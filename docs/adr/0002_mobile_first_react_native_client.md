@@ -26,10 +26,11 @@ Uma interface puramente web não oferece suporte confiável a notificações pus
 2. **Arquitetura Desacoplada (Backend-for-Frontend):**
    - O aplicativo mobile consumirá a API FastAPI (`backend/app/`) estritamente via requisições HTTP RESTful documentadas no Swagger/OpenAPI;
    - Toda a inteligência artificial (RAG híbrido, auditoria de normas e guardrails) permanece centralizada no backend Python, garantindo segurança e desempenho em dispositivos de baixo custo.
-3. **Hardware Nativo para a Semana 5:**
-   - Integração com `expo-camera` para captura de imagens de receituários;
-   - Integração com `expo-av` para gravação de mensagens de voz com a RA do paciente;
-   - Integração com `expo-notifications` para os alertas da contagem regressiva da receita (RF08).
+3. **Hardware Nativo, Carteira Digital e Mitigação de Responsabilidade:**
+   - **Carteira Digital Local (Câmera):** A câmera (`expo-camera`) é utilizada para digitalizar e armazenar a receita no próprio dispositivo móvel do usuário (Carteira Digital / Digital Vault). Isso permite ao cidadão apresentar a receita na farmácia diretamente pelo celular e apoia a gestão visual. **A foto não é submetida a OCR de extração clínica na nuvem**, eliminando riscos éticos e jurídicos de responsabilidade civil por erro algorítmico de leitura de caligrafia médica;
+   - **Preenchimento Assistido com Autocomplete:** Os medicamentos são informados diretamente pelo cidadão com auxílio de autocomplete alimentado pela tabela oficial (DCB/RENAME), garantindo precisão e responsabilidade do usuário;
+   - **Áudio / Voz (Semana 5):** Integração com `expo-av` para gravação de mensagens de voz com a Região Administrativa do paciente (transcrição via Whisper);
+   - **Gestão de Validade e Adesão (RF08):** Integração com `expo-notifications` para agendamento de alertas push locais preventivos a 15 e 7 dias antes do vencimento da receita.
 
 ---
 

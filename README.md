@@ -4,10 +4,12 @@
 ---
 ## 🎯 Sobre o Projeto
 Milhões de famílias brasileiras comprometem parte expressiva de sua renda adquirindo medicamentos de uso contínuo no varejo privado por puro desconhecimento das regras públicas de gratuidade. 
-O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para empoderar o paciente da rede pública e seus cuidadores familiares. A partir do envio de uma **receita médica digital (PDF)**, **foto do receituário** ou **mensagem de voz**, o sistema decodifica os itens prescritos e audita as regras oficiais do Ministério da Saúde e do Distrito Federal, entregando um roteiro prático e auditável:
+
+O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para empoderar o paciente da rede pública e seus cuidadores familiares. A partir do **preenchimento assistido com autocomplete dos medicamentos**, **digitalização da receita médica na Carteira Digital (RF08)** e **mensagem de voz com a localidade (RA)**, o sistema audita as regras oficiais do Ministério da Saúde e do Distrito Federal, entregando um roteiro prático e auditável:
 1. **Onde retirar gratuitamente:** Diferenciação automática entre *Farmácia Popular* (drogaria privada com CPF), *Unidade Básica de Saúde - UBS* (Atenção Primária) e *Farmácia de Alto Custo* (Componente Especializado via processo LME).
 2. **Checklist Documental e SISREG:** Documentos obrigatórios e critérios de regulação para consultas e exames especializados.
-3. **Guardrail Ético Inegociável:** Atuação estritamente restrita à **navegação administrativa e cidadã**, sem realizar prescrição clínica, diagnóstico ou troca de remédios.
+3. **Gestão da Receita e Validade:** Carteira digital no app com contagem regressiva e alertas preventivos a 15 e 7 dias antes do vencimento.
+4. **Guardrail Ético Inegociável:** Atuação estritamente restrita à **navegação administrativa e cidadã**, sem realizar prescrição clínica, diagnóstico ou troca de remédios.
 ---
 ## 🏗️ Arquitetura Técnica & Roadmap (7 Semanas)
 

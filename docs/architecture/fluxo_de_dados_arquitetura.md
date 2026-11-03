@@ -11,7 +11,7 @@ Este documento detalha o fluxo de dados ponta a ponta do projeto **SUS Cidadão*
 
 O sistema é dividido em **4 Zonas Arquiteturais**:
 1. **Zona 1 (Governança e Ingestão de Dados Oficiais):** Pipeline offline/batch que normaliza as regras governamentais na Denominação Comum Brasileira (DCB) e alimenta o banco vetorial;
-2. **Zona 2 (Ingestão Multimodal e Privacidade LGPD):** Captura pelo app mobile React Native e sanitização de dados sensíveis em memória volátil;
+2. **Zona 2 (Entrada do Cidadão e Gestão da Receita):** Preenchimento assistido com autocomplete no app React Native e digitalização da receita na Carteira Digital local (RF08);
 3. **Zona 3 (Núcleo de Decisão e Recuperação Híbrida):** Orquestração dos casos de uso, consulta determinística tabular e busca semântica em portarias;
 4. **Zona 4 (Entrega Cidadã e LLMOps):** Exibição do roteiro de retirada gratuita e rastreamento contínuo de latência, fidelidade factual (RAGAS) e custos.
 
@@ -22,7 +22,7 @@ O sistema é dividido em **4 Zonas Arquiteturais**:
 ```mermaid
 flowchart TD
     %% ZONA 1: DADOS OFICIAIS & GOVERNANÇA (OFFLINE / BATCH)
-    subgraph ZONA_1["ZONA 1: Fontes Oficiais e Governança de Dados"]
+    subgraph ZONA_1["ZONA 1: Fontes Oficiais e Governança de Dados (Offline)"]
         direction TB
         F1["RENAME 2024 (Portaria GM/MS 6.324)"] --> ETL["ETL & Normalização DCB (Ingestion Engine)"]
         F2["Farmácia Popular (Elenco Gratuito MS)"] --> ETL
@@ -37,23 +37,19 @@ flowchart TD
         EMB_OFF --> VEC[("Vector Store (ChromaDB)")]
     end
 
-    %% ZONA 2: INGESTÃO MULTIMODAL & PRIVACIDADE (MOBILE & REAL-TIME)
-    subgraph ZONA_2["ZONA 2: Ingestão do Cidadão e Privacidade LGPD"]
+    %% ZONA 2: ENTRADA DO CIDADÃO & GESTÃO DA RECEITA (MOBILE REACT NATIVE)
+    subgraph ZONA_2["ZONA 2: Entrada do Cidadão e Gestão da Receita (Mobile)"]
         direction TB
         USER(["Cidadão / Cuidador (Helena ou Lucas)"]) --> APP["App Mobile (React Native / Expo)"]
         
-        APP -->|"1. PDF Digital (CFM)"| PARSE_PDF["Parser Digital (pdfplumber)"]
-        APP -->|"2. Foto de Receita Física"| OCR_VLM["Visão Multimodal (VLM / Gemini Flash)"]
-        APP -->|"3. Áudio da Região Adm."| ASR["Transcrição de Voz (Whisper)"]
+        APP -->|"1. Remédios Prescritos"| AUTOCOMPLETE["Busca Assistida / Autocomplete (DCB e Nomes Comerciais)"]
+        APP -->|"2. Data de Emissão"| DATE_PICKER["Seleção da Data da Receita (Base para Contagem de Validade)"]
+        APP -->|"3. Região Administrativa"| LOC_INPUT["Seleção de RA (Texto ou Áudio via Whisper)"]
+        APP -->|"4. Foto da Receita Física"| LOCAL_VAULT["Carteira Digital Local (RF08: Seguro no Celular, Sem Envio para Nuvem)"]
         
-        PARSE_PDF --> RAW_TEXT["Texto Bruto da Prescrição"]
-        OCR_VLM --> RAW_TEXT
-        ASR --> RAW_TEXT
-        
-        RAW_TEXT --> PII["PII Masking (LGPD: Regex/NER - CPF, Cartão SUS, Nome)"]
-        PII --> HITL{"Human-in-the-Loop: Usuário confirma remédios na tela?"}
-        HITL -->|"Não (Editar)"| APP
-        HITL -->|"Sim (Confirmado)"| REQ["PrescriptionPayload (JSON Estruturado)"]
+        AUTOCOMPLETE --> REQ["PrescriptionAuditRequest (JSON Estruturado)"]
+        DATE_PICKER --> REQ
+        LOC_INPUT --> REQ
     end
 
     %% ZONA 3: NÚCLEO DE DECISÃO & RAG HÍBRIDO (BACKEND FASTAPI)
@@ -94,6 +90,7 @@ flowchart TD
         RESP_APP --> CARD2["O que Levar: Checklist Documental (RG, CPF, LME)"]
         RESP_APP --> CARD3["Gestão da Receita: Alertas a 15 e 7 dias do vencimento"]
         
+        LOCAL_VAULT -.->|"Apresentação física na farmácia"| CARD3
         BLOCK --> RESP_APP
         
         %% Telemetria
@@ -113,13 +110,13 @@ flowchart TD
   - *Tabela Canônica (Parquet/SQLite):* Armazena `dcb_principio_ativo`, `concentracao`, `forma_farmaceutica` e flags de gratuidade (PFPB e REME-DF).
   - *Vector Store (ChromaDB):* Armazena chunks semânticos com regras de laudos LME e critérios de agendamento de exames.
 
-### Passo 2: Entrada do Usuário e Anonimização LGPD (Zona 2)
-- O cidadão envia a prescrição pelo app **React Native**.
-- **PII Masking:** Antes de qualquer processamento por modelos de IA, um pipeline baseado em Regex e NER substitui Nome, CPF e Cartão SUS por tokens anônimos (`[PACIENTE_ANONIMIZADO]`, `[CPF_MASCARADO]`).
-- **Human-in-the-Loop (HITL):** A lista de medicamentos identificada é exibida na tela do celular para confirmação do usuário antes de disparar a auditoria no SUS.
+### Passo 2: Entrada do Cidadão e Gestão da Receita (Zona 2)
+- **Decisão Arquitetural de Segurança e Responsabilidade:** Para mitigar 100% dos riscos de erro de leitura em caligrafia médica ilegível (evitando responsabilidade civil por troca de medicamentos), a entrada dos itens prescritos é realizada **pelo próprio cidadão com apoio de autocomplete** baseado na tabela oficial do SUS.
+- **Foto da Receita (Carteira Digital Local - RF08):** A foto da receita física permanece armazenada localmente no dispositivo móvel do usuário (armazenamento seguro via React Native). Ela serve exclusivamente como carteira digital (comprovante visual para apresentação na farmácia) e para alimentar a contagem regressiva de validade (alertas preventivos a 15 e 7 dias). Nenhum arquivo de imagem precisa transitar pela rede ou servidores de IA externos, garantindo conformidade total com a LGPD (*Privacy by Design*).
+- **Voz/Áudio:** O usuário pode utilizar gravação de áudio (transcrita via Whisper) para indicar sua Região Administrativa ou tirar dúvidas de navegação.
 
 ### Passo 3: Núcleo de Decisão e RAG Híbrido (Zona 3)
-- O backend **FastAPI** recebe a requisição no endpoint `/api/v1/prescriptions/audit` e aciona o caso de uso `AuditPrescriptionUseCase`.
+- O backend **FastAPI** recebe o payload estruturado no endpoint `/api/v1/prescriptions/audit` e aciona o caso de uso `AuditPrescriptionUseCase`.
 - **Guardrail de Segurança Clínica:** Se a consulta contiver perguntas de automedicação ("posso dobrar a dose?", "qual remédio substitui este?"), o sistema bloqueia imediatamente e orienta o retorno ao médico.
 - **Recuperação Híbrida (Hybrid Retrieval):**
   1. *Ramo Determinístico:* Faz match exato por princípio ativo (DCB) na tabela canônica. Se o remédio é Losartana 50mg, o sistema determina imediatamente: *Disponível 100% gratuito na Farmácia Popular (drogaria privada com CPF) e na UBS*.
@@ -128,7 +125,7 @@ flowchart TD
 
 ### Passo 4: Entrega ao Cidadão e Observabilidade (Zona 4)
 - O app exibe o **Roteiro Cidadão**:
-  - **Onde ir:** Mapa da drogaria credenciada mais próxima ou UBS;
+  - **Onde ir:** Drogaria credenciada ao Farmácia Popular ou farmácia da UBS;
   - **O que levar:** Documento com foto, CPF, receita válida e formulário LME preenchido (se aplicável);
   - **Validade da receita:** Contagem regressiva com notificações push locais a 15 e 7 dias do vencimento.
 - **LLMOps e Telemetria:** Toda requisição gera traces de latência e consumo de tokens via OpenTelemetry, e as respostas são avaliadas periodicamente contra o *Golden Dataset* com o framework **RAGAS** (meta de *Faithfulness* $\ge 0,92$).
