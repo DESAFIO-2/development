@@ -1,0 +1,116 @@
+INSTITUTO ELDORADO
+RESIDÊNCIA EM INTELIGÊNCIA ARTIFICIAL
+
+Engenheiro(a) de Dados - Jhiovana Silva Ribeiro
+Cientista de Dados - Marlon Dias Marques
+Arquiteto(a) do Sistema - Mickeias Charles de Oliveira Paiva
+MLOps / LLMOps - Tayrine Hevellin Zitkoski
+Product Owner - Samuel de Souza Rodrigues
+
+Documento de Definição de Produto e Requisitos (PDR)
+Projeto SUS Cidadão - Challenge 2: Qualidade de Vida e Tomada de Decisão com IA
+
+Brasília - DF
+2026
+
+
+SUMÁRIO
+
+1 CENÁRIO ESCOLHIDO
+2 DELIMITAÇÃO DO PROBLEMA E DILEMA DECISÓRIO
+3 ESSENTIAL QUESTION DA EQUIPE
+4 GUIDING QUESTIONS (PERGUNTAS NORTEADORAS)
+5 MAPA DE STAKEHOLDERS
+6 PERSONAS
+7 REQUISITOS FUNCIONAIS E NÃO FUNCIONAIS
+8 PREMISSAS DO PROJETO
+9 RISCOS E ESTRATÉGIAS DE MITIGAÇÃO
+10 MÉTRICAS DE SUCESSO E VALIDAÇÃO OBJETIVA
+
+
+1 CENÁRIO ESCOLHIDO
+
+1.1 Contextualização Socioeconômica e de Qualidade de Vida
+O projeto insere-se no domínio da saúde pública, assistência farmacêutica e navegação cidadã no Sistema Único de Saúde (SUS). Segundo a Organização Mundial da Saúde (OMS) e o Índice de Perda de Qualidade de Vida (IPQV/IBGE), o bem-estar depende da proteção da saúde física e mental, da segurança orçamentária familiar e da preservação do tempo útil. No Brasil, a Pesquisa de Orçamentos Familiares (POF/IBGE) mostra que o desembolso direto com medicamentos é o maior peso privado em saúde nas famílias de menor renda, comprometendo alimentação e moradia. Grande parte desse gasto decorre de assimetria informacional: cidadãos compram remédios na rede privada por desconhecerem que os mesmos fármacos possuem gratuidade assegurada pelo Estado.
+
+1.2 Recorte Específico do Cenário de Atuação no SUS e no Distrito Federal
+No Distrito Federal, cidadãos que saem de consultas em UBSs, UPAs ou hospitais regionais com receitas médicas e pedidos de exames enfrentam forte fragmentação burocrática. As regras para obter gratuitamente cada medicamento ou validar encaminhamentos estão dispersas na Relação Nacional de Medicamentos Essenciais (RENAME 2024 - Portaria GM/MS nº 6.324/2024), no Programa Farmácia Popular do Brasil (PFPB), na Relação de Medicamentos do Distrito Federal (REME-DF/SES-DF) e nos protocolos do Sistema Nacional de Regulação (SISREG). Sem apoio estruturado, o paciente não sabe se deve retirar o item na UBS (Componente Básico), em drogaria privada conveniada à Farmácia Popular (com CPF e receita) ou na Farmácia de Alto Custo (Componente Especializado, via laudo LME), gerando viagens perdidas e abandono de tratamentos.
+
+
+2 DELIMITAÇÃO DO PROBLEMA E DILEMA DECISÓRIO
+
+2.1 Caracterização da Dor Real
+O problema reside na vulnerabilidade financeira e na sobrecarga cognitiva enfrentadas por pacientes da rede pública e cuidadores familiares ao viabilizar o acesso gratuito a medicamentos e exames no SUS. A dor manifesta-se em: a) assimetria técnica para traduzir receitas médicas na Denominação Comum Brasileira (DCB - princípio ativo) exigida nas tabelas da RENAME e REME-DF; b) fragmentação de fluxos entre UBS, Farmácia Popular e Alto Custo; e c) perda de recursos financeiros ou dias de trabalho em filas por falta de documentos exigidos nos protocolos de regulação.
+
+2.2 O Dilema Decisório Central
+A decisão que o usuário precisa tomar ao sair da consulta resume-se à questão: "Diante desta receita médica e deste pedido de exame, quais medicamentos consigo retirar gratuitamente hoje (via Farmácia Popular ou UBS), quais exigem processo na Farmácia de Alto Custo e quais documentos exatos devo reunir para garantir meu tratamento sem comprometer o orçamento da minha família?"
+
+2.3 Consequências da Inação
+A falta de suporte decisório perpetua o abandono medicamentoso por falta de dinheiro, o agravamento de doenças crônicas (hipertensão, diabetes e asma), o aumento de internações evitáveis no DF e o endividamento familiar.
+
+
+3 ESSENTIAL QUESTION DA EQUIPE
+
+"Como a inteligência artificial pode apoiar cidadãos usuários do SUS e seus familiares a planejarem e decidirem a obtenção gratuita de medicamentos e o encaminhamento de exames na rede pública, com base em evidências oficiais da RENAME, do Programa Farmácia Popular, da REME-DF e dos protocolos do SISREG, protegendo o orçamento familiar, explicitando os limites administrativos da análise e preservando o ato médico e a autonomia humana?"
+
+
+4 GUIDING QUESTIONS (PERGUNTAS NORTEADORAS)
+
+a) Eixo Fator Humano e Decisão: Como apresentar o roteiro de acesso a medicamentos e exames de forma acolhedora e acessível (reduzindo a sobrecarga cognitiva e barreiras de letramento em saúde), deixando claro que a ferramenta atua apenas na orientação administrativa e jamais substitui a prescrição médica?
+b) Eixo Dados e Governança: Como estruturar as bases públicas oficiais — RENAME 2024, Farmácia Popular, REME-DF (SES-DF) e Protocolos do SISREG — em uma busca híbrida (tabular por princípio ativo e vetorial para portarias), garantindo anonimização prévia de dados sensíveis de saúde conforme a LGPD (Lei nº 13.709/2018)?
+c) Eixo Modelo e Arquitetura de IA: Em que medida a arquitetura RAG combinada a múltiplos agentes (Extrator Multimodal de PDF/Imagem/Áudio, Auditor RENAME/Farmácia Popular/REME-DF, Consultor SISREG e Sintetizador Cidadão) supera uma LLM pura na prevenção de alucinações sobre cobertura gratuita no SUS?
+d) Eixo Produção e LLMOps: Como mensurar continuamente a fidelidade às fontes governamentais (RAGAS) e operar guardrails de segurança que bloqueiem 100% de pedidos de automedicação ou substituição terapêutica sem aval médico?
+
+
+5 MAPA DE STAKEHOLDERS
+
+a) Primários (Usuários e Decisores Diretos): Pacientes do SUS (especialmente doentes crônicos) e familiares cuidadores no DF. Submetem o PDF ou foto da receita/exame e áudio/texto com sua Região Administrativa (RA), decidindo seu roteiro de retirada. Buscam economia financeira, checklist documental claro e sigilo.
+b) Secundários (Rede de Apoio e Atendimento): Farmacêuticos e atendentes das UBSs e drogarias do Farmácia Popular, Agentes Comunitários de Saúde, assistentes sociais e médicos prescritores. São beneficiados quando o cidadão comparece à unidade correta com receita válida e documentação completa, reduzindo filas e retrabalho.
+c) Terciários (Órgãos Reguladores e Fontes Oficiais): Ministério da Saúde (DAF/MS), Secretaria de Saúde do DF (SES-DF), CFM, CFF e ANPD. Fornecem as normas públicas que alimentam o RAG e exigem fidelidade normativa, respeito ao ato médico e conformidade com a LGPD.
+
+
+6 PERSONAS
+
+a) Persona 01 - Helena Soares (58 anos, Diarista, Ceilândia Norte - DF): Ensino fundamental completo, renda de 1,5 salário mínimo, hipertensa e diabética. Usa WhatsApp por áudio e recebe receitas em PDF por SMS, mas não entende tabelas técnicas. Saiu da UBS com receita de Losartana 50 mg, Metformina 850 mg e Dapagliflozina 10 mg (orçada em R$ 210,00 na rede privada). Não sabe o que retirar na Farmácia Popular, na UBS ou no Alto Custo e teme perder diária de trabalho indo ao lugar errado. Deseja enviar o PDF e um áudio para receber o passo a passo gratuito. Frase: "Se eu pagar tudo na farmácia falta para o mercado; só preciso saber onde o governo entrega cada remédio e qual papel levar."
+b) Persona 02 - Lucas Mendes (29 anos, Auxiliar Administrativo, Taguatinga Sul - DF): Ensino médio completo, cuidador do pai idoso (67 anos) paciente cardíaco no SUS. Recebeu receita e guia de Ecocardiograma via SISREG. Com horário rígido no emprego, busca um checklist documental auditado nas normas da SES-DF para resolver tudo em uma única viagem. Frase: "Não consigo pedir dispensa do serviço várias vezes por burocracia mal explicada; preciso ter certeza dos documentos antes de sair de casa."
+
+
+7 REQUISITOS FUNCIONAIS E NÃO FUNCIONAIS
+
+7.1 Requisitos Funcionais (RF)
+a) RF01 - Ingestão Multimodal: Aceitar prescrições médicas em PDF (padrão CFM/ICP-Brasil), fotos de receituários/guias (JPEG/PNG), áudios (MP3/WAV) e texto.
+b) RF02 - Anonimização (PII Masking): Mascarar automaticamente nome, CPF, Cartão SUS, telefone e endereço presentes na receita antes do envio à LLM.
+c) RF03 - Extração e Normalização (DCB): Extrair os medicamentos normalizando-os pelo princípio ativo (DCB), concentração e forma farmacêutica, data da receita, exame e RA.
+d) RF04 - Recuperação Baseada em Evidências (RAG): Consultar base híbrida composta pela RENAME 2024, Elenco da Farmácia Popular, REME-DF e Protocolos do SISREG/CPPAS.
+e) RF05 - Orquestração Multiagentes: Operar com quatro agentes: (1) Extrator Multimodal; (2) Auditor Farmacêutico; (3) Consultor SISREG; e (4) Sintetizador Cidadão.
+f) RF06 - Matriz de Decisão e Fontes Auditáveis: Classificar cada item na sua via gratuita (Farmácia Popular, UBS ou Alto Custo), listando documentos obrigatórios, validade da receita, citação da portaria oficial e alerta de abstinência caso o item não seja padronizado pelo SUS.
+
+7.2 Requisitos Não Funcionais (RNF)
+a) RNF01 - Não-Prescritividade Clínica: Vedado emitir diagnósticos, alterar doses ou recomendar troca de princípio ativo, preservando o ato médico e a agência humana.
+b) RNF02 - Fidelidade Factual: Operar com baixa temperatura e validação tabular, atingindo RAGAS Faithfulness >= 0,92.
+c) RNF03 - Privacidade e LGPD: Processamento efêmero em memória com mascaramento prévio de PII, sem retenção de receitas ou áudios.
+d) RNF04 - Desempenho: Tempo de resposta de até 8 segundos para texto/PDF digital e até 15 segundos para fluxos com imagem e áudio.
+e) RNF05 - Clareza Comunicacional: Traduzir siglas técnicas (DCB, CBAF, CEAF, LME e SISREG) para linguagem acessível ao cidadão.
+
+
+8 PREMISSAS DO PROJETO
+
+a) Premissa 01 (Dados Públicos): As bases RENAME 2024, Farmácia Popular, REME-DF e manuais do SISREG são públicas e abertas para indexação local.
+b) Premissa 02 (Escopo Administrativo): O usuário já possui receita ou guia emitida por profissional habilitado, cabendo à IA apenas apoiar o acesso gratuito e documental.
+c) Premissa 03 (Massa de Testes Ética): Os testes utilizarão receitas digitais sintéticas no padrão CFM, receitas reais anonimizadas e áudios gravados pela equipe.
+d) Premissa 04 (Padronização versus Estoque): Como não há API pública de estoque em tempo real das UBSs, o sistema audita a padronização oficial e orienta canais de confirmação.
+
+
+9 RISCOS E ESTRATÉGIAS DE MITIGAÇÃO
+
+a) Risco 01 - Alucinação Normativa (Impacto Alto / Prob. Média): Informar cobertura incorreta ou omitir exigência de laudo LME. Mitigação: Busca híbrida exata em CSV por princípio ativo aliada ao RAG vetorial, Agente Auditor e Faithfulness >= 0,92.
+b) Risco 02 - Pedido de Substituição Médica (Impacto Alto / Prob. Baixa): Usuário pedir indicação de remédio substituto se o prescrito não for coberto. Mitigação: Guardrails bloqueando trocas terapêuticas e orientando retorno ao médico com a lista da RENAME/REME-DF.
+c) Risco 03 - Exposição de Dados Sensíveis (Impacto Alto / Prob. Baixa): Vazamento de CPF ou CID da receita. Mitigação: PII Masking local (Regex/NER) antes da LLM e descarte imediato dos arquivos após a sessão.
+d) Risco 04 - Ruído Multimodal (Impacto Médio / Prob. Alta): Fotos escuras ou áudios ruidosos gerarem erro de leitura. Mitigação: Priorização de PDFs digitais e confirmação na tela pelo usuário (Human-in-the-Loop) dos itens lidos antes de emitir o roteiro.
+e) Risco 05 - Falta Pontual de Estoque na UBS (Impacto Médio / Prob. Média): Medicamento padronizado na REME-DF estar em falta no posto. Mitigação: Diferenciar "padronização oficial" de "estoque físico" e priorizar a via do Programa Farmácia Popular quando houver dupla cobertura.
+
+
+10 MÉTRICAS DE SUCESSO E VALIDAÇÃO OBJETIVA
+
+a) Métricas Técnicas de IA e LLMOps: Fidelidade ao Contexto (RAGAS Faithfulness >= 0,92); Relevância da Resposta (RAGAS Answer Relevance >= 0,88); Precisão e Revocação de Contexto (Context Precision & Recall >= 0,90); Acurácia de Extração Multimodal (>= 95% em PDFs digitais e >= 88% em fotos/áudios frente ao gabarito humano); e Taxa de Bloqueio de Guardrails de 100% contra pedidos de automedicação ou substituição clínica.
+b) Métricas de Impacto Humano e Decisão: Redução na Escala de Conflito Decisório (DCS >= 35% de redução na incerteza sobre onde ir e o que levar, medida por escala Likert 1 a 5 pré e pós-uso); Economia de Tempo de Triagem (redução >= 75% no tempo para localizar a via de acesso de 3 itens nas tabelas oficiais, caindo de ~25 minutos para menos de 2 minutos); e Índice de Transparência e Agência Percebida >= 90% entre os avaliadores.

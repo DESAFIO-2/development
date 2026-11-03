@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.env
+.env*.local
+.venv
+env/
+venv/
+ENV/
+
+# Vectorstore & Raw Data Blobs
+data/vectorstore/*
+!data/vectorstore/.gitkeep
+data/raw/*.pdf
+data/raw/*.zip
+data/raw/*.tar.gz
+
+# Evaluation transient outputs
+evals/reports/*.json
+evals/reports/*.csv
+
+# OS & Editors
+.DS_Store
+.idea/
+.vscode/
+*~
+*.swp

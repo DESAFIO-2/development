@@ -1,0 +1,13 @@
+# Data Lineage Manifest - REME-DF (Relação de Medicamentos do Distrito Federal)
+source_id: "reme_df_2024_2026"
+source_version: "2024-DF-v2"
+document_name: "Relação de Medicamentos do Distrito Federal (REME-DF)"
+publisher: "Secretaria de Estado de Saúde do Distrito Federal (SES-DF)"
+jurisdiction: "Distrito Federal (Brasília - DF)"
+publication_date: "2024-05-15"
+ingestion_date: "2026-11-03"
+official_url: "https://www.saude.df.gov.br/assistencia-farmaceutica"
+dispensation_points:
+  - "Farmácias das Unidades Básicas de Saúde (UBSs do DF)"
+  - "Polos de Dispensação Especializada (Farmácias de Alto Custo - Asa Sul, Ceilândia, Gama)"
+schema_version: "1.0.0"

@@ -1,0 +1,11 @@
+# Data Lineage Manifest - Protocolos SISREG e Regulação Ambulatorial DF
+source_id: "sisreg_df_cppas"
+source_version: "2024-v1"
+document_name: "Manual de Regulação Ambulatorial e Protocolos de Acesso SISREG III / CPPAS"
+publisher: "Complexo Regulador em Saúde do DF (CRDF) / SES-DF"
+jurisdiction: "Distrito Federal"
+publication_date: "2024-01-20"
+ingestion_date: "2026-11-03"
+official_url: "https://www.saude.df.gov.br/complexo-regulador"
+scope: "Protocolos de encaminhamento para consultas especializadas e exames de média e alta complexidade"
+schema_version: "1.0.0"

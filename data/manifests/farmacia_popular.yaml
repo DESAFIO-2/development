@@ -1,0 +1,15 @@
+# Data Lineage Manifest - Programa Farmácia Popular do Brasil (PFPB)
+source_id: "farmacia_popular_2026"
+source_version: "2026-08"
+document_name: "Elenco Oficial de Medicamentos - Programa Farmácia Popular do Brasil"
+publisher: "Ministério da Saúde - DAF/MS"
+legal_act: "Portaria de Consolidação GM/MS nº 5/2017 e atualizações vigentes"
+publication_date: "2026-08-31"
+ingestion_date: "2026-11-03"
+official_url: "https://www.gov.br/saude/pt-br/composicao/sectics/daf/farmacia-popular"
+coverage_type: "Gratuidade Integral para Hipertensão, Diabetes, Asma, Osteoporose, Anticoncepção e Beneficiários Bolsa Família"
+dispensation_point: "Rede privada de drogarias credenciadas (Drogasil, Raia, Pacheco, Pague Menos, etc.)"
+required_docs:
+  - "Receita médica válida (SUS ou privada) com CRM legível"
+  - "Documento oficial com foto e CPF do paciente"
+schema_version: "1.0.0"
