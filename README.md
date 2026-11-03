@@ -32,8 +32,8 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 
 
   
-* **Semana 1 (Atual):** Definição do Problema, Personas, Stakeholders, Riscos e Métricas (PDR ABNT).
-* **Semana 2:** Base de Conhecimento e Recuperação (RAG Híbrido: CSV tabular + Chunks vetoriais de portarias).
+* **Semana 1:** Definição do Problema, Personas, Stakeholders, Riscos e Métricas (PDR ABNT).
+* **Semana 2 (Atual):** Base de Conhecimento e Recuperação (RAG Híbrido: CSV tabular + Chunks vetoriais de portarias).
 * **Semana 3:** Avaliação Experimental Científica (LLM pura vs. RAG com framework RAGAS).
 * **Semana 4:** Sistema Multiagentes Colaborativo (LangGraph / CrewAI).
 * **Semana 5:** Pipeline Multimodal (PDFs digitais padrão CFM/ICP-Brasil + OCR + Transcrição Whisper).
