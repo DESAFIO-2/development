@@ -49,7 +49,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 ## 👥 Squad
 | Papel | Responsável |
 | :--- | :--- |
-| **Engenheiro de IA & Full Stack (Tech Lead)** | Samuel de Souza Rodrigues |
+| **Engenheiro de IA** | Samuel de Souza Rodrigues |
 | **Arquiteto de Software** | Mickeias Charles de Oliveira Paiva |
 | **Cientista de Dados** | Marlon Dias Marques |
 | **Engenheira de Dados** | Jhiovana Silva Ribeiro |
