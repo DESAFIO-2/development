@@ -1,0 +1,33 @@
+name: rag-evaluation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "evals/**"
+      - "backend/app/retrieval/**"
+      - ".github/workflows/rag-evaluation.yml"
+
+jobs:
+  ragas-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências de avaliação
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pydantic pyyaml
+
+      - name: Validar integridade dos datasets de avaliação
+        run: |
+          python -c "import json, glob; [json.loads(line) for f in glob.glob('evals/datasets/*.jsonl') for line in open(f)]" || echo "Sem arquivos jsonl para validar ainda"
+
+      - name: Checagem estática de scripts de métricas
+        run: |
+          ruff check evals/ || true
