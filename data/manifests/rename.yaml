@@ -1,0 +1,18 @@
+# Data Lineage Manifest - RENAME (Relação Nacional de Medicamentos Essenciais)
+source_id: "rename_2024"
+source_version: "2024-v1"
+document_name: "Relação Nacional de Medicamentos Essenciais (RENAME 2024)"
+publisher: "Ministério da Saúde - DAF/SECTICS/MS"
+legal_act: "Portaria GM/MS nº 6.324/2024"
+publication_date: "2024-12-26"
+ingestion_date: "2026-11-03"
+official_url: "https://www.gov.br/saude/pt-br/composicao/sectics/daf/relacao-nacional-de-medicamentos-essenciais"
+components:
+  - name: "CBAF"
+    description: "Componente Básico da Assistência Farmacêutica (Atenção Primária / UBS)"
+  - name: "CEAF"
+    description: "Componente Especializado da Assistência Farmacêutica (Alto Custo / LME)"
+  - name: "CESAF"
+    description: "Componente Estratégico da Assistência Farmacêutica"
+update_policy: "Anual pelo Ministério da Saúde com consultas públicas e atos da CONITEC"
+schema_version: "1.0.0"

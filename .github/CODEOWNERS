@@ -1,0 +1,26 @@
+# Code Owners for SUS Cidadão (NavegaSUS)
+
+# Default owners for all files
+* @samucabsb @mickeiaspaiva @tayrinehz @MarlonDiasMarques @jhiovanars
+
+# Application Core, AI Engine & Architecture
+/src/challenge2/core/ @samucabsb @mickeiaspaiva
+/src/challenge2/domain/ @samucabsb @mickeiaspaiva
+/src/challenge2/application/ @samucabsb @mickeiaspaiva
+/src/challenge2/api/ @samucabsb @mickeiaspaiva
+/src/challenge2/ui/ @samucabsb
+
+# Data Engineering & Ingestion Pipelines
+/src/challenge2/ingestion/ @jhiovanars @samucabsb
+/data/ @jhiovanars @MarlonDiasMarques
+
+# Retrieval, Vectorstores & Embeddings (Data Science)
+/src/challenge2/retrieval/ @MarlonDiasMarques @samucabsb
+/src/challenge2/infrastructure/vectorstores/ @MarlonDiasMarques @samucabsb
+/src/challenge2/infrastructure/embeddings/ @MarlonDiasMarques
+
+# MLOps, CI/CD, Observability & Evaluations
+/evals/ @tayrinehz @MarlonDiasMarques @samucabsb
+/.github/ @tayrinehz @samucabsb
+/observability/ @tayrinehz @samucabsb
+/deploy/ @tayrinehz @mickeiaspaiva

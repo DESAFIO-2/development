@@ -4,10 +4,12 @@
 ---
 ## 🎯 Sobre o Projeto
 Milhões de famílias brasileiras comprometem parte expressiva de sua renda adquirindo medicamentos de uso contínuo no varejo privado por puro desconhecimento das regras públicas de gratuidade. 
-O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para empoderar o paciente da rede pública e seus cuidadores familiares. A partir do envio de uma **receita médica digital (PDF)**, **foto do receituário** ou **mensagem de voz**, o sistema decodifica os itens prescritos e audita as regras oficiais do Ministério da Saúde e do Distrito Federal, entregando um roteiro prático e auditável:
+
+O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para empoderar o paciente da rede pública e seus cuidadores familiares. A partir do **preenchimento assistido com autocomplete dos medicamentos**, **digitalização da receita médica na Carteira Digital (RF08)** e **mensagem de voz com a localidade (RA)**, o sistema audita as regras oficiais do Ministério da Saúde e do Distrito Federal, entregando um roteiro prático e auditável:
 1. **Onde retirar gratuitamente:** Diferenciação automática entre *Farmácia Popular* (drogaria privada com CPF), *Unidade Básica de Saúde - UBS* (Atenção Primária) e *Farmácia de Alto Custo* (Componente Especializado via processo LME).
 2. **Checklist Documental e SISREG:** Documentos obrigatórios e critérios de regulação para consultas e exames especializados.
-3. **Guardrail Ético Inegociável:** Atuação estritamente restrita à **navegação administrativa e cidadã**, sem realizar prescrição clínica, diagnóstico ou troca de remédios.
+3. **Gestão da Receita e Validade:** Carteira digital no app com contagem regressiva e alertas preventivos a 15 e 7 dias antes do vencimento.
+4. **Guardrail Ético Inegociável:** Atuação estritamente restrita à **navegação administrativa e cidadã**, sem realizar prescrição clínica, diagnóstico ou troca de remédios.
 ---
 ## 🏗️ Arquitetura Técnica & Roadmap (7 Semanas)
 
@@ -44,12 +46,83 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 * **REME-DF:** Relação de Medicamentos do Distrito Federal (SES-DF).
 * **SISREG III / CPPAS:** Protocolos de Encaminhamento e Regulação Ambulatorial da SES-DF e Ministério da Saúde.
 ---
-## 👥 Squad MLOps / LLMOps
+## 👥 Squad
 | Papel | Responsável |
 | :--- | :--- |
-| **Product Owner (PO)** | Samuel de Souza Rodrigues |
+| **Engenheiro de IA & Full Stack (Tech Lead)** | Samuel de Souza Rodrigues |
 | **Arquiteto de Software** | Mickeias Charles de Oliveira Paiva |
 | **Cientista de Dados** | Marlon Dias Marques |
 | **Engenheira de Dados** | Jhiovana Silva Ribeiro |
 | **MLOps / LLMOps** | Tayrine Hevellin Zitkoski |
+
 ---
+
+## 🏛️ Estrutura do Repositório (Clean Architecture & LLMOps Monorepo)
+
+```text
+challenge2/
+├── .github/
+│   ├── workflows/backend-ci.yml # CI automatizado (Ruff, Mypy, Pytest, Docker)
+│   └── CODEOWNERS               # Matriz de responsabilidade de revisão por componente
+├── backend/                     # Aplicação e Serviços de IA (FastAPI + Clean Architecture)
+│   ├── app/
+│   │   ├── main.py              # Entrypoint da API FastAPI
+│   │   ├── core/                # Configurações globais e logs estruturados
+│   │   ├── api/                 # Rotas HTTP (/health, /audit-prescription)
+│   │   ├── domain/              # Modelos e regras de negócio puras (Prescription, Guidance)
+│   │   ├── application/         # Casos de uso e portas abstratas (Clean Architecture)
+│   │   │   ├── use_cases/       # AuditPrescription, SearchMedication, ClassifyRoute
+│   │   │   ├── ports/           # Interfaces para repositórios e provedores
+│   │   │   └── services/        # Orquestração do fluxo de auditoria
+│   │   ├── infrastructure/      # Adaptadores concretos (ChromaDB, Embeddings, LLM)
+│   │   ├── ingestion/           # Pipelines de ETL e normalização DCB (Engenharia de Dados)
+│   │   ├── retrieval/           # Hybrid Retriever: Busca Tabular (DCB) + Vetorial (Portarias)
+│   │   └── guardrails/          # Mascaramento PII (LGPD) e bloqueio clínico (Preservação do Ato Médico)
+│   ├── tests/                   # Testes automatizados (test_health, unitários e integração)
+│   ├── Dockerfile               # Containerização com usuário não-root e healthcheck
+│   ├── pyproject.toml           # Dependências gerenciadas via uv
+│   └── uv.lock
+├── data/                        # Dados e Governança de Linhagem
+│   ├── manifests/               # Linhagem, datas de publicação e hashes (RENAME, PFPB, REME-DF, SISREG)
+│   ├── raw/                     # Arquivos públicos originais baixados
+│   ├── staging/                 # Dados intermediários de transformação
+│   ├── processed/               # Tabelas canônicas limpas (medicamentos_sus_canonical)
+│   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
+├── docs/                        # Documentação Técnica e Decisões
+│   ├── adr/                     # Architecture Decision Records (ADR 0001 aprovado)
+│   ├── architecture/            # Diagramas C4 e fluxos de dados
+│   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
+│   ├── data_sources/            # Dicionários de dados das fontes oficiais
+│   ├── runbooks/                # Procedimentos de execução e incidentes
+│   └── security/                # Modelo de ameaças e conformidade LGPD
+├── evals/                       # Suíte Contínua de LLMOps e Métricas RAGAS
+│   ├── datasets/                # Golden Dataset (casos das Personas Helena e Lucas)
+│   ├── metrics/                 # Métricas de Faithfulness, Answer Relevancy, Context Recall
+│   ├── runners/                 # Runners de benchmark automatizados
+│   ├── configs/                 # Configurações de parâmetros de chunking/top_k
+│   ├── baselines/               # Linha de base para comparação (LLM Pura vs RAG - Semana 3)
+│   └── reports/                 # Relatórios consolidados de avaliação
+├── observability/               # Instrumentação de telemetria, tracing e latência
+├── CONTRIBUTING.md              # Guia de contribuição e GitFlow do squad
+├── SECURITY.md                  # Política de segurança e proteção de dados de saúde
+├── Makefile                     # Atalhos operacionais (make test, make run-api, make lint)
+└── README.md
+```
+
+---
+
+## ⚡ Comandos Rápidos
+
+```bash
+# 1. Instalar dependências (via uv no backend)
+make dev-install
+
+# 2. Executar suíte de testes do backend
+make test
+
+# 3. Executar linter e checagem de tipos
+make lint
+
+# 4. Iniciar API FastAPI local
+make run-api
+```

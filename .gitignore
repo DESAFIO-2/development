@@ -1,13 +1,38 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-.venv/
+*$py.class
+*.so
+
+# Caches
 .pytest_cache/
+.coverage
+htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Segredos: nunca vão para o git
+# Environments
 .env
+.env*.local
+.venv
+env/
+venv/
+ENV/
 
-# Editor / SO
+# Vectorstore & Raw Data Blobs
+data/vectorstore/*
+!data/vectorstore/.gitkeep
+data/raw/*.pdf
+data/raw/*.zip
+data/raw/*.tar.gz
+
+# Evaluation transient outputs
+evals/reports/*.json
+evals/reports/*.csv
+
+# OS & Editors
 .DS_Store
+.idea/
+.vscode/
+*~
+*.swp
