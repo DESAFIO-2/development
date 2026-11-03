@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from app.domain.medication import CoverageRoute
@@ -24,7 +24,7 @@ class ItemRoteiroCidadao(BaseModel):
     )
     local_sugerido: str = Field(
         ...,
-        description="Explicação simples de onde ir (ex: 'Farmácia Popular em drogaria privada com CPF')",
+        description="Explicação simples de onde ir (ex: Farmácia Popular com CPF)",
     )
     o_que_levar: list[str] = Field(
         ...,
@@ -72,5 +72,5 @@ class CitizenGuidanceCard(BaseModel):
     )
     solicitou_automedicacao: bool = Field(
         default=False,
-        description="Flag indicando se houve tentativa de substituição clínica barrada pelo guardrail",
+        description="Flag indicando se houve tentativa de substituição clínica barrada",
     )

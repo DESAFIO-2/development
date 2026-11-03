@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -8,30 +8,30 @@ class MedicationItemInput(BaseModel):
 
     nome_digitado: str = Field(
         ...,
-        description="Nome do remédio digitado ou selecionado pelo usuário (ex: 'Losartana Potássica' ou 'Aradois')",
+        description="Nome digitado ou selecionado pelo usuário (ex: 'Losartana Potássica')",
         examples=["Losartana Potássica 50mg"],
     )
-    principio_ativo_dcb: Optional[str] = Field(
+    principio_ativo_dcb: str | None = Field(
         default=None,
-        description="Denominação Comum Brasileira (DCB) identificada ou selecionada via autocomplete",
+        description="Denominação Comum Brasileira (DCB) selecionada via autocomplete",
         examples=["LOSARTANA POTASSICA"],
     )
-    concentracao: Optional[str] = Field(
+    concentracao: str | None = Field(
         default=None,
         description="Concentração do fármaco (ex: '50mg', '10mg', '850mg')",
         examples=["50mg"],
     )
-    forma_farmaceutica: Optional[str] = Field(
+    forma_farmaceutica: str | None = Field(
         default=None,
         description="Forma farmacêutica (ex: 'comprimido', 'cápsula', 'xarope')",
         examples=["comprimido"],
     )
-    posologia: Optional[str] = Field(
+    posologia: str | None = Field(
         default=None,
         description="Rotina de tomada indicada pelo médico (usada no módulo de adesão)",
         examples=["Tomar 1 comprimido pela manhã"],
     )
-    quantidade_prescrita: Optional[str] = Field(
+    quantidade_prescrita: str | None = Field(
         default=None,
         description="Quantidade total solicitada na receita",
         examples=["60 comprimidos"],
@@ -52,7 +52,7 @@ class PrescriptionAuditRequest(BaseModel):
     )
     regiao_administrativa: str = Field(
         default="Distrito Federal",
-        description="Região Administrativa (RA) ou cidade do cidadão (ex: 'Ceilândia', 'Taguatinga')",
+        description="Região Administrativa (RA) ou cidade do cidadão (ex: 'Ceilândia')",
         examples=["Ceilândia"],
     )
     tipo_prescritor: str = Field(
@@ -60,8 +60,8 @@ class PrescriptionAuditRequest(BaseModel):
         description="Origem da receita ('SUS' ou 'Particular/Convenio')",
         examples=["SUS"],
     )
-    pergunta_adicional: Optional[str] = Field(
+    pergunta_adicional: str | None = Field(
         default=None,
-        description="Dúvida administrativa ou logística informada pelo cidadão (via texto ou áudio)",
+        description="Dúvida administrativa ou logística informada pelo cidadão",
         examples=["Onde retiro e o que preciso levar?"],
     )

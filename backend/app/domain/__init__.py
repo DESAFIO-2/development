@@ -1,6 +1,6 @@
+from app.domain.guidance import CitizenGuidanceCard, ItemRoteiroCidadao
+from app.domain.medication import ComponenteSUS, CoverageRoute, MedicationCoverage
 from app.domain.prescription import MedicationItemInput, PrescriptionAuditRequest
-from app.domain.medication import CoverageRoute, ComponenteSUS, MedicationCoverage
-from app.domain.guidance import ItemRoteiroCidadao, CitizenGuidanceCard
 
 __all__ = [
     "MedicationItemInput",

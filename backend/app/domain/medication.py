@@ -1,9 +1,9 @@
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 
-class CoverageRoute(str, Enum):
+class CoverageRoute(StrEnum):
     """Via oficial de obtenção gratuita do medicamento no SUS / DF."""
 
     FARMACIA_POPULAR = "FARMACIA_POPULAR"
@@ -12,12 +12,12 @@ class CoverageRoute(str, Enum):
     NAO_PADRONIZADO = "NAO_PADRONIZADO"
 
 
-class ComponenteSUS(str, Enum):
+class ComponenteSUS(StrEnum):
     """Componente da Assistência Farmacêutica na RENAME."""
 
-    CBAF = "CBAF"          # Básico (Atenção Primária / UBS)
-    CEAF = "CEAF"          # Especializado (Alto Custo / LME)
-    CESAF = "CESAF"        # Estratégico (Programas específicos do MS)
+    CBAF = "CBAF"  # Básico (Atenção Primária / UBS)
+    CEAF = "CEAF"  # Especializado (Alto Custo / LME)
+    CESAF = "CESAF"  # Estratégico (Programas específicos do MS)
     NAO_APLICAVEL = "NAO_APLICAVEL"
 
 
@@ -68,7 +68,7 @@ class MedicationCoverage(BaseModel):
         description="Citação formal da portaria ou relação que ampara a regra",
         examples=["Portaria GM/MS nº 6.324/2024 (RENAME 2024)"],
     )
-    observacoes_dispensacao: Optional[str] = Field(
+    observacoes_dispensacao: str | None = Field(
         default=None,
         description="Orientações administrativas complementares",
     )

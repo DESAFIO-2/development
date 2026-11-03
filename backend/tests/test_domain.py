@@ -1,12 +1,12 @@
 from datetime import date, timedelta
+
 from app.domain import (
+    CitizenGuidanceCard,
+    CoverageRoute,
+    ItemRoteiroCidadao,
+    MedicationCoverage,
     MedicationItemInput,
     PrescriptionAuditRequest,
-    CoverageRoute,
-    ComponenteSUS,
-    MedicationCoverage,
-    ItemRoteiroCidadao,
-    CitizenGuidanceCard,
 )
 
 
