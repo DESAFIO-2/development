@@ -1,0 +1,40 @@
+name: guardrail-eval
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "evals/**"
+      - "backend/app/guardrails/**"
+      - ".github/workflows/guardrail-eval.yml"
+
+jobs:
+  avaliar-guardrail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Instalar dependências
+        run: uv sync --locked --project backend
+      - name: Lint e tipos dos scripts de avaliação
+        run: |
+          uv run --project backend ruff format --check --config backend/pyproject.toml evals
+          uv run --project backend ruff check --config backend/pyproject.toml evals
+          uv run --project backend mypy --strict evals/runners evals/baselines
+      - name: Baseline de palavras-chave (só informativo)
+        run: >
+          uv run --project backend python evals/runners/guardrail_runner.py
+          --alvo evals.baselines.palavras_chave:deve_bloquear
+      # Quando o guardrail real existir em backend/app/guardrails, descomente.
+      # Este passo REPROVA o PR se a segurança cair abaixo da meta.
+      # - name: Guardrail real (com metas)
+      #   run: >
+      #     uv run --project backend python evals/runners/guardrail_runner.py
+      #     --alvo app.guardrails.clinico:deve_bloquear
+      #     --min-recall 0.95 --max-falso-bloqueio 0.10
+      - name: Guardar relatório
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-guardrail
+          path: evals/reports/guardrail_ultimo.json
