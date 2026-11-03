@@ -1,26 +1,29 @@
 # Code Owners for SUS Cidadão (NavegaSUS)
 
-# Default owners for all files
-* @samucabsb @mickeiaspaiva @tayrinehz @MarlonDiasMarques @jhiovanars
+# Default owners for all repository files
+* @samucabsb @mickeiascharles @Amistice @oficialmarlonmd @jhsribeiro
 
-# Application Core, AI Engine & Architecture
-/src/challenge2/core/ @samucabsb @mickeiaspaiva
-/src/challenge2/domain/ @samucabsb @mickeiaspaiva
-/src/challenge2/application/ @samucabsb @mickeiaspaiva
-/src/challenge2/api/ @samucabsb @mickeiaspaiva
-/src/challenge2/ui/ @samucabsb
+# Application Core, Domain & Architecture
+/backend/app/core/ @samucabsb @mickeiascharles
+/backend/app/domain/ @samucabsb @mickeiascharles
+/backend/app/application/ @samucabsb @mickeiascharles
+/backend/app/api/ @samucabsb @mickeiascharles
+/backend/app/guardrails/ @samucabsb @mickeiascharles
 
 # Data Engineering & Ingestion Pipelines
-/src/challenge2/ingestion/ @jhiovanars @samucabsb
-/data/ @jhiovanars @MarlonDiasMarques
+/backend/app/ingestion/ @jhsribeiro @samucabsb
+/data/ @jhsribeiro @oficialmarlonmd
 
 # Retrieval, Vectorstores & Embeddings (Data Science)
-/src/challenge2/retrieval/ @MarlonDiasMarques @samucabsb
-/src/challenge2/infrastructure/vectorstores/ @MarlonDiasMarques @samucabsb
-/src/challenge2/infrastructure/embeddings/ @MarlonDiasMarques
+/backend/app/retrieval/ @oficialmarlonmd @samucabsb
+/backend/app/infrastructure/vectorstores/ @oficialmarlonmd @samucabsb
+/backend/app/infrastructure/embeddings/ @oficialmarlonmd @samucabsb
 
 # MLOps, CI/CD, Observability & Evaluations
-/evals/ @tayrinehz @MarlonDiasMarques @samucabsb
-/.github/ @tayrinehz @samucabsb
-/observability/ @tayrinehz @samucabsb
-/deploy/ @tayrinehz @mickeiaspaiva
+/evals/ @Amistice @oficialmarlonmd @samucabsb
+/.github/ @Amistice @samucabsb
+/observability/ @Amistice @samucabsb
+/backend/Dockerfile @Amistice @mickeiascharles
+
+# Mobile Application (React Native / Expo)
+/mobile/ @samucabsb @mickeiascharles
