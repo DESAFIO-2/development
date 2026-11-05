@@ -12,22 +12,13 @@ jobs:
   ragas-benchmark:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Instalar dependências de avaliação
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff pytest pydantic pyyaml
-
-      - name: Validar integridade dos datasets de avaliação
-        run: |
-          python -c "import json, glob; [json.loads(line) for f in glob.glob('evals/datasets/*.jsonl') for line in open(f)]" || echo "Sem arquivos jsonl para validar ainda"
-
-      - name: Checagem estática de scripts de métricas
-        run: |
-          ruff check evals/ || true
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Instalar dependências
+        run: uv sync --locked --project backend
+      - name: Validar datasets de avaliação
+        run: uv run --project backend python evals/runners/validar_datasets.py
+      # Semana 3: quando existir o runner do RAGAS, descomente e ajuste a meta.
+      # A meta de faithfulness (0.92) já está em backend/app/core/config.py.
+      # - name: Benchmark RAGAS
+      #   run: uv run --project backend python evals/runners/ragas_runner.py
