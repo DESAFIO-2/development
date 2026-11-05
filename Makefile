@@ -8,7 +8,7 @@ help:
 	@echo "  make test           - Executa os testes no backend"
 	@echo "  make run-api        - Inicia a API FastAPI (0.0.0.0:8000)"
 	@echo "  make run-ui         - Orientações da interface mobile (React Native)"
-	@echo "  make eval           - Executa a suíte de avaliações do projeto"
+	@echo "  make eval           - Valida os datasets e avalia o guardrail (baseline)"
 	@echo "  make eval-guardrail - Executa a avaliação do guardrail clínico"
 	@echo "  make docker-build   - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
@@ -33,10 +33,11 @@ run-ui:
 	@echo "Interface do Cidadão em React Native (mobile/). Consulte docs/adr/0002_mobile_first_react_native_client.md"
 
 eval:
-	python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
+	uv run --project backend python evals/runners/validar_datasets.py
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
 
 eval-guardrail:
-	python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest backend
