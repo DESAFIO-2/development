@@ -39,6 +39,23 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 * **Semana 5:** Pipeline Multimodal (PDFs digitais padrão CFM/ICP-Brasil + OCR + Transcrição Whisper).
 * **Semana 6:** Integração Sistêmica Ponta a Ponta (API FastAPI + Interface).
 * **Semana 7:** Bateria de Testes com Usuários, Métricas DCS e Demonstração Final.
+
+---
+
+## Status de Entregas & Maturidade Técnica
+
+| Componente | Fase / Semana | Status | Artefato de Referência |
+| :--- | :--- | :--- | :--- |
+| **Arquitetura & Clean Architecture** | Semana 1 | ✅ Concluído | [ADR 0001](docs/adr/0001_enterprise_clean_architecture_and_rag.md) e `backend/app/` |
+| **Cliente Mobile & Carteira Digital** | Semana 1 | ✅ Concluído | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) e `mobile/` |
+| **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
+| **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` e runner ativo |
+| **Ingestão Tabular RENAME / PFPB** | Semana 2 | 🔄 Em andamento | Pipelines de normalização DCB e manifestos em `data/` |
+| **Recuperação Híbrida (RAG Híbrido)** | Semana 2 | 🔄 Em andamento | Busca determinística tabular + embeddings de portarias |
+| **Benchmark RAGAS (LLM pura vs RAG)** | Semana 3 | ⏳ Planejado | Comparativo experimental com Golden Dataset |
+| **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
+| **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
+| **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
 ---
 ## Bases de Dados Oficiais (100% Públicas)
 * **RENAME 2024:** Relação Nacional de Medicamentos Essenciais (Portaria GM/MS nº 6.324/2024).
@@ -89,23 +106,23 @@ challenge2/
 │   ├── processed/               # Tabelas canônicas limpas (medicamentos_sus_canonical)
 │   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
 ├── docs/                        # Documentação Técnica e Decisões
-│   ├── adr/                     # Architecture Decision Records (ADR 0001 aprovado)
-│   ├── architecture/            # Diagramas C4 e fluxos de dados
+│   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002 e 0003)
+│   ├── architecture/            # Diagramas C4, fluxos e Matriz de Métricas
 │   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
 │   ├── data_sources/            # Dicionários de dados das fontes oficiais
 │   ├── runbooks/                # Procedimentos de execução e incidentes
 │   └── security/                # Modelo de ameaças e conformidade LGPD
 ├── evals/                       # Suíte Contínua de LLMOps e Métricas RAGAS
-│   ├── datasets/                # Golden Dataset (casos das Personas Helena e Lucas)
+│   ├── datasets/                # Datasets rotulados (Guardrail Clínico v1 e Golden Set)
 │   ├── metrics/                 # Métricas de Faithfulness, Answer Relevancy, Context Recall
-│   ├── runners/                 # Runners de benchmark automatizados
+│   ├── runners/                 # Runners de benchmark automatizados (guardrail_runner.py)
 │   ├── configs/                 # Configurações de parâmetros de chunking/top_k
-│   ├── baselines/               # Linha de base para comparação (LLM Pura vs RAG - Semana 3)
+│   ├── baselines/               # Linhas de base comparativas (Palavras-chave, LLM pura)
 │   └── reports/                 # Relatórios consolidados de avaliação
 ├── observability/               # Instrumentação de telemetria, tracing e latência
 ├── CONTRIBUTING.md              # Guia de contribuição e GitFlow do squad
 ├── SECURITY.md                  # Política de segurança e proteção de dados de saúde
-├── Makefile                     # Atalhos operacionais (make test, make run-api, make lint)
+├── Makefile                     # Atalhos operacionais (make test, make run-api, make lint, make eval)
 └── README.md
 ```
 
@@ -125,4 +142,7 @@ make lint
 
 # 4. Iniciar API FastAPI local
 make run-api
+
+# 5. Executar suíte de avaliações (guardrail clínico)
+make eval
 ```
