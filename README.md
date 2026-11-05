@@ -51,7 +51,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` e runner ativo |
 | **Ingestão Tabular RENAME / PFPB** | Semana 2 | 🔄 Em andamento | Pipelines de normalização DCB e manifestos em `data/` |
-| **Recuperação Híbrida (RAG Híbrido)** | Semana 2 | 🔄 Em andamento | Busca determinística tabular + embeddings de portarias |
+| **Recuperação Híbrida (RAG Híbrido)** | Semana 2 | 🔄 Em andamento | [Plano Semana 2](docs/architecture/plano_integracao_semana2_rag.md) (Busca tabular + ChromaDB) |
 | **Benchmark RAGAS (LLM pura vs RAG)** | Semana 3 | ⏳ Planejado | Comparativo experimental com Golden Dataset |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
@@ -107,7 +107,7 @@ challenge2/
 │   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
 ├── docs/                        # Documentação Técnica e Decisões
 │   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002 e 0003)
-│   ├── architecture/            # Diagramas C4, fluxos e Matriz de Métricas
+│   ├── architecture/            # Diagramas C4, Matriz de Métricas e Plano RAG Semana 2
 │   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
 │   ├── data_sources/            # Dicionários de dados das fontes oficiais
 │   ├── runbooks/                # Procedimentos de execução e incidentes
