@@ -49,11 +49,7 @@ def executar_demonstracao(caso: str = "helena") -> int:
     use_case = AuditPrescriptionUseCase(medication_repo=med_repo, retriever=retriever)
 
     if caso.lower() in ("helena", "dona_helena"):
-        print(
-            formatar_cabecalho(
-                "Demonstração: Persona Dona Helena (68 anos, Ceilândia - DF)"
-            )
-        )
+        print(formatar_cabecalho("Demonstração: Persona Dona Helena (68 anos, Ceilândia - DF)"))
         print("Cenário: Paciente hipertensa e diabética com receita recente da UBS.")
         itens = [
             MedicationItemInput(nome_digitado="Losartana Potássica 50mg"),
@@ -63,11 +59,7 @@ def executar_demonstracao(caso: str = "helena") -> int:
         ra = "Ceilândia"
         pergunta = "Onde retiro esses remédios de graça e quais papéis preciso levar?"
     elif caso.lower() in ("lucas", "alto_custo"):
-        print(
-            formatar_cabecalho(
-                "Demonstração: Persona Lucas Mendes (Taguatinga Sul - DF)"
-            )
-        )
+        print(formatar_cabecalho("Demonstração: Persona Lucas Mendes (Taguatinga Sul - DF)"))
         print("Cenário: Cuidador do pai cardiopata buscando medicamento de Alto Custo.")
         itens = [
             MedicationItemInput(nome_digitado="Adalimumabe 40mg"),
@@ -98,9 +90,7 @@ def executar_demonstracao(caso: str = "helena") -> int:
                 )
                 print(f"          Trecho: {hit.text[:130]}...")
         else:
-            print(
-                "      [Sem chunks adicionais - coberto diretamente via catálogo tabular Gold]"
-            )
+            print("      [Sem chunks adicionais - coberto diretamente via catálogo tabular Gold]")
 
     # Executa a auditoria completa
     req = PrescriptionAuditRequest(
@@ -120,9 +110,8 @@ def executar_demonstracao(caso: str = "helena") -> int:
         print(f"   |-- Via de Gratuidade: {card.via_retirada.value}")
         print(f"   |-- Onde Retirar:      {card.local_sugerido}")
         print(f"   |-- O que Levar:       {', '.join(card.o_que_levar)}")
-        print(
-            f"   |-- Validade Receita:  {card.dias_validade_receita} dias (restam {card.dias_restantes} dias)"
-        )
+        dias_info = f"{card.dias_validade_receita} dias (restam {card.dias_restantes} dias)"
+        print(f"   |-- Validade Receita:  {dias_info}")
         print(f"   +-- Base Legal:        {card.citacao_normativa}\n")
 
     print(formatar_cabecalho("Guardrail Ético e Preservação do Ato Médico"))
@@ -134,7 +123,7 @@ def executar_demonstracao(caso: str = "helena") -> int:
 def main() -> int:
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         with contextlib.suppress(AttributeError, io.UnsupportedOperation):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

@@ -128,9 +128,9 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         reciprocal_ranks.append(rr)
 
         # Auditoria de Roteamento
-        itens_input = [
-            MedicationItemInput(nome_digitado=dcb) for dcb in esperado_dcb
-        ] or [MedicationItemInput(nome_digitado=query)]
+        itens_input = [MedicationItemInput(nome_digitado=dcb) for dcb in esperado_dcb] or [
+            MedicationItemInput(nome_digitado=query)
+        ]
         audit_res = use_case.executar(PrescriptionAuditRequest(itens=itens_input))
 
         if audit_res.itens_auditados:
@@ -172,7 +172,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
 def main() -> int:
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         with contextlib.suppress(AttributeError, io.UnsupportedOperation):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
     print("=" * 80)
     print("  BENCHMARK CIENTÍFICO RAG — GOLDEN DATASET (16 CASOS AUDITADOS)")
@@ -195,18 +195,14 @@ def main() -> int:
         **metricas.to_dict(),
     }
     destino = PASTA_RELATORIOS / "rag_benchmark_ultimo.json"
-    destino.write_text(
-        json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    destino.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nRelatório salvo em: {destino.relative_to(RAIZ)}")
 
     if not metricas.sucesso_geral:
         print("[ERRO] Reprovado: métricas abaixo dos limiares de aceitação.")
         return 1
 
-    print(
-        "[OK] APROVADO: Sistema atende a todos os critérios de qualidade da Semana 2."
-    )
+    print("[OK] APROVADO: Sistema atende a todos os critérios de qualidade da Semana 2.")
     return 0
 
 

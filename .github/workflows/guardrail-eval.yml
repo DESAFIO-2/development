@@ -17,10 +17,12 @@ jobs:
       - name: Instalar dependencias
         run: uv sync --locked --project backend
       - name: Lint e tipos dos scripts de avaliacao
+        env:
+          MYPYPATH: backend
         run: |
           uv run --project backend ruff format --check --config backend/pyproject.toml evals
           uv run --project backend ruff check --config backend/pyproject.toml evals
-          uv run --project backend mypy --strict evals/runners evals/baselines
+          uv run --project backend mypy --config-file backend/pyproject.toml --strict evals/runners evals/baselines
       - name: Baseline de palavras-chave (informativo)
         run: >
           uv run --project backend python evals/runners/guardrail_runner.py
