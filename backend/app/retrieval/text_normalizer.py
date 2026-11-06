@@ -68,3 +68,8 @@ def tokenizar_com_ngrams(texto: str, max_ngram: int = 2) -> list[str]:
         for idx in range(len(base_tokens) - 1):
             tokens.append(f"{base_tokens[idx]}_{base_tokens[idx + 1]}")
     return tokens
+
+
+# Aliases de compatibilidade
+normalize_pt_text = normalizar_texto_pt
+tokenize_with_ngrams = tokenizar_com_ngrams
