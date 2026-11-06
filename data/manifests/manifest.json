@@ -1,0 +1,12 @@
+{
+  "manifest_version": "2024.2.1",
+  "generated_at_utc": "2026-11-06T12:00:00.000000+00:00",
+  "engineering_source": "canonical_materialization_v2024.2_full",
+  "canonical_medications_sha256": "699dcc74ff1514e1d01947c606034c1ca4648ad7f6e4dbdf22fa2b5a32853fdd",
+  "normative_chunks_sha256": "a5e9092ed285fff29cb1f5450a998367e85054f2f8af8dfef5ff5cde118ae496",
+  "combined_sha256": "00d33cbeda878f182baa52ab969a86d57877177147b8999ef230e3fa5d68591e",
+  "record_counts": {
+    "canonical_medications": 992,
+    "normative_chunks": 13
+  }
+}

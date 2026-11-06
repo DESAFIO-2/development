@@ -1,4 +1,4 @@
-.PHONY: help install dev-install lint format test run-api run-ui eval eval-guardrail docker-build docker-up clean
+.PHONY: help install dev-install lint format test run-api run-ui eval eval-guardrail demo benchmark docker-build clean
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -8,8 +8,10 @@ help:
 	@echo "  make test           - Executa os testes no backend"
 	@echo "  make run-api        - Inicia a API FastAPI (0.0.0.0:8000)"
 	@echo "  make run-ui         - Orientações da interface mobile (React Native)"
-	@echo "  make eval           - Valida os datasets e avalia o guardrail (baseline)"
-	@echo "  make eval-guardrail - Executa a avaliação do guardrail clínico"
+	@echo "  make eval           - Valida os datasets e avalia os guardrails"
+	@echo "  make eval-guardrail - Executa a avaliação do guardrail clínico em produção"
+	@echo "  make demo           - Executa a demonstração do RAG para as Personas Dona Helena e Lucas"
+	@echo "  make benchmark      - Executa o benchmark científico RAG no Golden Dataset (16 casos)"
 	@echo "  make docker-build   - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
@@ -34,10 +36,17 @@ run-ui:
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
 
 eval-guardrail:
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo evals.baselines.palavras_chave:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
+
+demo:
+	uv run --project backend python evals/runners/demo_rag_runner.py --caso helena
+	uv run --project backend python evals/runners/demo_rag_runner.py --caso lucas
+
+benchmark:
+	uv run --project backend python evals/runners/ragas_runner.py
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest backend
