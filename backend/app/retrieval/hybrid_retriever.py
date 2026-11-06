@@ -27,6 +27,26 @@ class HybridRetriever(RetrieverPort):
             "consulta",
         }
     )
+    _REGULATORY_RULE_TOKENS: frozenset[str] = frozenset(
+        {
+            "procuracao",
+            "procurador",
+            "terceiro",
+            "terceiros",
+            "idoso",
+            "idosa",
+            "acamado",
+            "bairro",
+            "polo",
+            "polos",
+            "adscricao",
+            "territorio",
+            "territorial",
+            "cadastrada",
+            "lme",
+            "pcdt",
+        }
+    )
 
     def __init__(
         self,
@@ -85,10 +105,13 @@ class HybridRetriever(RetrieverPort):
                         chunk_dcb_boost = matched_dcbs[dcb_name]
                         best_dcb = dcb_name
 
+            is_rule_intent = bool(norm_query_tokens.intersection(self._REGULATORY_RULE_TOKENS))
             if chunk_dcb_boost > 0.0:
                 final_score = 0.50 * lexical_score + 0.35 * chunk_dcb_boost + 0.15 * rrf_norm
             elif is_sisreg_intent and chunk.route_category == "SISREG_EXAME_CONSULTA":
                 final_score = 0.80 * lexical_score + 0.20 * rrf_norm
+            elif is_rule_intent and chunk.chunk_id.startswith("CHK-REGRA-"):
+                final_score = 0.70 * lexical_score + 0.30 * rrf_norm
             elif matched_dcbs:
                 final_score = 0.35 * lexical_score
             else:

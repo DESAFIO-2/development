@@ -130,5 +130,66 @@
     "dcb_mentions": [],
     "route_category": "GERAL",
     "sha256": "e12fc5e00640d2b96aa4c6dc7414d8ebebc87e61b3ebbf2fa9b5028f4a717d0d"
+  },
+  {
+    "chunk_id": "CHK-REGRA-UBS-001",
+    "source_id": "PNAB_SES_DF",
+    "document_title": "Portaria de Consolidação MS nº 2/2017 e Diretrizes da Atenção Primária SES-DF",
+    "section": "Regra de Adscrição Territorial e Dispensação na Unidade Básica de Saúde (UBS)",
+    "page_number": 14,
+    "text": "Na Atenção Primária à Saúde do SUS-DF, os medicamentos do Componente Básico (RENAME/REME-DF) devem ser retirados prioritariamente na farmácia da Unidade Básica de Saúde (UBS) de referência do território onde o cidadão reside e está cadastrado na sua Equipe de Saúde da Família (eSF). Para retirar, é obrigatório apresentar o Cartão Nacional de Saúde (CNS - Cartão SUS), documento oficial de identificação com foto e CPF, comprovante de residência no DF e receita médica original válida emitida pelo SUS. Em caso de indisponibilidade pontual de estoque no lote da UBS, o farmacêutico emite declaração de encaminhamento para a UBS polo de retaguarda da mesma Região de Saúde.",
+    "dcb_mentions": [
+      "omeprazol",
+      "amoxicilina",
+      "levotiroxina sódica"
+    ],
+    "route_category": "UBS_ATENCAO_PRIMARIA",
+    "sha256": "d32256d96afd8a7b5d44becbc60bab7a693d91c243b5077e48f6619afd7c25a5"
+  },
+  {
+    "chunk_id": "CHK-REGRA-PFPB-001",
+    "source_id": "PFPB_2024",
+    "document_title": "Portaria GM/MS nº 3.677/2024 — Manual de Operações do Programa Farmácia Popular",
+    "section": "Regras de Acesso Nacional, Receitas Particulares e Retirada por Terceiros",
+    "page_number": 8,
+    "text": "No Programa Farmácia Popular do Brasil, não há exigência de vinculação territorial: o cidadão pode retirar medicamentos gratuitos (hipertensão, diabetes, asma, osteoporose, dislipidemia) em qualquer drogaria privada credenciada ('Aqui Tem Farmácia Popular') em qualquer Região Administrativa do DF ou município brasileiro. São aceitas receitas emitidas tanto pelo SUS quanto por clínicas privadas e convênios, com validade de até 180 dias. A retirada exige a presença do titular com CPF, RG e receita. Caso o paciente seja idoso, enfermo ou esteja impossibilitado de locomoção, a retirada por terceiros exige procuração pública ou procuração particular com firma reconhecida em cartório, laudo médico atestando a impossibilidade e documentos de identificação com foto do paciente e do procurador.",
+    "dcb_mentions": [
+      "losartana potássica",
+      "cloridrato de metformina",
+      "sinvastatina",
+      "alendronato de sódio"
+    ],
+    "route_category": "FARMACIA_POPULAR",
+    "sha256": "ca3a2cfda99b7f1b5fef4b598e28b05d52b15520ec145018029e8b206452b26b"
+  },
+  {
+    "chunk_id": "CHK-REGRA-CEAF-001",
+    "source_id": "REME_DF_2024",
+    "document_title": "Manual do Componente Especializado da Assistência Farmacêutica (CEAF) — SES-DF",
+    "section": "Polos Regionais de Alto Custo no DF e Abertura de Processo LME",
+    "page_number": 19,
+    "text": "No Distrito Federal, os medicamentos do Componente Especializado (Alto Custo / CEAF) são dispensados exclusivamente em três polos centrais da Diretoria de Assistência Farmacêutica (DIASF): (1) Polo Asa Sul, localizado no subsolo da Estação 102 Sul do Metrô; (2) Polo Ceilândia, na Praça do Cidadão ao lado do Hospital Regional de Ceilândia (HRC); e (3) Polo Gama, na Praça 1, Entrequadra 1/2, Setor Sul. A obtenção exige abertura de processo administrativo com Laudo de Solicitação, Avaliação e Autorização de Medicamento(s) (LME) assinado pelo médico especialista (validade de 90 dias a contar da emissão), receita médica em 2 vias com a Denominação Comum Brasileira (DCB), Termo de Esclarecimento e Responsabilidade (TER), exames exigidos pelo PCDT do Ministério da Saúde para o CID-10, Cartão SUS, CPF, RG e comprovante de residência no DF. Recomenda-se conferência prévia da disponibilidade no painel InfoSaúde antes do deslocamento.",
+    "dcb_mentions": [
+      "adalimumabe",
+      "sacubitril valsartana sódica hidratada",
+      "insulina glargina"
+    ],
+    "route_category": "ALTO_CUSTO_CEAF",
+    "sha256": "e08f14892312f9d08982dba4057f10d1e8798d8f4e44a6c4a2808b98d88ee067"
+  },
+  {
+    "chunk_id": "CHK-REGRA-CONTROLE-001",
+    "source_id": "ANVISA_PORTARIA_344",
+    "document_title": "Portaria SVS/MS nº 344/1998 e RDC ANVISA nº 20/2011 — Controle Especial e Antimicrobianos",
+    "section": "Prazos de Validade Estrita de Receituários de Controle Especial e Antibióticos",
+    "page_number": 5,
+    "text": "Para medicamentos sujeitos a controle especial (psicotrópicos, antidepressivos, ansiolíticos e anticonvulsivantes como fluoxetina e carbamazepina), a dispensação gratuita nas farmácias do SUS exige Receita de Controle Especial em duas vias (ou Notificação de Receita), com retenção obrigatória da 1ª via pelo farmacêutico e validade estrita de 30 dias contados da data de emissão médica. Para medicamentos antimicrobianos (antibióticos como amoxicilina, azitromicina e cefalexina), a receita médica em duas vias possui validade máxima improrrogável de 10 dias corridos em todo o território nacional.",
+    "dcb_mentions": [
+      "cloridrato de fluoxetina",
+      "carbamazepina",
+      "amoxicilina"
+    ],
+    "route_category": "UBS_ATENCAO_PRIMARIA",
+    "sha256": "b300faf9e71131f474bdea73369675569aff41a844b83b672d1d410ca26b4f8e"
   }
 ]

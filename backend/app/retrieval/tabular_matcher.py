@@ -45,6 +45,8 @@ class TabularDCBMatcher:
             norm_dcb = normalizar_texto_pt(med.dcb_name)
             dcb_tokens = [t for t in norm_dcb.split() if len(t) > 2]
             core_tokens = [t for t in dcb_tokens if t not in self._IGNORED_SALTS] or dcb_tokens
+            if not core_tokens:
+                continue
 
             if norm_dcb in norm_query:
                 score = 0.95
