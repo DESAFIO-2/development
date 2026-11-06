@@ -40,6 +40,35 @@ PFPB_ACTIVE_INGREDIENTS = frozenset(
     }
 )
 
+CONTINUATION_DCB_SUFFIXES = frozenset(
+    {
+        "hidratada",
+        "diidratada",
+        "monoidratada",
+        "triidratada",
+        "anidra",
+    }
+)
+
+FORM_KEYWORDS = frozenset(
+    {
+        "prolongada",
+        "revestido",
+        "injetavel",
+        "liberacao",
+        "suspensao",
+        "solucao",
+        "comprimido",
+        "capsula",
+        "gotas",
+        "oral",
+        "retal",
+        "topico",
+        "creme",
+        "pomada",
+    }
+)
+
 COMPONENTS_PATTERN = re.compile(r"\b(Básico|Especializado|Estratégico|Hospitalar)\b", re.IGNORECASE)
 ATC_PATTERN = re.compile(r"\b([A-Z]\d{2}[A-Z]{2}\d{2})\b")
 # Fármaco seguido de concentração (ex: "alfa-agalsidase 1 mg/mL", "ácido acetilsalicílico 500 mg")
@@ -173,14 +202,23 @@ def extrair_rename_completa(pdf_path: Path) -> list[dict[str, Any]]:
                 )
                 item_counter += 1
             else:
-                # Linha de cabeçalho de DCB
+                # Linha de cabeçalho de DCB ou continuação
+                clean_l = line.strip().lower()
+                norm_l = _remover_acentos(clean_l)
                 if (
                     not line.isdigit()
                     and len(line) > 2
                     and not line.startswith("(")
                     and len(line) < 70
                 ):
-                    current_dcb = line.strip().lower()
+                    if norm_l in CONTINUATION_DCB_SUFFIXES and current_dcb:
+                        current_dcb = f"{current_dcb} {clean_l}"
+                    elif norm_l in FORM_KEYWORDS or any(
+                        kw in norm_l for kw in ("liberacao", "suspensao", "po para", "revestido")
+                    ):
+                        pass
+                    else:
+                        current_dcb = clean_l
 
     return canonical_items
 
