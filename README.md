@@ -50,7 +50,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Cliente Mobile & Carteira Digital** | Semana 1 | ✅ Concluído | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) e `mobile/` |
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` (Recall: 100%, Falso Bloqueio: 0%) |
-| **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico (24 fármacos), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
+| **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
 | **Recuperação Híbrida (RAG Híbrido)** | Semana 2 | ✅ Concluído | [Spec Semana 2](docs/architecture/spec_semana2_rag_hibrido.md) (DCB Matcher + BM25 + TF-IDF + ChromaDB) |
 | **Benchmark RAGAS / Golden Dataset** | Semana 2-3 | ✅ Concluído | `evals/runners/ragas_runner.py` (Hit@3: 100%, MRR: 1.0, Rota: 100%) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
@@ -107,7 +107,7 @@ challenge2/
 │   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
 ├── docs/                        # Documentação Técnica e Decisões
 │   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002 e 0003)
-│   ├── architecture/            # Diagramas C4, Matriz de Métricas e Plano RAG Semana 2
+│   ├── architecture/            # Diagramas C4, Matriz de Métricas e Especificação RAG Semana 2
 │   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
 │   ├── data_sources/            # Dicionários de dados das fontes oficiais
 │   ├── runbooks/                # Procedimentos de execução e incidentes
