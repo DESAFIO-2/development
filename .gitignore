@@ -22,6 +22,7 @@ ENV/
 # Vectorstore & Raw Data Blobs
 data/vectorstore/*
 !data/vectorstore/.gitkeep
+data/raw/**/*.pdf
 data/raw/*.pdf
 data/raw/*.zip
 data/raw/*.tar.gz
