@@ -1,12 +1,16 @@
 {
-  "manifest_version": "2024.2.1",
-  "generated_at_utc": "2026-11-06T12:00:00.000000+00:00",
-  "engineering_source": "canonical_materialization_v2024.2_full",
-  "canonical_medications_sha256": "699dcc74ff1514e1d01947c606034c1ca4648ad7f6e4dbdf22fa2b5a32853fdd",
-  "normative_chunks_sha256": "a5e9092ed285fff29cb1f5450a998367e85054f2f8af8dfef5ff5cde118ae496",
-  "combined_sha256": "00d33cbeda878f182baa52ab969a86d57877177147b8999ef230e3fa5d68591e",
+  "manifest_version": "2026.3.0",
+  "generated_at_utc": "2026-11-10T13:31:23.513870+00:00",
+  "engineering_source": "consolidated_multi_source_f01_f03_f04_c01_c14_v2026.3",
+  "canonical_medications_sha256": "a0e7ef6f1283fe2cf7a2d53b66ac1ee632649a8038cdcc44e7613955074411cc",
+  "normative_chunks_sha256": "4e69c4c4fba158905f6bee19e5dd79d9db7032e5f3679c04ca2a6744f9801c3d",
+  "unified_pdf_chunks_sha256": "35295b321b07b9ab714e784e087f297ed83b637fccf21e48f03c7dd3c63ec5ea",
+  "curated_occurrences_sha256": "78d1853c46a0b3e11c6340e46ba8403efa7d3242601817a556c957571feb12dd",
+  "combined_sha256": "ac8994ec9ff705f1a776c88cac3ec9ecabad87c74dd873fa91a90f4bef16ca7c",
   "record_counts": {
-    "canonical_medications": 992,
-    "normative_chunks": 13
+    "canonical_medications": 1789,
+    "normative_chunks": 20,
+    "unified_pdf_chunks": 70,
+    "curated_occurrences_f01_f03_f04": 2114
   }
 }

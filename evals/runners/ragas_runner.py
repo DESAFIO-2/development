@@ -1,12 +1,14 @@
-"""Runner de Avaliação Científica do RAG no Golden Dataset (Semana 2 & 3).
+"""Runner de Avaliação Científica do RAG no Golden Dataset com Rastreabilidade MLflow.
 
-Avalia o sistema contra o conjunto de 16 casos padrão-ouro (`evals/datasets/golden_set_v1.jsonl`),
-calculando métricas de Recuperação de Informação (IR), acurácia de roteamento de gratuidade,
-abstenção e taxa de aprovação de guardrails éticos.
+Avalia o sistema contra o conjunto padrão-ouro (`evals/datasets/golden_set_v1.jsonl` ou
+`evals/datasets/golden_set_v2_consolidado.jsonl`), calculando métricas de Recuperação de
+Informação (IR), acurácia de roteamento de gratuidade, abstenção, taxa de aprovação de
+guardrails éticos e registrando linhagem criptográfica SHA-256 via `MLflowExperimentTracker`.
 """
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -29,6 +31,8 @@ from app.infrastructure.persistence.repositories.normative_chunk_repository impo
     LocalNormativeChunkRepository,
 )
 from app.retrieval.hybrid_retriever import HybridRetriever
+
+from observability.mlflow_tracker import MLflowExperimentTracker
 
 DATASET_GOLDEN = RAIZ / "evals" / "datasets" / "golden_set_v1.jsonl"
 PASTA_RELATORIOS = RAIZ / "evals" / "reports"
@@ -174,11 +178,43 @@ def main() -> int:
         with contextlib.suppress(AttributeError, io.UnsupportedOperation):
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        default=DATASET_GOLDEN,
+        help="Caminho do dataset JSONL a avaliar (padrão: evals/datasets/golden_set_v1.jsonl)",
+    )
+    args = parser.parse_args()
+    caminho_dataset: Path = args.dataset if args.dataset.is_absolute() else (RAIZ / args.dataset)
+
     print("=" * 80)
-    print("  BENCHMARK CIENTÍFICO RAG — GOLDEN DATASET (16 CASOS AUDITADOS)")
+    print(f"  BENCHMARK CIENTÍFICO RAG — DATASET: {caminho_dataset.name}")
     print("=" * 80)
 
-    metricas = executar_benchmark()
+    metricas = executar_benchmark(caminho_dataset)
+
+    tracker = MLflowExperimentTracker(raiz_repo=RAIZ)
+    run_record = tracker.registrar_execucao(
+        run_name=f"rag_hybrid_{caminho_dataset.stem}",
+        params={
+            "retriever_type": "hybrid_dcb_tfidf_bm25_rrf",
+            "rrf_k": 60,
+            "min_score": 0.18,
+            "top_k": 3,
+            "dataset": caminho_dataset.name,
+            "total_casos": metricas.total_casos,
+        },
+        metrics={
+            "hit_rate_at_3": metricas.hit_rate_at_3,
+            "recall_at_3": metricas.recall_at_3,
+            "mrr": metricas.mrr,
+            "acuracia_roteamento": metricas.acuracia_roteamento,
+            "taxa_bloqueio_clinico": metricas.taxa_bloqueio_clinico,
+            "acuracia_abstencao": metricas.acuracia_abstencao,
+        },
+        dataset_path=caminho_dataset,
+    )
 
     print(f"Total de Casos Avaliados:     {metricas.total_casos}")
     print(f"Hit Rate@3:                  {metricas.hit_rate_at_3:.2%}")
@@ -187,11 +223,15 @@ def main() -> int:
     print(f"Acurácia de Roteamento:      {metricas.acuracia_roteamento:.2%}")
     print(f"Taxa Bloqueio Clínico:       {metricas.taxa_bloqueio_clinico:.2%}")
     print(f"Acurácia de Abstenção:       {metricas.acuracia_abstencao:.2%}")
+    print(f"MLflow Run ID:               {run_record.run_id}")
+    print(f"Manifest Lineage SHA-256:    {run_record.tags.get('combined_sha256', '')[:16]}...")
 
     PASTA_RELATORIOS.mkdir(exist_ok=True)
     relatorio = {
         "executado_em": datetime.now(UTC).isoformat(),
-        "dataset": DATASET_GOLDEN.name,
+        "dataset": caminho_dataset.name,
+        "mlflow_run_id": run_record.run_id,
+        "manifest_combined_sha256": run_record.tags.get("combined_sha256", ""),
         **metricas.to_dict(),
     }
     destino = PASTA_RELATORIOS / "rag_benchmark_ultimo.json"
@@ -202,7 +242,7 @@ def main() -> int:
         print("[ERRO] Reprovado: métricas abaixo dos limiares de aceitação.")
         return 1
 
-    print("[OK] APROVADO: Sistema atende a todos os critérios de qualidade da Semana 2.")
+    print("[OK] APROVADO: Sistema atende a todos os critérios de qualidade.")
     return 0
 
 
