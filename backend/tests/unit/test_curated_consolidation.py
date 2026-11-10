@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 from observability.mlflow_tracker import MLflowExperimentTracker
@@ -16,6 +17,7 @@ from app.infrastructure.persistence.repositories.normative_chunk_repository impo
 )
 from app.ingestion.consolidate_curated_corpus import (
     RAIZ_REPO,
+    consolidar_catalogo_medicamentos,
     normalizar_concentracao,
     validate_occurrence_drift,
 )
@@ -31,7 +33,7 @@ def test_normalizar_concentracao_unifica_f01_f03_f04() -> None:
 
 
 def test_schema_drift_validation_curated_occurrences() -> None:
-    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v1.jsonl"
+    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v5.jsonl"
     with caminho_occ.open(encoding="utf-8") as f:
         occurrences = [json.loads(line) for line in f if line.strip()]
 
@@ -40,6 +42,16 @@ def test_schema_drift_validation_curated_occurrences() -> None:
     assert report.total_records == 2114
     assert report.valid_records == 2114
     assert len(report.unexpected_fields) == 0
+    assert Counter(row["item_type"] for row in occurrences) == {"medicine": 2085, "supply": 29}
+
+    upstream = json.loads((RAIZ_REPO / "data/manifests/corpus_v5_source.json").read_bytes())
+    assert hashlib.sha256(caminho_occ.read_bytes()).hexdigest() == upstream["staging_sha256"]
+    excluido = upstream["excluded_occurrences"][0]["occurrence_id"]
+    assert all(row["occurrence_id"] != excluido for row in occurrences)
+
+    canonico = RAIZ_REPO / "data/processed/medicamentos_sus_canonical.json"
+    assert consolidar_catalogo_medicamentos(occurrences) == json.loads(canonico.read_bytes())
+    assert not validate_occurrence_drift([*occurrences, occurrences[0]]).is_valid
 
 
 def test_catalogo_consolidado_possui_cobertura_multifonte() -> None:
@@ -66,7 +78,7 @@ def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
     caminho_manifest = RAIZ_REPO / "data" / "manifests" / "manifest.json"
 
     manifest = json.loads(caminho_manifest.read_text(encoding="utf-8"))
-    assert manifest["manifest_version"] == "2026.3.0"
+    assert manifest["manifest_version"] == "2026.3.1"
 
     assert (
         hashlib.sha256(caminho_meds.read_bytes()).hexdigest()
@@ -124,5 +136,5 @@ def test_mlflow_experiment_tracker_registra_linhagem(tmp_path: Path) -> None:
         metrics={"hit_rate_at_3": 1.0, "mrr": 1.0},
     )
     assert rec.status == "FINISHED"
-    assert rec.tags["manifest_version"] == "2026.3.0"
+    assert rec.tags["manifest_version"] == "2026.3.1"
     assert len(rec.tags["combined_sha256"]) == 64

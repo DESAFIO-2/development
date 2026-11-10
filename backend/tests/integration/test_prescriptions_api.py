@@ -99,3 +99,32 @@ def test_api_audit_rejeita_data_futura_e_nome_em_branco() -> None:
         ("body", "itens", 0, "nome_digitado"),
         ("body", "data_emissao"),
     }
+
+
+def test_api_auditoria_v5_distingue_apresentacoes_f04_e_canal_f03() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={
+            "itens": [
+                {
+                    "nome_digitado": "benzilpenicilina benzatina",
+                    "principio_ativo_dcb": "benzilpenicilina benzatina",
+                    "concentracao": "1.200.000 UI",
+                    "forma_farmaceutica": "pó para suspensão injetável",
+                },
+                {"nome_digitado": "acetato de medroxiprogesterona 10mg"},
+                {"nome_digitado": "acetato de medroxiprogesterona 150mg"},
+                {"nome_digitado": "abacavir 300mg"},
+                {"nome_digitado": "fralda geriátrica"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    benzil, oral, elenco, abacavir, insumo = response.json()["itens"]
+    assert benzil["via_retirada"] == oral["via_retirada"] == "UBS_REME_DF"
+    assert elenco["via_retirada"] == "FARMACIA_POPULAR"
+    assert elenco["citacao_normativa"] == "PFPB_2026 (p. 1)"
+    assert "Policlínica" in abacavir["local_sugerido"]
+    assert "CEDIN" in abacavir["local_sugerido"]
+    assert insumo["via_retirada"] == "FARMACIA_POPULAR"
+    assert insumo["dias_validade_receita"] is None

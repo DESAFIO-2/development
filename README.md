@@ -51,8 +51,8 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` (Recall: 100%, Falso Bloqueio: 0%) |
 | **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
-| **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado com 1.789 registros. |
-| **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ⚠️ v1 aprovado, v2 com divergência | `make benchmark` |
+| **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado v5 com 1.787 registros. |
+| **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ⏳ Esqueleto inicial | [Auditoria e roteiro de implementação](docs/auditoria_semana3.md) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |

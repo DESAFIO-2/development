@@ -6,15 +6,15 @@
     "page_number": 1,
     "segment_index": 0,
     "char_count": 1954,
-    "content": "MINISTÉRIO DA SAÚDE & SECRETARIA DE SAÚDE DO DISTRITO FEDERAL (SES-DF) — CATÁLOGO CANÔNICO CONSOLIDADO DE MEDICAMENTOS DO SUS (F01 RENAME 2024 + F03 REME-DF 2026 + F04 FARMÁCIA POPULAR 2026). Total de Apresentações Padronizadas e Auditadas: 1789 apresentações (97 Farmácia Popular, 892 Atenção Primária/Secundária DF, 487 Componente Especializado CEAF). losartana potássica 50 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. cloridrato de metformina 500 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. cloridrato de metformina 850 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. maleato de enalapril 10 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. atenolol 25 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. hidroclorotiazida 25 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. besilato de anlodipino 5 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. sinvastatina 20 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. glibenclamida 5 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. insulina humana nph 100 UI/mL (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias.",
+    "content": "MINISTÉRIO DA SAÚDE & SECRETARIA DE SAÚDE DO DISTRITO FEDERAL (SES-DF) — CATÁLOGO CANÔNICO CONSOLIDADO DE MEDICAMENTOS DO SUS (F01 RENAME 2024 + F03 REME-DF 2026 + F04 FARMÁCIA POPULAR 2026). Total de Apresentações Padronizadas e Auditadas: 1787 apresentações (54 Farmácia Popular, 923 Atenção Primária/Secundária DF, 492 Componente Especializado CEAF). losartana potássica 50 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. cloridrato de metformina 500 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. cloridrato de metformina 850 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. maleato de enalapril 10 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. atenolol 25 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. hidroclorotiazida 25 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. besilato de anlodipino 5 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. sinvastatina 20 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. glibenclamida 5 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. insulina humana nph 100 UI/mL (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias.",
     "review_status": "approved",
-    "sha256": "be395611e31f644ca954ce44993cae80839763f3bf9be0eeb74d236fd840abc3",
+    "sha256": "26914baee1c7001c39853516188244f827a824f51903097a58786a7b3c55cfa9",
     "metadata": {
       "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {
@@ -32,7 +32,7 @@
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {
@@ -42,15 +42,15 @@
     "page_number": 1,
     "segment_index": 2,
     "char_count": 1702,
-    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): sacubitril valsartana sódica hidratada 97 mg + 103 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. fumarato de formoterol di-hidratado + budesonida 12 mcg + 400 mcg (cápsula inalante) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. hemifumarato de quetiapina 25 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. insulina glargina 100 UI/mL (solução injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abacavir 20 mg/mL (solução oral) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. abacavir 300 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. abatacepte 125 mg/mL (solução injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abatacepte 250 mg (pó para solução para infusão) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abatacepte pó liofilizo 250 mg (injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abciximabe 2 mg/mL (solução injetável) | Componente: Hospitalar | Rota: HOSPITALAR | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 30 dias.",
+    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): sacubitril valsartana sódica hidratada 97 mg + 103 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. fumarato de formoterol di-hidratado + budesonida 12 mcg + 400 mcg (cápsula inalante) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. hemifumarato de quetiapina 25 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. insulina glargina 100 UI/mL (solução injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abacavir 20 mg/mL (solução oral) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. abacavir 300 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. abatacepte 125 mg/mL (solução injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abatacepte 250 mg (pó liofilizo injetável) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abatacepte 250 mg (pó para solução para infusão) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. abciximabe 2 mg/mL (solução injetável) | Componente: Hospitalar | Rota: HOSPITALAR | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 30 dias.",
     "review_status": "approved",
-    "sha256": "9006f8d8cf21ce064f769023fc8d2e011727c94590566334e5dfb0b6cf3930a2",
+    "sha256": "de5eb96d9b0414301a24e628e9623fc72400dbdcd70713427eb728223db3ca8f",
     "metadata": {
       "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {
@@ -59,16 +59,16 @@
     "category": "catalogo_canonico_sus",
     "page_number": 1,
     "segment_index": 3,
-    "char_count": 1749,
-    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): abiraterona (acetato) 250 mg (comprimido) | Componente: Hospitalar | Rota: HOSPITALAR | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 30 dias. absorvente higiênico Padronizada (unidade) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de betametasona + fosfato dissódico de betametasona 3 mg/mL + 3 mg/mL (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de ciproterona 50 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. acetato de desmopressina 0,1 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 0,1 mg/mL (solução spray nasal) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 0,2 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 15 mcg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 4 mcg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de fludrocortisona 0,1 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias.",
+    "char_count": 1761,
+    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): abiraterona (acetato) 250 mg (comprimido) | Componente: Hospitalar | Rota: HOSPITALAR | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 30 dias. absorvente higiênico Padronizada (forma não informada) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de betametasona + fosfato dissódico de betametasona 3 mg/mL + 3 mg/mL (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de ciproterona 50 mg (comprimido) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. acetato de desmopressina 0,1 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 0,1 mg/mL (solução spray nasal) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 0,2 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 15 mcg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de desmopressina 4 mcg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de fludrocortisona 0,1 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias.",
     "review_status": "approved",
-    "sha256": "e4b8e57aefee42ce047c03b227fd73d33c1e8a579aa67531a0206d47ab79282d",
+    "sha256": "3e22626edbc2cf54dcbbc50bc703051bcdec0fc022edf775822c542f0490e283",
     "metadata": {
       "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {
@@ -86,7 +86,7 @@
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {
@@ -95,16 +95,16 @@
     "category": "catalogo_canonico_sus",
     "page_number": 1,
     "segment_index": 5,
-    "char_count": 1923,
-    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): acetato de leuprorrelina 45 mg (pó para suspensão injetável de liberação prolongada) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. acetato de medroxiprogesterona 10 mg (comprimido) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 150 mg (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 150 mg/mL (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 50 mg/mL (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona + cipionato de estradiol 25 mg/0,5 mL + 5 mg/ 0,5 mL (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona + estradiol cipionato 25 mg + 5 mg (suspensão injetável) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 0,1 mg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 10 mg (pó para suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 20 mg (pó para suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias.",
+    "char_count": 1908,
+    "content": "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): acetato de leuprorrelina 45 mg (pó para suspensão injetável de liberação prolongada) | Componente: Especializado | Rota: ALTO_CUSTO_CEAF | PFPB Gratuito: NÃO | Exige LME: SIM | Validade Receita: 90 dias. acetato de medroxiprogesterona 10 mg (comprimido) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 150 mg (forma não informada) | Componente: Básico | Rota: FARMACIA_POPULAR | PFPB Gratuito: SIM (100%) | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 150 mg/mL (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona 50 mg/mL (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona + cipionato de estradiol 25 mg/0,5 mL + 5 mg/ 0,5 mL (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de medroxiprogesterona + estradiol cipionato 25 mg + 5 mg (suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 0,1 mg/mL (solução injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 10 mg (pó para suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias. acetato de octreotida 20 mg (pó para suspensão injetável) | Componente: Básico | Rota: UBS_ATENCAO_PRIMARIA | PFPB Gratuito: NÃO | Exige LME: NÃO | Validade Receita: 180 dias.",
     "review_status": "approved",
-    "sha256": "fd3c4cd8f49a1dadca6f9881c121ec9719322433feca5c21a9d63916d902f0ce",
+    "sha256": "808cf861b299ced126595aeec0f40864e28c42413878d02fe3dbb935ec3f8745",
     "metadata": {
       "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
       "category": "catalogo_canonico_sus",
       "page_number": 1,
       "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-      "total_consolidated_medications": 1789
+      "total_consolidated_medications": 1787
     }
   },
   {

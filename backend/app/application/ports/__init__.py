@@ -50,6 +50,8 @@ class CanonicalMedicationItem:
     source_id: str = "RENAME_2024"
     source_page: int = 1
     notes: str = ""
+    df_channels: tuple[str, ...] = ()
+    item_type: str = "medicine"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CanonicalMedicationItem:
@@ -69,6 +71,8 @@ class CanonicalMedicationItem:
             source_id=str(data.get("source_id", "RENAME_2024")),
             source_page=int(data.get("source_page", 1)),
             notes=str(data.get("notes", "")),
+            df_channels=tuple(str(channel) for channel in data.get("df_channels", [])),
+            item_type=str(data.get("item_type", "medicine")),
         )
 
 

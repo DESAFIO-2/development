@@ -1,5 +1,7 @@
 # Auditoria técnica e entrega da semana 3
 
+> Esta auditoria registra a linha de base anterior ao v5. Veja as mudanças e os resultados atuais no [registro da portação](implementation/plano_semana3_corpus_v5.md#registro-da-portação-executada).
+
 ## Fluxo disponível
 
 A API FastAPI carrega o catálogo consolidado e os chunks normativos locais na inicialização. O autocomplete consulta o catálogo por DCB. A auditoria recebe itens estruturados, aplica o guardrail clínico, mascara identificadores reconhecidos nos campos encaminhados à busca e usa o catálogo para orientar a dispensação. A busca lexical híbrida (DCB, BM25 e TF-IDF com RRF) recupera trechos normativos. A resposta atual usa templates determinísticos.

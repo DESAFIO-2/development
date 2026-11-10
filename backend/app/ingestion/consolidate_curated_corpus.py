@@ -1,7 +1,6 @@
 """Pipeline determinístico de consolidação multi-fonte (RENAME + REME-DF + Farmácia Popular).
 
-Porta e reconcilia a curadoria humana de Engenharia de Dados (`curated_occurrences_v1.jsonl`,
-com 283 correções auditadas em `curated_review_log_v1.jsonl` e fontes complementares C01-C14)
+Adapta o release v5 de Engenharia de Dados e preserva as fontes complementares C01-C14
 para os contratos da Clean Architecture:
 - `data/processed/medicamentos_sus_canonical.json`
 - `data/processed/medicamentos_sus_canonical_full.json`
@@ -45,46 +44,15 @@ EXPECTED_OCCURRENCE_KEYS: frozenset[str] = frozenset(
         "release_characteristic",
         "review_status",
         "source",
+        "evidence_id",
+        "raw_text",
     }
 )
 
 VALID_SOURCES: frozenset[str] = frozenset({"F01", "F03", "F04"})
 
-PFPB_FREE_INGREDIENTS: frozenset[str] = frozenset(
-    {
-        "losartana potassica",
-        "maleato de enalapril",
-        "captopril",
-        "atenolol",
-        "cloridrato de propranolol",
-        "hidroclorotiazida",
-        "besilato de anlodipino",
-        "cloridrato de metformina",
-        "glibenclamida",
-        "insulina humana nph",
-        "insulina humana regular",
-        "sulfato de salbutamol",
-        "dipropionato de beclometasona",
-        "brometo de ipratropio",
-        "alendronato de sodio",
-        "sinvastatina",
-        "dapagliflozina",
-        "succinato de metoprolol",
-        "espironolactona",
-        "furosemida",
-        "carvedilol",
-        "acetato de medroxiprogesterona",
-        "etinilestradiol + levonorgestrel",
-        "noretisterona",
-        "valerato de estradiol + enantato de noretisterona",
-        "levodopa + benserazida",
-        "levodopa + carbidopa",
-        "cloridrato de benserazida + levodopa",
-        "carbidopa + levodopa",
-        "maleato de timolol",
-        "budesonida",
-    }
-)
+OPTIONAL_OCCURRENCE_KEYS = {"description_cell", "description_provenance", "indication", "supply_id"}
+
 
 ANTIMICROBIAL_KEYWORDS: frozenset[str] = frozenset(
     {
@@ -930,7 +898,7 @@ class SchemaDriftReport:
 
     @property
     def is_valid(self) -> bool:
-        return len(self.errors) == 0 and len(self.missing_fields) == 0
+        return not (self.errors or self.missing_fields or self.unexpected_fields)
 
 
 def remover_acentos(texto: str) -> str:
@@ -970,10 +938,14 @@ def validate_occurrence_drift(occurrences: list[dict[str, Any]]) -> SchemaDriftR
     missing: set[str] = set()
     errors: list[str] = []
     valid_count = 0
+    occurrence_ids: set[str] = set()
+    evidence_ids: set[str] = set()
+    if not occurrences:
+        errors.append("Corpus vazio")
 
     for idx, row in enumerate(occurrences):
         keys = set(row.keys())
-        extra = keys - EXPECTED_OCCURRENCE_KEYS
+        extra = keys - EXPECTED_OCCURRENCE_KEYS - OPTIONAL_OCCURRENCE_KEYS
         absent = EXPECTED_OCCURRENCE_KEYS - keys
         if extra:
             unexpected.update(extra)
@@ -995,6 +967,27 @@ def validate_occurrence_drift(occurrences: list[dict[str, Any]]) -> SchemaDriftR
             errors.append(f"Row {idx}: unapproved review_status {row.get('review_status')!r}")
             continue
 
+        occurrence_id = row.get("occurrence_id")
+        evidence_id = row.get("evidence_id")
+        if (
+            not isinstance(occurrence_id, str)
+            or not occurrence_id
+            or occurrence_id in occurrence_ids
+            or not isinstance(evidence_id, str)
+            or not evidence_id
+            or evidence_id in evidence_ids
+        ):
+            errors.append(f"Row {idx}: ID ausente ou repetido")
+            continue
+        item_type = row.get("item_type")
+        if not (
+            (item_type == "medicine" and row.get("medicine_id") and not row.get("supply_id"))
+            or (item_type == "supply" and row.get("supply_id") and not row.get("medicine_id"))
+        ):
+            errors.append(f"Row {idx}: tipo de item ou vínculo inválido")
+            continue
+        occurrence_ids.add(occurrence_id)
+        evidence_ids.add(evidence_id)
         valid_count += 1
 
     return SchemaDriftReport(
@@ -1017,12 +1010,9 @@ def classificar_apresentacao_consolidada(
     channels_joined = " | ".join(sorted(f03_channels)).lower()
     channels_norm = remover_acentos(channels_joined)
 
-    is_pfpb = in_f04 or any(
-        dcb_norm == p or dcb_norm.startswith(f"{p} ") for p in PFPB_FREE_INGREDIENTS
-    )
     is_ceaf = "Especializado" in f01_components or "componente especializado" in channels_norm
 
-    if "Especializado" in f01_components or "componente especializado" in channels_norm:
+    if is_ceaf:
         comp_str = "Especializado"
     elif "Estratégico" in f01_components:
         comp_str = "Estratégico"
@@ -1031,7 +1021,7 @@ def classificar_apresentacao_consolidada(
     else:
         comp_str = "Básico"
 
-    if is_pfpb:
+    if in_f04:
         return (
             comp_str,
             "FARMACIA_POPULAR",
@@ -1145,35 +1135,53 @@ def consolidar_catalogo_medicamentos(
     """Funde F01 (RENAME), F03 (REME-DF) e F04 (Farmácia Popular) preservando os 24 prioritários."""
     drift = validate_occurrence_drift(occurrences)
     if not drift.is_valid:
-        raise ValueError(f"Schema drift detectado nas ocorrências: {drift.errors[:5]}")
+        raise ValueError(
+            f"Schema drift: ausentes={drift.missing_fields}, extras={drift.unexpected_fields}, "
+            f"erros={drift.errors[:5]}"
+        )
 
-    # Agrupa ocorrências por chave normalizada (dcb_norm, conc_key, form_norm)
-    grupos: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    # Mantém apresentações de liberação distinta em grupos separados.
+    grupos: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
     for occ in occurrences:
+        # Os insumos F01 ficam na evidência de presença, fora do roteiro de medicamentos.
+        if occ["item_type"] == "supply" and occ["source"]["source_id"] != "F04":
+            continue
         dcb_raw = str(occ["active_ingredient"]).strip().rstrip("*").strip().lower()
         conc_raw = normalizar_concentracao(str(occ.get("strength") or ""))
-        form_raw = str(occ.get("form") or "").strip().lower() or "apresentação padronizada"
-        if form_raw == "-":
-            form_raw = "apresentação padronizada"
+        form_raw = str(occ.get("form") or "").strip().lower()
+        if form_raw in {"", "-"}:
+            form_raw = "forma não informada"
 
         key = (
             remover_acentos(dcb_raw),
             chave_normalizada_concentracao(conc_raw),
             remover_acentos(form_raw),
+            remover_acentos(str(occ["release_characteristic"] or "")),
         )
         grupos.setdefault(key, []).append(occ)
 
     # Indexa os 24 itens prioritários para evitar duplicatas exatas
-    chaves_prioritarias: set[tuple[str, str, str]] = set()
+    chaves_prioritarias: set[tuple[str, str, str, str]] = set()
     catalogo_final: list[dict[str, Any]] = []
     for p_item in PRIORITY_24_ITEMS:
         p_key = (
             remover_acentos(p_item["dcb_name"]),
             chave_normalizada_concentracao(p_item["concentration"]),
             remover_acentos(p_item["pharmaceutical_form"]),
+            "",
         )
         chaves_prioritarias.add(p_key)
-        catalogo_final.append(dict(p_item))
+        prioritario = dict(p_item)
+        if correspondencias := grupos.get(p_key):
+            prioritario["occurrence_ids"] = [row["occurrence_id"] for row in correspondencias]
+            prioritario["df_channels"] = sorted(
+                {
+                    row["channel"]
+                    for row in correspondencias
+                    if row["source"]["source_id"] == "F03" and row["channel"]
+                }
+            )
+        catalogo_final.append(prioritario)
 
     contador = 1
     for key in sorted(grupos.keys()):
@@ -1185,7 +1193,7 @@ def consolidar_catalogo_medicamentos(
         conc = normalizar_concentracao(str(primeiro.get("strength") or ""))
         form = str(primeiro.get("form") or "").strip().lower()
         if not form or form == "-":
-            form = "apresentação padronizada"
+            form = "forma não informada"
 
         fontes_presentes = sorted({str(o["source"]["source_id"]) for o in occs})
         f01_comps = {
@@ -1216,16 +1224,11 @@ def consolidar_catalogo_medicamentos(
         )
 
         is_pfpb = route == "FARMACIA_POPULAR"
-        if "F04" in fontes_presentes:
-            src_id = "PFPB_2026"
-        elif "F03" in fontes_presentes and "F01" in fontes_presentes:
-            src_id = "RENAME_2024_REME_DF_2026"
-        elif "F03" in fontes_presentes:
-            src_id = "REME_DF_2026"
-        else:
-            src_id = "RENAME_2024"
-
-        src_page = int(primeiro["source"].get("page") or 1)
+        # A página acompanha a fonte escolhida. F03 embasa o canal local e F04 o PFPB.
+        fonte_preferida = "F04" if in_f04 else "F03" if in_f03 else "F01"
+        fonte = next(o["source"] for o in occs if o["source"]["source_id"] == fonte_preferida)
+        src_id = {"F01": "RENAME_2024", "F03": "REME_DF_2026", "F04": "PFPB_2026"}[fonte_preferida]
+        src_page = int(fonte["page"])
 
         partes_notas: list[str] = [f"Fontes consolidadas: {', '.join(fontes_presentes)}."]
         if f03_codes:
@@ -1243,13 +1246,17 @@ def consolidar_catalogo_medicamentos(
                 "rename_component": comp_str,
                 "available_pfpb": is_pfpb,
                 "pfpb_free": is_pfpb,
-                "available_reme_df": in_f03 or is_pfpb,
+                "available_reme_df": in_f03,
                 "dispensation_route": route,
                 "requires_lme": req_lme,
                 "required_documents": req_docs,
                 "prescription_validity_days": val_days,
                 "source_id": src_id,
                 "source_page": src_page,
+                "occurrence_ids": [o["occurrence_id"] for o in occs],
+                "item_type": primeiro["item_type"],
+                "release_characteristic": primeiro["release_characteristic"],
+                "df_channels": sorted(f03_channels),
                 "notes": " ".join(partes_notas),
             }
         )
@@ -1482,6 +1489,7 @@ def atualizar_manifesto(
     total_norm_chunks: int,
     total_pdf_chunks: int,
     total_occurrences: int,
+    origem: dict[str, Any],
 ) -> dict[str, Any]:
     """Atualiza data/manifests/manifest.json com linhagem criptográfica SHA-256."""
     meds_sha = hashlib.sha256(caminho_meds.read_bytes()).hexdigest()
@@ -1491,9 +1499,11 @@ def atualizar_manifesto(
     combined = hashlib.sha256(f"{meds_sha}:{norm_sha}:{pdf_sha}:{occ_sha}".encode()).hexdigest()
 
     manifest: dict[str, Any] = {
-        "manifest_version": "2026.3.0",
+        "manifest_version": "2026.3.1",
         "generated_at_utc": datetime.now(UTC).isoformat(),
-        "engineering_source": "consolidated_multi_source_f01_f03_f04_c01_c14_v2026.3",
+        "engineering_source": origem["release_version"],
+        "engineering_source_commit": origem["commit"],
+        "engineering_source_manifest_sha256": origem["release_manifest_sha256"],
         "canonical_medications_sha256": meds_sha,
         "normative_chunks_sha256": norm_sha,
         "unified_pdf_chunks_sha256": pdf_sha,
@@ -1515,15 +1525,19 @@ def atualizar_manifesto(
 
 def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
     """Executa o pipeline completo de consolidação de dados e reconciliação de chunks."""
-    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v1.jsonl"
+    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v5.jsonl"
+    caminho_origem = raiz / "data" / "manifests" / "corpus_v5_source.json"
     caminho_meds = raiz / "data" / "processed" / "medicamentos_sus_canonical.json"
     caminho_meds_full = raiz / "data" / "processed" / "medicamentos_sus_canonical_full.json"
     caminho_norm = raiz / "data" / "processed" / "normative_chunks.json"
     caminho_pdf_chunks = raiz / "data" / "processed" / "unified_pdf_chunks.json"
     caminho_manifest = raiz / "data" / "manifests" / "manifest.json"
 
-    with caminho_occ.open(encoding="utf-8") as f:
-        occurrences = [json.loads(line) for line in f if line.strip()]
+    origem = json.loads(caminho_origem.read_text(encoding="utf-8"))
+    dados = caminho_occ.read_bytes()
+    if hashlib.sha256(dados).hexdigest() != origem["staging_sha256"]:
+        raise ValueError("Staging v5 diverge do SHA-256 registrado")
+    occurrences = [json.loads(line) for line in dados.splitlines() if line.strip()]
 
     catalogo = consolidar_catalogo_medicamentos(occurrences)
     meds_json = json.dumps(catalogo, ensure_ascii=False, indent=2) + "\n"
@@ -1552,6 +1566,7 @@ def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
         total_norm_chunks=len(norm_chunks),
         total_pdf_chunks=len(pdf_chunks),
         total_occurrences=len(occurrences),
+        origem=origem,
     )
     return manifest
 

@@ -101,8 +101,10 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 elif route_str == "UBS_ATENCAO_PRIMARIA":
                     via = CoverageRoute.UBS_REME_DF
                     local = (
-                        f"Farmácia da Unidade Básica de Saúde (UBS) de referência "
-                        f"da sua quadra/bairro em {regiao}."
+                        f"Canal registrado na REME-DF: {'; '.join(med_canonico.df_channels)}. "
+                        "Confirme as condições de atendimento com o serviço."
+                        if med_canonico.df_channels
+                        else "Confirme na UBS de referência qual unidade atende esta apresentação."
                     )
                 elif route_str == "HOSPITALAR":
                     via = CoverageRoute.HOSPITALAR
@@ -111,13 +113,18 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                     via = CoverageRoute.NAO_PADRONIZADO
                     local = "Consulte a gerência de assistência farmacêutica da UBS."
 
-                validade_dias = med_canonico.prescription_validity_days
-                data_limite = data_base + timedelta(days=validade_dias)
-                dias_restantes = max(0, (data_limite - hoje).days)
-                alerta_vencimento = dias_restantes <= 15
+                insumo = med_canonico.item_type == "supply"
+                validade_dias = None if insumo else med_canonico.prescription_validity_days
+                data_limite = (
+                    data_base + timedelta(days=validade_dias) if validade_dias is not None else None
+                )
+                dias_restantes = max(0, (data_limite - hoje).days) if data_limite else None
+                alerta_vencimento = dias_restantes is not None and dias_restantes <= 15
 
                 docs = list(med_canonico.required_documents or [])
-                if not docs:
+                if insumo:
+                    docs = ["Confira a documentação e os critérios do programa para este insumo."]
+                elif not docs:
                     if via == CoverageRoute.FARMACIA_POPULAR:
                         docs = [
                             "Receita médica válida com CRM legível",
@@ -268,14 +275,11 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         ]
         if total_pfpb > 0:
             partes.append(
-                f"Você pode retirar {total_pfpb} remédio(s) de graça diretamente na "
-                "Farmácia Popular (drogarias privadas credenciadas com seu CPF)."
+                f"{total_pfpb} item(ns) constam no elenco do Farmácia Popular. "
+                "Confira os critérios de acesso de cada item."
             )
         if total_ubs > 0:
-            partes.append(
-                f"{total_ubs} remédio(s) são entregues gratuitamente na farmácia da "
-                "sua Unidade Básica de Saúde (UBS)."
-            )
+            partes.append(f"Para {total_ubs} item(ns), confira o canal de atendimento no roteiro.")
         if total_ceaf > 0:
             partes.append(
                 f"{total_ceaf} medicamento(s) fazem parte do Componente de Alto Custo (CEAF) "

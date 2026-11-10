@@ -61,20 +61,18 @@ class MLflowExperimentTracker:
         if not self.caminho_manifesto.exists():
             return {"manifest_version": "unknown", "combined_sha256": "none"}
 
-        dados: dict[str, Any] = json.loads(
-            self.caminho_manifesto.read_text(encoding="utf-8")
-        )
+        dados: dict[str, Any] = json.loads(self.caminho_manifesto.read_text(encoding="utf-8"))
         counts = dados.get("record_counts") or {}
         return {
             "manifest_version": str(dados.get("manifest_version", "unknown")),
             "engineering_source": str(dados.get("engineering_source", "unknown")),
-            "canonical_medications_sha256": str(
-                dados.get("canonical_medications_sha256", "")
+            "engineering_source_commit": str(dados.get("engineering_source_commit", "")),
+            "engineering_source_manifest_sha256": str(
+                dados.get("engineering_source_manifest_sha256", "")
             ),
+            "canonical_medications_sha256": str(dados.get("canonical_medications_sha256", "")),
             "normative_chunks_sha256": str(dados.get("normative_chunks_sha256", "")),
-            "unified_pdf_chunks_sha256": str(
-                dados.get("unified_pdf_chunks_sha256", "")
-            ),
+            "unified_pdf_chunks_sha256": str(dados.get("unified_pdf_chunks_sha256", "")),
             "combined_sha256": str(dados.get("combined_sha256", "")),
             "canonical_medications_count": str(counts.get("canonical_medications", 0)),
             "normative_chunks_count": str(counts.get("normative_chunks", 0)),
@@ -100,9 +98,7 @@ class MLflowExperimentTracker:
         }
         if dataset_path and dataset_path.exists():
             tags["dataset_file"] = dataset_path.name
-            tags["dataset_sha256"] = hashlib.sha256(
-                dataset_path.read_bytes()
-            ).hexdigest()
+            tags["dataset_sha256"] = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
         if extra_tags:
             tags.update(extra_tags)
 
@@ -139,9 +135,7 @@ class MLflowExperimentTracker:
             artifact_uri=uri_str,
         )
 
-        conteudo_json = (
-            json.dumps(registro.to_dict(), ensure_ascii=False, indent=2) + "\n"
-        )
+        conteudo_json = json.dumps(registro.to_dict(), ensure_ascii=False, indent=2) + "\n"
         destino_run.write_text(conteudo_json, encoding="utf-8")
 
         ultimo_run = self.raiz_repo / "evals" / "reports" / "mlflow_latest_run.json"
