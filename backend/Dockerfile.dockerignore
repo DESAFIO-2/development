@@ -1,0 +1,11 @@
+**
+!backend/
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/app/
+!backend/app/**
+backend/app/**/__pycache__/
+!data/
+!data/processed/
+!data/processed/medicamentos_sus_canonical.json
+!data/processed/normative_chunks.json

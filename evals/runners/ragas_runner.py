@@ -1,4 +1,4 @@
-"""Runner de Avaliação Científica do RAG no Golden Dataset com Rastreabilidade MLflow.
+"""Benchmark determinístico de recuperação e auditoria no Golden Dataset.
 
 Avalia o sistema contra o conjunto padrão-ouro (`evals/datasets/golden_set_v1.jsonl` ou
 `evals/datasets/golden_set_v2_consolidado.jsonl`), calculando métricas de Recuperação de
@@ -50,6 +50,7 @@ class BenchmarkMetrics:
     taxa_bloqueio_clinico: float
     acuracia_abstencao: float
     sucesso_geral: bool
+    falhas: dict[str, list[str]]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -68,6 +69,10 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
     with caminho_dataset.open(encoding="utf-8") as f:
         casos = [json.loads(linha) for linha in f if linha.strip()]
 
+    if not casos:
+        raise ValueError(f"Dataset sem casos: {caminho_dataset}")
+
+    falhas: dict[str, list[str]] = {}
     hits_count = 0
     total_recall = 0.0
     reciprocal_ranks: list[float] = []
@@ -81,76 +86,67 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
 
     for caso in casos:
         query = caso["query"]
-        esperado_dcb = caso.get("expected_dcb", [])
-        esperado_rota = caso["expected_route"]
         chunks_relevantes = set(caso.get("relevant_chunk_ids", []))
-        deve_abster = caso.get("should_abstain", False)
-        e_bloqueio_clinico = caso.get("is_clinical_block", False)
+        audit_res = use_case.executar(
+            PrescriptionAuditRequest(itens=[MedicationItemInput(nome_digitado=query)])
+        )
+        erros = []
 
-        # 1. Avaliação do Guardrail Clínico
-        if e_bloqueio_clinico:
+        if caso.get("is_clinical_block", False):
             casos_clinicos += 1
-            req_bloqueio = PrescriptionAuditRequest(
-                itens=[MedicationItemInput(nome_digitado=query)],
-                pergunta_adicional=query,
-            )
-            res_bloqueio = use_case.executar(req_bloqueio)
-            if res_bloqueio.solicitou_automedicacao or not res_bloqueio.sucesso:
+            if audit_res.solicitou_automedicacao and not audit_res.itens_auditados:
                 guardrail_corretos += 1
+            else:
+                falhas[caso["id"]] = ["bloqueio_clinico"]
             continue
 
-        # 2. Avaliação de Abstenção
-        if deve_abster:
+        retrieved_ids = [hit.chunk_id for hit in retriever.search(query, top_k=3)]
+        rota_obtida = (
+            audit_res.itens_auditados[0].via_retirada.value
+            if audit_res.itens_auditados
+            else None
+        )
+        if caso.get("should_abstain", False):
             casos_abstencao += 1
-            retrieval_hits = retriever.search(query, top_k=3, min_score=0.18)
-            if len(retrieval_hits) == 0:
+            if not retrieved_ids and rota_obtida == "NAO_PADRONIZADO":
                 abstencoes_corretas += 1
+            else:
+                falhas[caso["id"]] = ["abstencao"]
             continue
 
-        # 3. Casos Positivos de RAG
         casos_positivos += 1
-        retrieval_hits = retriever.search(query, top_k=3, min_score=0.18)
-        retrieved_ids = [h.chunk_id for h in retrieval_hits]
+        if not chunks_relevantes:
+            raise ValueError(f"{caso['id']}: caso positivo sem chunks relevantes")
 
-        # Hit@3
-        intersect = chunks_relevantes.intersection(set(retrieved_ids))
-        if len(intersect) > 0:
-            hits_count += 1
+        intersect = chunks_relevantes.intersection(retrieved_ids)
+        hits_count += bool(intersect)
+        total_recall += len(intersect) / len(chunks_relevantes)
+        rank = next(
+            (
+                i
+                for i, chunk_id in enumerate(retrieved_ids, 1)
+                if chunk_id in chunks_relevantes
+            ),
+            0,
+        )
+        reciprocal_ranks.append(1.0 / rank if rank else 0.0)
+        if intersect != chunks_relevantes or rank != 1:
+            erros.append("recuperacao")
 
-        # Recall@3
-        if chunks_relevantes:
-            total_recall += len(intersect) / len(chunks_relevantes)
-        else:
-            total_recall += 1.0
-
-        # MRR
-        rr = 0.0
-        for rank, hid in enumerate(retrieved_ids, start=1):
-            if hid in chunks_relevantes:
-                rr = 1.0 / rank
-                break
-        reciprocal_ranks.append(rr)
-
-        # Auditoria de Roteamento
-        itens_input = [MedicationItemInput(nome_digitado=dcb) for dcb in esperado_dcb] or [
-            MedicationItemInput(nome_digitado=query)
-        ]
-        audit_res = use_case.executar(PrescriptionAuditRequest(itens=itens_input))
-
-        if audit_res.itens_auditados:
-            rota_obtida = audit_res.itens_auditados[0].via_retirada.value
-            # Normalização e equivalência de rotas SUS/DF
-            equivs: dict[str, set[str]] = {
-                "FARMACIA_POPULAR": {"FARMACIA_POPULAR"},
-                "UBS_ATENCAO_PRIMARIA": {"UBS_ATENCAO_PRIMARIA", "UBS_REME_DF"},
-                "ALTO_CUSTO_CEAF": {"ALTO_CUSTO_CEAF", "FARMACIA_ALTO_CUSTO"},
-                "SISREG_EXAME_CONSULTA": {"SISREG_EXAME_CONSULTA"},
-                "ABSTENCAO_FORA_ELENCO": {"ABSTENCAO_FORA_ELENCO", "NAO_PADRONIZADO"},
-            }
-            if rota_obtida in equivs.get(esperado_rota, {esperado_rota}):
-                rotas_corretas += 1
-        elif deve_abster:
+        rotas = {
+            "UBS_ATENCAO_PRIMARIA": "UBS_REME_DF",
+            "ALTO_CUSTO_CEAF": "FARMACIA_ALTO_CUSTO",
+        }
+        rota_esperada = rotas.get(caso["expected_route"], caso["expected_route"])
+        if rota_obtida == rota_esperada:
             rotas_corretas += 1
+        else:
+            erros.append(f"roteamento esperado {rota_esperada}, obtido {rota_obtida}")
+        if erros:
+            falhas[caso["id"]] = erros
+
+    if not (casos_positivos and casos_clinicos and casos_abstencao):
+        raise ValueError("O benchmark exige casos positivos, clínicos e de abstenção.")
 
     hit_rate = hits_count / casos_positivos if casos_positivos else 1.0
     recall = total_recall / casos_positivos if casos_positivos else 1.0
@@ -159,7 +155,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
     guardrail_acc = guardrail_corretos / casos_clinicos if casos_clinicos else 1.0
     abstention_acc = abstencoes_corretas / casos_abstencao if casos_abstencao else 1.0
 
-    sucesso = (route_acc >= 0.85) and (guardrail_acc == 1.0) and (abstention_acc == 1.0)
+    sucesso = not falhas
 
     return BenchmarkMetrics(
         total_casos=len(casos),
@@ -170,6 +166,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         taxa_bloqueio_clinico=round(guardrail_acc, 4),
         acuracia_abstencao=round(abstention_acc, 4),
         sucesso_geral=sucesso,
+        falhas=falhas,
     )
 
 
@@ -186,7 +183,9 @@ def main() -> int:
         help="Caminho do dataset JSONL a avaliar (padrão: evals/datasets/golden_set_v1.jsonl)",
     )
     args = parser.parse_args()
-    caminho_dataset: Path = args.dataset if args.dataset.is_absolute() else (RAIZ / args.dataset)
+    caminho_dataset: Path = (
+        args.dataset if args.dataset.is_absolute() else (RAIZ / args.dataset)
+    )
 
     print("=" * 80)
     print(f"  BENCHMARK CIENTÍFICO RAG — DATASET: {caminho_dataset.name}")
@@ -224,7 +223,9 @@ def main() -> int:
     print(f"Taxa Bloqueio Clínico:       {metricas.taxa_bloqueio_clinico:.2%}")
     print(f"Acurácia de Abstenção:       {metricas.acuracia_abstencao:.2%}")
     print(f"MLflow Run ID:               {run_record.run_id}")
-    print(f"Manifest Lineage SHA-256:    {run_record.tags.get('combined_sha256', '')[:16]}...")
+    print(
+        f"Manifest Lineage SHA-256:    {run_record.tags.get('combined_sha256', '')[:16]}..."
+    )
 
     PASTA_RELATORIOS.mkdir(exist_ok=True)
     relatorio = {
@@ -234,11 +235,15 @@ def main() -> int:
         "manifest_combined_sha256": run_record.tags.get("combined_sha256", ""),
         **metricas.to_dict(),
     }
-    destino = PASTA_RELATORIOS / "rag_benchmark_ultimo.json"
-    destino.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
+    destino = PASTA_RELATORIOS / f"rag_benchmark_{caminho_dataset.stem}.json"
+    destino.write_text(
+        json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"\nRelatório salvo em: {destino.relative_to(RAIZ)}")
 
     if not metricas.sucesso_geral:
+        for caso_id, falhas in metricas.falhas.items():
+            print(f"{caso_id}: {', '.join(falhas)}")
         print("[ERRO] Reprovado: métricas abaixo dos limiares de aceitação.")
         return 1
 

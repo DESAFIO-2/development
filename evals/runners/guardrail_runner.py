@@ -104,7 +104,9 @@ def main() -> int:
         **asdict(resultado),
     }
     destino = PASTA_RELATORIOS / "guardrail_ultimo.json"
-    destino.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
+    destino.write_text(
+        json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"Relatório salvo em {destino.relative_to(RAIZ)}")
 
     reprovou = (

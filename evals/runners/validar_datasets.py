@@ -33,8 +33,8 @@ def validar_arquivo(caminho: Path) -> list[str]:
                 erros.append(f"{local}: a linha precisa ser um objeto JSON")
                 continue
             identificador = exemplo.get("id")
-            if not identificador:
-                erros.append(f"{local}: falta o campo 'id'")
+            if not isinstance(identificador, str) or not identificador.strip():
+                erros.append(f"{local}: o campo 'id' precisa ser texto não vazio")
             elif identificador in ids_vistos:
                 erros.append(f"{local}: id repetido '{identificador}'")
             else:

@@ -2,6 +2,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+
 
 class Settings(BaseSettings):
     """Configurações lidas de variáveis de ambiente (ou do arquivo .env)."""
@@ -23,12 +25,12 @@ class Settings(BaseSettings):
 
     # Embeddings e Vector Store
     embedding_model_name: str = "BAAI/bge-m3"
-    vector_store_path: Path = Path("../data/vectorstore/chroma")
+    vector_store_path: Path = DATA_DIR / "vectorstore" / "chroma"
 
     # Diretórios de Dados
-    data_raw_dir: Path = Path("../data/raw")
-    data_processed_dir: Path = Path("../data/processed")
-    data_manifests_dir: Path = Path("../data/manifests")
+    data_raw_dir: Path = DATA_DIR / "raw"
+    data_processed_dir: Path = DATA_DIR / "processed"
+    data_manifests_dir: Path = DATA_DIR / "manifests"
 
     # Metas de Qualidade e RAGAS
     rag_faithfulness_threshold: float = 0.92

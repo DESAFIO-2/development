@@ -30,15 +30,15 @@ class ItemRoteiroCidadao(BaseModel):
         ...,
         description="Checklist documental exato para não perder a viagem",
     )
-    dias_validade_receita: int = Field(
+    dias_validade_receita: int | None = Field(
         ...,
         description="Validade total da receita em dias conforme a norma",
     )
-    data_limite_validade: date = Field(
+    data_limite_validade: date | None = Field(
         ...,
         description="Data limite calculada a partir da emissão",
     )
-    dias_restantes: int = Field(
+    dias_restantes: int | None = Field(
         ...,
         description="Dias restantes até o vencimento da receita médica",
     )

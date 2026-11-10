@@ -54,3 +54,48 @@ def test_api_autocomplete_medications() -> None:
     assert data["consulta"] == "losartana"
     assert data["total_encontrados"] > 0
     assert "LOSARTANA" in data["resultados"][0]["dcb_principio_ativo"]
+
+
+def test_api_audit_usa_apresentacao_selecionada_e_abstem_em_concentracao_desconhecida() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={
+            "itens": [
+                {
+                    "nome_digitado": "Medicamento selecionado",
+                    "principio_ativo_dcb": "losartana potássica",
+                    "concentracao": "50mg",
+                    "forma_farmaceutica": "comprimido",
+                },
+                {"nome_digitado": "Losartana 999mg"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    selecionado, desconhecido = response.json()["itens"]
+    assert selecionado["via_retirada"] == "FARMACIA_POPULAR"
+    assert desconhecido["via_retirada"] == "NAO_PADRONIZADO"
+    assert desconhecido["data_limite_validade"] is None
+
+
+def test_api_audit_reconhece_rota_hospitalar_e_mascara_cpf_no_retorno() -> None:
+    cpf = "123.456.789-00"
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={"itens": [{"nome_digitado": f"abciximabe 2 mg/mL CPF {cpf}"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["itens"][0]["via_retirada"] == "HOSPITALAR"
+    assert cpf not in response.text
+
+
+def test_api_audit_rejeita_data_futura_e_nome_em_branco() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={"itens": [{"nome_digitado": "  "}], "data_emissao": "9999-12-31"},
+    )
+    assert response.status_code == 422
+    assert {tuple(erro["loc"]) for erro in response.json()["detail"]} == {
+        ("body", "itens", 0, "nome_digitado"),
+        ("body", "data_emissao"),
+    }

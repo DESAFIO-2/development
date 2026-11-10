@@ -33,7 +33,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 
   
 * **Semana 1:** Definição do Problema, Personas, Stakeholders, Riscos e Métricas (PDR ABNT).
-* **Semana 2 (Atual):** Base de Conhecimento e Recuperação (RAG Híbrido: CSV tabular + Chunks vetoriais de portarias).
+* **Semana 2:** Base de Conhecimento e Recuperação (RAG Híbrido: CSV tabular + Chunks vetoriais de portarias).
 * **Semana 3:** Avaliação Experimental Científica (LLM pura vs. RAG com framework RAGAS).
 * **Semana 4:** Sistema Multiagentes Colaborativo (LangGraph / CrewAI).
 * **Semana 5:** Pipeline Multimodal (PDFs digitais padrão CFM/ICP-Brasil + OCR + Transcrição Whisper).
@@ -47,12 +47,13 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | Componente | Fase / Semana | Status | Artefato de Referência |
 | :--- | :--- | :--- | :--- |
 | **Arquitetura & Clean Architecture** | Semana 1 | ✅ Concluído | [ADR 0001](docs/adr/0001_enterprise_clean_architecture_and_rag.md) e `backend/app/` |
-| **Cliente Mobile & Carteira Digital** | Semana 1 | ✅ Concluído | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) e `mobile/` |
+| **Decisão sobre cliente mobile & carteira digital** | Semana 1 | ✅ Documentada | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) |
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` (Recall: 100%, Falso Bloqueio: 0%) |
 | **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
-| **Recuperação Híbrida (RAG Híbrido)** | Semana 2 | ✅ Concluído | [Spec Semana 2](docs/architecture/spec_semana2_rag_hibrido.md) (DCB Matcher + BM25 + TF-IDF + ChromaDB) |
-| **Benchmark RAGAS / Golden Dataset** | Semana 2-3 | ✅ Concluído | `evals/runners/ragas_runner.py` (Hit@3: 100%, MRR: 1.0, Rota: 100%) |
+| **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado com 1.789 registros. |
+| **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ⚠️ v1 aprovado, v2 com divergência | `make benchmark` |
+| **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ⏳ Esqueleto inicial | [Auditoria e roteiro de implementação](docs/auditoria_semana3.md) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
@@ -149,8 +150,9 @@ make eval
 # 6. Demonstrador Oficial da Semana 2 (Dona Helena e Lucas Mendes)
 make demo
 
-# 7. Benchmark Científico RAG no Golden Dataset (16 casos)
+# 7. Benchmark determinístico (Golden Set v1 por padrão)
 make benchmark
+make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 ```
 
 ### Endpoints Principais da API (FastAPI)

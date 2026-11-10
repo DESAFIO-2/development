@@ -109,11 +109,15 @@ def test_hybrid_retriever_recupera_fontes_complementares_consolidada() -> None:
 
 
 def test_mlflow_experiment_tracker_registra_linhagem(tmp_path: Path) -> None:
+    manifest_dir = tmp_path / "data" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_bytes(
+        (RAIZ_REPO / "data" / "manifests" / "manifest.json").read_bytes()
+    )
     tracker = MLflowExperimentTracker(
         experiment_name="test-experiment",
-        raiz_repo=RAIZ_REPO,
+        raiz_repo=tmp_path,
     )
-    tracker.pasta_runs = tmp_path / "mlflow_runs"
     rec = tracker.registrar_execucao(
         run_name="unit_test_run",
         params={"rrf_k": 60, "min_score": 0.18},

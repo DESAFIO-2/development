@@ -1,6 +1,8 @@
 from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from app.domain.medication import CoverageRoute
 
 
 class ItemRoteiroDTO(BaseModel):
@@ -8,15 +10,12 @@ class ItemRoteiroDTO(BaseModel):
 
     medicamento: str
     principio_ativo_dcb: str
-    via_retirada: str = Field(
-        ...,
-        description="FARMACIA_POPULAR, UBS_REME_DF, FARMACIA_ALTO_CUSTO ou NAO_PADRONIZADO",
-    )
+    via_retirada: CoverageRoute
     local_sugerido: str
     o_que_levar: list[str]
-    dias_validade_receita: int
-    data_limite_validade: date
-    dias_restantes: int
+    dias_validade_receita: int | None
+    data_limite_validade: date | None
+    dias_restantes: int | None
     alerta_vencimento_proximo: bool
     citacao_normativa: str
 

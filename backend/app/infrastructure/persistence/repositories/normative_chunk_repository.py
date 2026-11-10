@@ -13,24 +13,14 @@ class LocalNormativeChunkRepository:
     """Carrega os fragmentos de portarias das camadas processed para o Hybrid Retriever."""
 
     def __init__(self, json_path: Path | None = None) -> None:
-        if json_path is not None:
-            self._path = json_path
-        else:
-            caminho_config = settings.data_processed_dir / "normative_chunks.json"
-            if caminho_config.exists():
-                self._path = caminho_config
-            else:
-                self._path = Path("data/processed/normative_chunks.json")
-                if not self._path.exists():
-                    self._path = Path("../data/processed/normative_chunks.json")
-
-        self._chunks: list[NormativeChunkDTO] = []
-        self._carregar()
-
-    def _carregar(self) -> None:
-        if not self._path.exists():
-            return
-        conteudo = json.loads(self._path.read_text(encoding="utf-8"))
+        path = (
+            json_path
+            if json_path is not None
+            else settings.data_processed_dir / "normative_chunks.json"
+        )
+        conteudo = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(conteudo, list) or not conteudo:
+            raise ValueError(f"Corpus precisa conter uma lista não vazia: {path}")
         self._chunks = [NormativeChunkDTO.from_dict(item) for item in conteudo]
 
     def listar_todos(self) -> list[NormativeChunkDTO]:

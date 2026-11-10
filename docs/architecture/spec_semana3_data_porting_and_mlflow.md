@@ -1,6 +1,6 @@
 # SPEC-DEV-002: Portagem do Corpus Consolidado, Reconciliação de Chunks e Rastreabilidade MLflow
 
-- **Status:** Implementado e Auditado
+- **Status:** Portagem implementada, aceitação do benchmark v2 pendente ([auditoria](../auditoria_semana3.md))
 - **Fase:** Semana 3 (Consolidação Multi-Fonte RENAME + REME-DF + PFPB, Reconciliação de Chunks e Rastreabilidade Experimental MLflow)
 - **Data:** 10/11/2026
 - **Responsáveis:** Esquadrão SUS Cidadão (Samuel, Mickeias, Marlon, Jhiovana, Tayrine)
