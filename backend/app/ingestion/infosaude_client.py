@@ -31,6 +31,10 @@ def compute_sha256(content: str | bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# Snapshots do Power BI ficam em data/raw do repo, e não em /tmp: em /tmp qualquer
+# usuário da máquina pode plantar um JSON e envenenar a camada gold (bandit B108).
+SNAPSHOT_DIR = Path(__file__).resolve().parents[3] / "data" / "raw"
+
 POWERBI_QUERY_ENDPOINT = (
     "https://wabi-brazil-south-api.analysis.windows.net/public/reports/querydata?synchronous=true"
 )
@@ -304,15 +308,16 @@ class InfoSaudeLiveClient:
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # B310 é falso positivo: a URL é a constante POWERBI_QUERY_ENDPOINT (https fixo).
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             raw_json: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
             return raw_json
 
     def sync_from_snapshots_or_live(
         self,
-        stock_snapshot: Path = Path("/tmp/pbi_res_stock_clean.json"),
-        ceaf_maps_snapshot: Path = Path("/tmp/pbi_res_maps.json"),
-        doc_maps_snapshot: Path = Path("/tmp/pbi_res_doc_maps.json"),
+        stock_snapshot: Path = SNAPSHOT_DIR / "pbi_res_stock_clean.json",
+        ceaf_maps_snapshot: Path = SNAPSHOT_DIR / "pbi_res_maps.json",
+        doc_maps_snapshot: Path = SNAPSHOT_DIR / "pbi_res_doc_maps.json",
         prefer_live: bool = False,
     ) -> InfoSaudeSyncSummary:
         """Sincroniza estoque CEAF e mapas das farmácias do DF via API ou snapshot DSR."""
