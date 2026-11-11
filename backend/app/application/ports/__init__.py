@@ -50,6 +50,8 @@ class CanonicalMedicationItem:
     source_id: str = "RENAME_2024"
     source_page: int = 1
     notes: str = ""
+    df_channels: tuple[str, ...] = ()
+    item_type: str = "medicine"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CanonicalMedicationItem:
@@ -69,6 +71,8 @@ class CanonicalMedicationItem:
             source_id=str(data.get("source_id", "RENAME_2024")),
             source_page=int(data.get("source_page", 1)),
             notes=str(data.get("notes", "")),
+            df_channels=tuple(str(channel) for channel in data.get("df_channels", [])),
+            item_type=str(data.get("item_type", "medicine")),
         )
 
 
@@ -128,6 +132,43 @@ class AuditPrescriptionUseCasePort(ABC):
         ...
 
 
+@dataclass(frozen=True)
+class GenerationResultDTO:
+    """Resultado imutável de síntese textual por LLM (com ou sem evidências RAG)."""
+
+    text: str
+    provider: str
+    model_name: str
+    grounded: bool
+    latency_ms: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class GeneratorPort(ABC):
+    """Porta abstrata para geração textual pareada (LLM sem recuperação × LLM com RAG)."""
+
+    @abstractmethod
+    def generate(
+        self,
+        question: str,
+        evidences: tuple[RetrievalHitDTO, ...] = (),
+        *,
+        rag_mode: bool | None = None,
+    ) -> GenerationResultDTO:
+        """Sintetiza resposta em linguagem cidadã com ou sem evidências recuperadas."""
+        ...
+
+    def __call__(
+        self,
+        question: str,
+        evidences: tuple[RetrievalHitDTO, ...] = (),
+    ) -> str:
+        """Permite uso direto como Callable[[str, tuple[RetrievalHitDTO, ...]], str]."""
+        return self.generate(question, evidences).text
+
+
 __all__ = [
     "RetrievalHitDTO",
     "CanonicalMedicationItem",
@@ -135,4 +176,6 @@ __all__ = [
     "MedicationRepositoryPort",
     "GuardrailPort",
     "AuditPrescriptionUseCasePort",
+    "GenerationResultDTO",
+    "GeneratorPort",
 ]

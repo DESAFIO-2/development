@@ -65,7 +65,7 @@ def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAudi
         ItemRoteiroDTO(
             medicamento=it.medicamento_ou_exame,
             principio_ativo_dcb=it.principio_ativo_dcb,
-            via_retirada=it.via_retirada.value,
+            via_retirada=it.via_retirada,
             local_sugerido=it.local_sugerido,
             o_que_levar=it.o_que_levar,
             dias_validade_receita=it.dias_validade_receita,
@@ -88,7 +88,7 @@ def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAudi
 
 @router.get("/medications/autocomplete", response_model=MedicationAutocompleteResponseDTO)
 def autocomplete_medications(
-    q: str = Query(..., min_length=1, description="Termo digitado pelo cidadão"),
+    q: str = Query(..., min_length=1, max_length=200, description="Termo digitado pelo cidadão"),
     limite: int = Query(default=10, ge=1, le=50),
 ) -> MedicationAutocompleteResponseDTO:
     """Sugestão assistida de medicamentos padronizados (DCB) para o autocomplete do app."""

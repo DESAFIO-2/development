@@ -116,7 +116,7 @@ def executar_demonstracao(caso: str = "helena") -> int:
 
     print(formatar_cabecalho("Guardrail Ético e Preservação do Ato Médico"))
     print(f'"{resultado.aviso_preservacao_ato_medico}"')
-    print("\n[OK] Demonstração concluída com 100% de fundamentação documental.")
+    print("\n[OK] Demonstração concluída.")
     return 0
 
 

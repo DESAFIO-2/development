@@ -1,4 +1,6 @@
-.PHONY: help install dev-install lint format test run-api run-ui eval eval-guardrail demo benchmark docker-build clean
+DATASET ?= evals/datasets/golden_set_v1.jsonl
+
+.PHONY: help install dev-install lint format test run-api run-ui eval eval-guardrail demo benchmark compare docker-build clean
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -11,7 +13,8 @@ help:
 	@echo "  make eval           - Valida os datasets e avalia os guardrails"
 	@echo "  make eval-guardrail - Executa a avaliação do guardrail clínico em produção"
 	@echo "  make demo           - Executa a demonstração do RAG para as Personas Dona Helena e Lucas"
-	@echo "  make benchmark      - Executa o benchmark científico RAG no Golden Dataset (16 casos)"
+	@echo "  make benchmark      - Executa o benchmark determinístico (dataset configurável com DATASET)"
+	@echo "  make compare        - Executa o experimento comparativo Semana 3 (LLM sem recuperação vs LLM com RAG)"
 	@echo "  make docker-build   - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
@@ -32,7 +35,7 @@ run-api:
 	cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 run-ui:
-	@echo "Interface do Cidadão em React Native (mobile/). Consulte docs/adr/0002_mobile_first_react_native_client.md"
+	@echo "Interface React Native planejada. Consulte docs/adr/0002_mobile_first_react_native_client.md"
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py
@@ -46,10 +49,13 @@ demo:
 	uv run --project backend python evals/runners/demo_rag_runner.py --caso lucas
 
 benchmark:
-	uv run --project backend python evals/runners/ragas_runner.py
+	uv run --project backend python evals/runners/ragas_runner.py --dataset "$(DATASET)"
+
+compare:
+	uv run --project backend python evals/runners/comparar_semana3.py --dataset "$(DATASET)"
 
 docker-build:
-	docker build -t sus-cidadao-backend:latest backend
+	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

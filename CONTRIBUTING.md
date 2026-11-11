@@ -24,3 +24,7 @@ make test     # Roda a suíte de testes unitários e de integração
 ## 📜 Registros de Decisões de Arquitetura (ADRs)
 
 Qualquer alteração estrutural no domínio, na recuperação RAG ou nos guardrails deve ser acompanhada de um ADR na pasta `docs/adr/`.
+
+## Portação entre branches e repositórios
+
+Siga o [procedimento de portações](docs/runbooks/portacoes.md) para fixar a revisão de origem, selecionar artefatos, validar os contratos do destino e documentar a reversão.

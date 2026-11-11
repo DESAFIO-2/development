@@ -30,6 +30,9 @@ data/raw/*.tar.gz
 # Evaluation transient outputs
 evals/reports/*.json
 evals/reports/*.csv
+evals/reports/*.md
+evals/reports/mlflow_runs/
+evals/reports/mlruns/
 
 # OS & Editors
 .DS_Store

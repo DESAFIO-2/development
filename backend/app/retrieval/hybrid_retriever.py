@@ -45,6 +45,14 @@ class HybridRetriever(RetrieverPort):
             "cadastrada",
             "lme",
             "pcdt",
+            "infosaude",
+            "estoque",
+            "declaracao",
+            "autorizadora",
+            "policlinica",
+            "cedin",
+            "dignidade",
+            "menstrual",
         }
     )
 
@@ -110,7 +118,7 @@ class HybridRetriever(RetrieverPort):
                 final_score = 0.50 * lexical_score + 0.35 * chunk_dcb_boost + 0.15 * rrf_norm
             elif is_sisreg_intent and chunk.route_category == "SISREG_EXAME_CONSULTA":
                 final_score = 0.80 * lexical_score + 0.20 * rrf_norm
-            elif is_rule_intent and chunk.chunk_id.startswith("CHK-REGRA-"):
+            elif is_rule_intent and chunk.chunk_id.startswith(("CHK-REGRA-", "CHK-COMP-")):
                 final_score = 0.70 * lexical_score + 0.30 * rrf_norm
             elif matched_dcbs:
                 final_score = 0.35 * lexical_score

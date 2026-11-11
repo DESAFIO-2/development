@@ -5,11 +5,14 @@ on:
   pull_request:
     paths:
       - "evals/**"
-      - "backend/app/retrieval/**"
+      - "backend/**"
+      - "data/processed/**"
+      - "data/manifests/**"
+      - "observability/**"
       - ".github/workflows/rag-evaluation.yml"
 
 jobs:
-  ragas-benchmark:
+  benchmark-deterministico:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -18,7 +21,17 @@ jobs:
         run: uv sync --locked --project backend
       - name: Validar datasets de avaliação
         run: uv run --project backend python evals/runners/validar_datasets.py
-      # Semana 3: quando existir o runner do RAGAS, descomente e ajuste a meta.
-      # A meta de faithfulness (0.92) já está em backend/app/core/config.py.
-      # - name: Benchmark RAGAS
-      #   run: uv run --project backend python evals/runners/ragas_runner.py
+      - name: Benchmark determinístico v1
+        run: make benchmark
+      - name: Benchmark consolidado v2 (Corpus v5)
+        run: make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+      - name: Experimento Comparativo Semana 3 (LLM vs RAG)
+        run: make compare DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+      - name: Guardar relatórios do benchmark
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-deterministico
+          path: |
+            evals/reports/rag_benchmark_golden_set_*.json
+            evals/reports/comparativo_semana3_llm_vs_rag.*
