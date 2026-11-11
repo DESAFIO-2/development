@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_name: str = "SUS Cidadão API"
     environment: str = "local"
     version: str = "0.1.0"
+    log_level: str = "INFO"
 
     # RAG & Provedores de IA
     openai_api_key: str = ""
