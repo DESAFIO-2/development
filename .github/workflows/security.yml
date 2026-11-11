@@ -59,3 +59,25 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: Análise estática de segurança (média e alta)
         run: uvx bandit -r backend/app evals -ll
+
+  anti-injection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Instalar dependências
+        run: uv sync --locked --project backend
+      - name: Red team de prompt injection (texto, PDF e voz)
+        # Meta 100% no conjunto de desenvolvimento: protege contra regressão.
+        # Generalização se mede no holdout, que fica fora do repositório.
+        run: >
+          uv run --project backend python evals/runners/guardrail_runner.py
+          --alvo app.seguranca.injecao:deve_bloquear
+          --dataset evals/datasets/injecao_v1.jsonl
+          --min-recall 1.0 --max-falso-bloqueio 0.0
+      - name: Guardar relatório
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-anti-injection
+          path: evals/reports/guardrail_ultimo.json
