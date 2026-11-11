@@ -1,0 +1,14 @@
+# Exceções do gitleaks. Cada linha precisa de justificativa e da aprovação do dono do código.
+#
+# Chaves ResourceKey do Power BI "publicar na Web" (endpoint /public/reports/ do InfoSaúde-DF).
+# São públicas por desenho: qualquer pessoa que abre o painel embutido recebe a mesma chave.
+# Dono: @samucabsb. Pendente de confirmação dele no PR ci/seguranca-basica (2026-11-11).
+# Se a chave deixar de ser pública, ela sai do código para o .env e esta exceção é removida.
+59840db6a14e6e8029a628f846223a503f3674f5:backend/app/ingestion/infosaude_client.py:generic-api-key:38
+59840db6a14e6e8029a628f846223a503f3674f5:backend/app/ingestion/infosaude_client.py:generic-api-key:42
+59840db6a14e6e8029a628f846223a503f3674f5:backend/app/ingestion/infosaude_client.py:generic-api-key:46
+960f3d373f21b08dcaa69cc5f12f98dac30da207:data/processed/df_pharmacies_geolocated.json:generic-api-key:4
+960f3d373f21b08dcaa69cc5f12f98dac30da207:data/processed/df_pharmacies_geolocated.json:generic-api-key:5
+960f3d373f21b08dcaa69cc5f12f98dac30da207:data/processed/ceaf_live_stock.json:generic-api-key:4
+0d619721461304d6492aef6ac65645dd83cc53ac:docs/entregaveis_semana2_rag.md:generic-api-key:247
+0d619721461304d6492aef6ac65645dd83cc53ac:docs/entregaveis_semana2_rag.md:generic-api-key:248
