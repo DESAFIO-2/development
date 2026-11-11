@@ -40,6 +40,20 @@ def validar_arquivo(caminho: Path) -> list[str]:
             else:
                 ids_vistos.add(identificador)
                 linhas_validas += 1
+            if "audit_items" in exemplo:
+                itens = exemplo["audit_items"]
+                if not isinstance(itens, list) or not itens:
+                    erros.append(f"{local}: audit_items deve ser lista não vazia")
+                else:
+                    for item in itens:
+                        if (
+                            not isinstance(item, dict)
+                            or set(item) != {"nome_digitado"}
+                            or not isinstance(item["nome_digitado"], str)
+                            or not item["nome_digitado"]
+                            or item["nome_digitado"] not in exemplo.get("query", "")
+                        ):
+                            erros.append(f"{local}: audit_items deve transcrever nomes da query")
 
     if linhas_validas == 0 and not erros:
         erros.append(f"{caminho.name}: arquivo sem nenhum exemplo")

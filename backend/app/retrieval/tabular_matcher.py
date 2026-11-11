@@ -34,19 +34,33 @@ class TabularDCBMatcher:
         }
     )
 
-    _DOSE = re.compile(
+    _DOSE_PART = (
         r"\b\d+(?:[.,]\d+)*(?:/\d+(?:[.,]\d+)*)*\s*"
-        r"(?:mcg|mg|g|ui|ml|%)(?!\w)(?:\s*/\s*(?:ml|g|dose)\b)?",
-        re.IGNORECASE,
+        r"(?:mcg|mg|g|ui|ml|%)(?!\w)"
+        r"(?:\s*/\s*(?:\d+(?:[.,]\d+)*\s*)?(?:ml|g|dose)\b)?"
     )
+    _DOSE = re.compile(_DOSE_PART + r"(?:\s*\+\s*" + _DOSE_PART + r")*", re.IGNORECASE)
 
     @staticmethod
     def normalizar_concentracao(concentracao: str) -> str:
-        return re.sub(r"\s+", "", concentracao.lower().replace(",", "."))
+        valor = re.sub(r"\s+", "", concentracao.lower().replace(",", "."))
+        # Abreviação de composição (97/103 mg), sem somar doses ou converter unidades.
+        composto = re.fullmatch(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)(mcg|mg|g|ui)", valor)
+        if composto:
+            primeiro, segundo, unidade = composto.groups()
+            return f"{primeiro}{unidade}+{segundo}{unidade}"
+        return valor
 
     @classmethod
     def doses_no_texto(cls, texto: str) -> set[str]:
         return {cls.normalizar_concentracao(dose) for dose in cls._DOSE.findall(texto)}
+
+    @classmethod
+    def tem_numero_nao_interpretado(cls, texto: str) -> bool:
+        """Número sem unidade reconhecida exige confirmação da apresentação."""
+        residual = cls._DOSE.sub("", texto)
+        padrao = r"/\s*\d" if cls._DOSE.search(texto) else r"\b\d"
+        return bool(re.search(padrao, residual))
 
     def __init__(self, medications: list[CanonicalMedicationItem]) -> None:
         self.medications = medications

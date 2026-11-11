@@ -1,3 +1,7 @@
+> Atualização de 11/11/2026: este registro contém resultados históricos da portação.
+> Para o protocolo corrigido e a retirada dos resultados sintéticos como evidência científica,
+> consulte [o entregável atualizado](entregaveis_semana3_comparativo.md) e o ADR 0004.
+
 # Auditoria técnica e entrega da semana 3
 
 > Esta auditoria registra a linha de base anterior ao v5. Veja as mudanças e os resultados atuais no [registro da portação](implementation/plano_semana3_corpus_v5.md#registro-da-portação-executada).

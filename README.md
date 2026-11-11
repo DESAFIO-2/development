@@ -53,7 +53,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado v5 com 1.787 registros. |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
-| **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Concluído | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md) e [Auditoria](docs/auditoria_semana3.md) |
+| **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | Protocolo corrigido; avaliação real pendente | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md) e [Auditoria](docs/auditoria_semana3.md) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
@@ -154,8 +154,8 @@ make demo
 make benchmark
 make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 
-# 8. Experimento Comparativo Semana 3 (LLM sem recuperação vs. LLM com RAG)
-make compare DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+# 8. Smoke offline do protocolo (não mede desempenho de LLM)
+make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 ```
 
 ### Endpoints Principais da API (FastAPI)

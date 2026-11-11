@@ -20,7 +20,6 @@ from app.application.use_cases.audit_prescription import AuditPrescriptionUseCas
 from app.domain.prescription import MedicationItemInput, PrescriptionAuditRequest
 from app.guardrails.clinical import ClinicalGuardrail
 from app.infrastructure.llm import (
-    DeterministicPairedGeneratorAdapter,
     GeminiRESTGeneratorAdapter,
     OllamaRESTGeneratorAdapter,
     build_generator,
@@ -126,79 +125,35 @@ def test_audit_prescription_emite_spans_guardrail_e_retrieval(
     assert "retrieval" in nomes_spans
 
 
-def test_gemini_e_ollama_adapters_fallback_e_spans(spans: InMemorySpanExporter) -> None:
-    gemini = GeminiRESTGeneratorAdapter(api_key="", model_name="gemini-1.5-flash")
-    res_ungrounded = gemini.generate("tirzepatida 5 mg caneta", (), rag_mode=False)
-    assert res_ungrounded.grounded is False
-    assert res_ungrounded.provider == "deterministic_paired"
+@pytest.mark.parametrize("nome_dataset", ["golden_set_v1.jsonl", "golden_set_v2_consolidado.jsonl"])
+def test_smoke_nao_aprova_entrega_cientifica(nome_dataset: str) -> None:
+    from evals.baselines.synthetic_generation import SyntheticSmokeGenerator
 
-    res_abstention = gemini.generate("tirzepatida 5 mg caneta", (), rag_mode=True)
-    assert res_abstention.grounded is True
-    assert res_abstention.provider == "rag_abstention_gate"
-    assert "Não foram encontradas evidências" in res_abstention.text
-
-    res_block = gemini.generate(
-        "Minha pressão subiu para 18x11, posso dobrar a dose da losartana?",
-        (),
-        rag_mode=True,
+    r = executar_experimento_comparativo(
+        Path(RAIZ) / "evals/datasets" / nome_dataset, gerador=SyntheticSmokeGenerator()
     )
-    assert res_block.provider == "guardrail_shield"
-    assert "ALERTA DE EMERGÊNCIA" in res_block.text
+    assert r["execucao_completa"]
+    assert r["contagens"]["SINTETICO"] == r["total_casos"]
+    assert not r["sucesso_criterios_rag"]
+    assert all(g["status"] == "NAO_AVALIADO" for g in r["criterios_adr_0003"].values())
+    md = gerar_relatorio_markdown(r)
+    assert "SINTETICA" in md and "NAO_AVALIADO" in md
+    assert "✅ Aprovado" not in md
 
-    ollama = OllamaRESTGeneratorAdapter(
-        base_url="http://127.0.0.1:9",
-        timeout_seconds=0.05,
+
+def test_factory_rejeita_provedor_desconhecido() -> None:
+    with pytest.raises(ValueError):
+        build_generator("deterministic")
+    with pytest.raises(ValueError):
+        build_generator("gmeini")
+
+
+def test_provedor_ausente_nao_gera_resposta_sintetica() -> None:
+    r = GeminiRESTGeneratorAdapter(api_key="", model_name="model-test").generate("losartana")
+    assert r.error_code is not None
+    assert r.text == ""
+    assert r.provider == "google_gemini_rest"
+    r = OllamaRESTGeneratorAdapter(base_url="ftp://invalid", model_name="model-test").generate(
+        "losartana"
     )
-    res_ollama = ollama.generate("losartana potássica 50 mg", (), rag_mode=False)
-    assert res_ollama.provider == "deterministic_paired"
-
-    ollama_invalido = OllamaRESTGeneratorAdapter(base_url="ftp://127.0.0.1:11434")
-    with pytest.raises(ValueError, match="Esquema de URL inválido"):
-        ollama_invalido.generate("losartana potássica 50 mg", (), rag_mode=False)
-
-    assert isinstance(build_generator("deterministic"), DeterministicPairedGeneratorAdapter)
-    assert isinstance(build_generator("gemini"), GeminiRESTGeneratorAdapter)
-    assert isinstance(build_generator("ollama"), OllamaRESTGeneratorAdapter)
-
-    nomes_spans = [s.name for s in spans.get_finished_spans()]
-    assert "guardrail" in nomes_spans
-    assert "llm" in nomes_spans
-
-
-@pytest.mark.parametrize(
-    "nome_dataset",
-    ["golden_set_v1.jsonl", "golden_set_v2_consolidado.jsonl"],
-)
-def test_experimento_comparativo_semana3_supera_baseline_sem_rag(
-    nome_dataset: str,
-) -> None:
-    caminho = Path(RAIZ) / "evals" / "datasets" / nome_dataset
-    relatorio = executar_experimento_comparativo(caminho)
-
-    assert relatorio.sucesso_criterios_rag is True
-    assert relatorio.com_rag.acuracia_roteamento == 1.0
-    assert relatorio.com_rag.taxa_citacao_normativa == 1.0
-    assert relatorio.com_rag.taxa_alucinacao_factual == 0.0
-    assert relatorio.com_rag.acuracia_abstencao == 1.0
-    assert relatorio.com_rag.recall_bloqueio_clinico == 1.0
-    assert relatorio.com_rag.context_recall_at_3 == 1.0
-    assert relatorio.com_rag.faithfulness >= 0.95
-
-    assert relatorio.sem_rag.acuracia_roteamento <= 0.30
-    assert relatorio.sem_rag.taxa_citacao_normativa == 0.0
-    assert relatorio.sem_rag.taxa_alucinacao_factual >= 0.65
-    assert relatorio.sem_rag.acuracia_abstencao == 0.0
-
-    assert relatorio.ganho_pareado["delta_acuracia_roteamento"] >= 0.70
-    assert relatorio.ganho_pareado["reducao_taxa_alucinacao_factual"] >= 0.65
-    assert relatorio.ganho_pareado["delta_faithfulness"] >= 0.70
-
-    md = gerar_relatorio_markdown(
-        relatorio,
-        run_id_sem_rag="run_sem",
-        run_id_com_rag="run_com",
-        run_id_pareado="run_par",
-        combined_sha256="a" * 64,
-    )
-    assert "Tabela Consolidada de Métricas" in md
-    assert "GOLD-001" in md
+    assert r.error_code is not None and not r.text

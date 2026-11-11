@@ -2,10 +2,10 @@ name: backend-ci
 
 on:
   pull_request:
-    paths: ["backend/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
 
 jobs:
   qualidade:
@@ -19,11 +19,11 @@ jobs:
       - name: Instalar dependências
         run: uv sync --locked
       - name: Formatação
-        run: uv run ruff format --check .
+        run: uv run ruff format --check . ../evals ../observability
       - name: Lint
-        run: uv run ruff check .
+        run: uv run ruff check . ../evals ../observability
       - name: Tipos
-        run: uv run mypy app tests
+        run: uv run mypy app tests ../evals/runners ../evals/baselines ../observability
       - name: Testes
         run: uv run pytest
 

@@ -15,6 +15,7 @@ htmlcov/
 .env
 .env*.local
 .venv
+evals/.venv
 env/
 venv/
 ENV/
@@ -40,3 +41,10 @@ evals/reports/mlruns/
 .vscode/
 *~
 *.swp
+
+# Execuções isoladas do protocolo comparativo v2
+evals/reports/smoke_sintetico_semana3_*/
+evals/reports/coleta_real_semana3_*/
+
+# Artefatos legados locais
+entregavel_semana2/

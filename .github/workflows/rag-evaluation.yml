@@ -25,8 +25,8 @@ jobs:
         run: make benchmark
       - name: Benchmark consolidado v2 (Corpus v5)
         run: make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
-      - name: Experimento Comparativo Semana 3 (LLM vs RAG)
-        run: make compare DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+      - name: Smoke sintético do protocolo Semana 3 (não mede LLM)
+        run: make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
       - name: Guardar relatórios do benchmark
         if: always()
         uses: actions/upload-artifact@v7
@@ -34,4 +34,4 @@ jobs:
           name: benchmark-deterministico
           path: |
             evals/reports/rag_benchmark_golden_set_*.json
-            evals/reports/comparativo_semana3_llm_vs_rag.*
+            evals/reports/smoke_sintetico_semana3_*/**

@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # RAG & Provedores de IA
-    llm_provider: str = "deterministic"
-    llm_model_name: str = "gemini-1.5-flash"
+    llm_provider: str = "gemini"
+    llm_model_name: str = ""
     ollama_base_url: str = "http://localhost:11434"
     openai_api_key: str = ""
     google_api_key: str = ""

@@ -37,31 +37,38 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
         # 1. Guardrail Clínico e de Ato Médico
-        consulta_completa = " ".join(
-            [
-                value
-                for item in request.itens
-                for value in (
-                    item.nome_digitado,
-                    item.principio_ativo_dcb,
-                    item.concentracao,
-                    item.forma_farmaceutica,
-                )
-                if value
-            ]
-            + ([request.pergunta_adicional] if request.pergunta_adicional else [])
-        )
+        campos = [
+            value
+            for item in request.itens
+            for value in (
+                item.nome_digitado,
+                item.principio_ativo_dcb,
+                item.concentracao,
+                item.forma_farmaceutica,
+                item.posologia,
+                item.quantidade_prescrita,
+            )
+            if value
+        ] + [request.pergunta_adicional or "", request.regiao_administrativa]
 
         regiao = self.pii_masker.mascarar(request.regiao_administrativa).texto_sanitizado
         with trace_operation("guardrail"):
-            check_clinico = self.guardrail.inspecionar(consulta_completa)
-        if check_clinico.bloqueado:
+            bloqueios = [
+                check
+                for campo in campos
+                if campo
+                if (check := self.guardrail.inspecionar(campo)).bloqueado
+            ]
+        if bloqueios:
+            check_clinico = next(
+                (check for check in bloqueios if check.alerta_emergencia), bloqueios[0]
+            )
             return CitizenGuidanceCard(
                 sucesso=False,
                 regiao_administrativa=regiao,
                 itens_auditados=[],
                 resumo_acolhedor=check_clinico.mensagem_acolhedora,
-                solicitou_automedicacao=True,
+                solicitou_automedicacao=check_clinico.motivo != "PROMPT_INJECTION",
             )
 
         hoje = date.today()
@@ -75,10 +82,24 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             forma = self.pii_masker.mascarar(item.forma_farmaceutica or "").texto_sanitizado
             doses = self.tabular_matcher.doses_no_texto(nome)
             dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
+            # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
+            dose_ambigua = (
+                self.tabular_matcher.tem_numero_nao_interpretado(nome)
+                or len(doses) > 1
+                or bool(
+                    item.concentracao
+                    and doses
+                    and doses != {self.tabular_matcher.normalizar_concentracao(item.concentracao)}
+                )
+            )
             consulta = dcb or nome
             with trace_operation("retrieval"):
-                matches = self.tabular_matcher.casar(
-                    consulta, concentracao=dose, forma=forma, deduplicar=False
+                matches = (
+                    self.tabular_matcher.casar(
+                        consulta, concentracao=dose, forma=forma, deduplicar=False
+                    )
+                    if not dose_ambigua
+                    else []
                 )
             if dcb:
                 dcb_norm = normalizar_texto_pt(dcb)
@@ -168,7 +189,11 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             else:
                 # Consulta busca híbrida para itens não tabulados diretamente
                 with trace_operation("retrieval"):
-                    hits = self.retriever.search(nome, top_k=1) if not (dcb or forma) else []
+                    hits = (
+                        self.retriever.search(nome, top_k=1)
+                        if not (dcb or forma or dose_ambigua)
+                        else []
+                    )
                 if dose:
                     # Evidência textual genérica não confirma uma concentração fora do catálogo.
                     hits = [hit for hit in hits if hit.route_category == "SISREG_EXAME_CONSULTA"]

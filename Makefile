@@ -1,10 +1,14 @@
 DATASET ?= evals/datasets/golden_set_v1.jsonl
+MODEL ?= qwen2.5:14b
+EMBED_MODEL ?= bge-m3
+COLETA_DIR ?=
 
-.PHONY: help install dev-install lint format test run-api run-ui eval eval-guardrail demo benchmark compare docker-build clean
+.PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
 	@echo "  make dev-install    - Instala dependências no backend com uv"
+	@echo "  make eval-setup     - Instala ambiente isolado de avaliação (ragas==0.4.3) em evals/"
 	@echo "  make lint           - Executa Ruff e Mypy no backend"
 	@echo "  make format         - Formata o código com Ruff"
 	@echo "  make test           - Executa os testes no backend"
@@ -14,19 +18,25 @@ help:
 	@echo "  make eval-guardrail - Executa a avaliação do guardrail clínico em produção"
 	@echo "  make demo           - Executa a demonstração do RAG para as Personas Dona Helena e Lucas"
 	@echo "  make benchmark      - Executa o benchmark determinístico (dataset configurável com DATASET)"
-	@echo "  make compare        - Executa o experimento comparativo Semana 3 (LLM sem recuperação vs LLM com RAG)"
+	@echo "  make compare        - Coleta respostas reais (configurar modelo; RAGAS pendente)"
+	@echo "  make compare-ollama - Estágio 1: Coleta pareada via Ollama local (MODEL=qwen2.5:14b)"
+	@echo "  make eval-ragas     - Estágio 2: Avalia coleta real com RAGAS oficial (COLETA_DIR=...)"
+	@echo "  make compare-smoke  - Testa o protocolo com fixture sintética offline"
 	@echo "  make docker-build   - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
 dev-install:
 	cd backend && uv sync
 
+eval-setup:
+	cd evals && uv sync --locked
+
 lint:
-	cd backend && uv run ruff check .
-	cd backend && uv run mypy app tests
+	cd backend && uv run ruff check . ../evals ../observability
+	cd backend && uv run mypy app tests ../evals/runners ../evals/baselines ../observability
 
 format:
-	cd backend && uv run ruff format .
+	cd backend && uv run ruff format . ../evals ../observability
 
 test:
 	cd backend && uv run pytest
@@ -51,8 +61,17 @@ demo:
 benchmark:
 	uv run --project backend python evals/runners/ragas_runner.py --dataset "$(DATASET)"
 
+compare-smoke:
+	uv run --project backend python evals/runners/comparar_semana3.py --synthetic-smoke --dataset "$(DATASET)"
+
 compare:
 	uv run --project backend python evals/runners/comparar_semana3.py --dataset "$(DATASET)"
+
+compare-ollama:
+	uv run --project backend python evals/runners/comparar_semana3.py --provider ollama --model "$(MODEL)" --dataset "$(DATASET)"
+
+eval-ragas:
+	uv run --project evals python evals/runners/avaliar_ragas_oficial.py --coleta-dir "$(COLETA_DIR)" --evaluator-model "$(MODEL)" --embedding-model "$(EMBED_MODEL)"
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .

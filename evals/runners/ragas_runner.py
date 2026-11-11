@@ -93,7 +93,13 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         query = caso["query"]
         chunks_relevantes = set(caso.get("relevant_chunk_ids", []))
         audit_res = use_case.executar(
-            PrescriptionAuditRequest(itens=[MedicationItemInput(nome_digitado=query)])
+            PrescriptionAuditRequest(
+                itens=[
+                    MedicationItemInput.model_validate(item)
+                    for item in caso.get("audit_items", [{"nome_digitado": query}])
+                ],
+                pergunta_adicional=query,
+            )
         )
         erros = []
 
@@ -137,7 +143,9 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
             "ALTO_CUSTO_CEAF": "FARMACIA_ALTO_CUSTO",
         }
         rota_esperada = rotas.get(caso["expected_route"], caso["expected_route"])
-        if rota_obtida == rota_esperada:
+        if audit_res.itens_auditados and all(
+            item.via_retirada.value == rota_esperada for item in audit_res.itens_auditados
+        ):
             rotas_corretas += 1
         else:
             erros.append(f"roteamento esperado {rota_esperada}, obtido {rota_obtida}")

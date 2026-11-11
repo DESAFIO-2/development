@@ -1,0 +1,27 @@
+[project]
+name = "sus-cidadao-evals"
+version = "0.1.0"
+description = "Ambiente isolado de avaliação (RAGAS + juiz local). Fora do runtime da API."
+requires-python = ">=3.12"
+dependencies = [
+    "ragas==0.4.3",
+    "openai",
+    # ragas 0.4.3 importa langchain_community.chat_models.vertexai, ausente nas
+    # versões atuais do langchain 1.x: sem estes limites `import ragas` falha.
+    "langchain<1",
+    "langchain-community<0.4",
+    "langchain-openai<1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.uv]
+# Somente dependências: nada a empacotar. O código vive em evals/ e usa a raiz do repo.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]
