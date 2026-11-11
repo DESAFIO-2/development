@@ -2,7 +2,7 @@
 #
 # Chaves ResourceKey do Power BI "publicar na Web" (endpoint /public/reports/ do InfoSaúde-DF).
 # São públicas por desenho: qualquer pessoa que abre o painel embutido recebe a mesma chave.
-# Dono: @samucabsb. Pendente de confirmação dele no PR ci/seguranca-basica (2026-11-11).
+# Dono: @samucabsb. Confirmado por ele como chaves públicas em 2026-11-10.
 # Se a chave deixar de ser pública, ela sai do código para o .env e esta exceção é removida.
 59840db6a14e6e8029a628f846223a503f3674f5:backend/app/ingestion/infosaude_client.py:generic-api-key:38
 59840db6a14e6e8029a628f846223a503f3674f5:backend/app/ingestion/infosaude_client.py:generic-api-key:42
