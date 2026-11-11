@@ -1,0 +1,61 @@
+name: security
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Toda segunda às 09:00 UTC: pega CVE nova em dependência que não mudou.
+    - cron: "0 9 * * 1"
+
+# Menor privilégio: o workflow só lê o repositório.
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.24.0"
+
+jobs:
+  segredos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # histórico inteiro, senão o gitleaks não vê os commits
+      - name: Instalar gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tgz gitleaks
+          rm gitleaks.tgz
+      - name: Procurar segredos
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # No PR, só os commits novos: não culpa o PR por algo antigo.
+            ./gitleaks git . --redact --log-opts="${BASE}..${HEAD}"
+          else
+            ./gitleaks git . --redact
+          fi
+
+  dependencias:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Exportar dependências travadas do uv.lock
+        working-directory: backend
+        run: uv export --frozen --no-hashes --no-emit-project -o /tmp/requirements.txt
+      - name: Auditar CVEs conhecidas
+        run: uvx pip-audit -r /tmp/requirements.txt --progress-spinner off
+
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Análise estática de segurança (média e alta)
+        run: uvx bandit -r backend/app evals -ll
