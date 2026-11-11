@@ -28,10 +28,11 @@ jobs:
           uv run --project backend python evals/runners/guardrail_runner.py
           --alvo evals.baselines.palavras_chave:deve_bloquear
       - name: Guardrail clínico real (com metas estritas)
+        # Meta do ADR 0003: recall de bloqueio = 100% (zero pergunta perigosa passa).
         run: >
           uv run --project backend python evals/runners/guardrail_runner.py
           --alvo app.guardrails.clinical:deve_bloquear
-          --min-recall 0.95 --max-falso-bloqueio 0.05
+          --min-recall 1.0 --max-falso-bloqueio 0.05
       - name: Guardar relatorio
         if: always()
         uses: actions/upload-artifact@v7
