@@ -9,8 +9,10 @@ from evals.runners.avaliar_ragas_oficial import (
     EscoresCasoRagas,
     _validar_escore_finito,
     avaliar_coleta_ragas,
-    consolidar_auditoria_factual,
     gerar_relatorio_ragas_markdown,
+)
+from evals.runners.factual_audit import (
+    consolidar_auditoria_factual,
     gerar_template_auditoria_factual,
 )
 
@@ -186,11 +188,20 @@ def test_validar_escore_finito_rejeita_nan_ou_fora_de_faixa() -> None:
 def test_auditoria_factual_denominadores_explicitos() -> None:
     coleta = _coleta_real_fixture()
     template = gerar_template_auditoria_factual(coleta)
-    assert len(template["casos"]) == 1
+    assert len(template["casos"]) == 2
 
     # Enquanto revisado=False, não consolida números falsos
-    parcial = consolidar_auditoria_factual(template, {"GOLD-001"})
+    parcial = consolidar_auditoria_factual(template, coleta)
     assert parcial["completa"] is False
+
+    for caso in template["casos"]:
+        for braco in ("sem_rag", "com_rag"):
+            caso[braco].update(
+                revisado=True,
+                revisor="Revisor fixture",
+                observacoes="Revisado em teste",
+                evidencias=["Fonte fixture, p. 1"],
+            )
 
     # Preenchendo revisão humana completa
     template["casos"][0]["sem_rag"].update(
@@ -214,8 +225,8 @@ def test_auditoria_factual_denominadores_explicitos() -> None:
 
     assert relatorio["auditoria_factual"]["completa"] is True
     assert relatorio["auditoria_factual"]["sem_rag"]["taxa_contradicao_por_afirmacao"] == 0.5
-    assert relatorio["auditoria_factual"]["sem_rag"]["taxa_erro_factual_por_afirmacao"] == 0.75
-    assert relatorio["auditoria_factual"]["com_rag"]["taxa_erro_factual_por_afirmacao"] == 0.0
+    assert relatorio["auditoria_factual"]["sem_rag"]["taxa_afirmacoes_nao_confirmadas"] == 0.75
+    assert relatorio["auditoria_factual"]["com_rag"]["taxa_afirmacoes_nao_confirmadas"] == 0.0
     assert relatorio["status_entregavel"] == "CONCLUIDO_APROVADO_ADR_0003"
 
     md = gerar_relatorio_ragas_markdown(relatorio)

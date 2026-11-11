@@ -35,6 +35,24 @@ HIT = RetrievalHitDTO(
 )
 
 
+def test_ollama_truncation_preserves_text_and_usage_but_invalidates_response() -> None:
+    adapter = OllamaRESTGeneratorAdapter(model_name="fixture")
+    body = {
+        "response": "Resposta parcial",
+        "done": True,
+        "done_reason": "length",
+        "eval_count": 450,
+        "prompt_eval_count": 80,
+        "model": "fixture",
+    }
+    with patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())):
+        result = adapter.generate("losartana", (HIT,), rag_mode=True)
+    assert result.error_code == "RESPOSTA_TRUNCADA"
+    assert result.text == "Resposta parcial"
+    assert result.provider_metadata is not None
+    assert result.provider_metadata["eval_count"] == 450
+
+
 class Retriever(RetrieverPort):
     def search(self, query: str, top_k: int = 5, min_score: float = 0.18) -> list[RetrievalHitDTO]:
         return [HIT]

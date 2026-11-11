@@ -2,6 +2,9 @@ DATASET ?= evals/datasets/golden_set_v1.jsonl
 MODEL ?= qwen2.5:14b
 EMBED_MODEL ?= bge-m3
 COLETA_DIR ?=
+LOCAL_MODEL ?= semana3-qwen14
+RUN_DIR ?= evals/reports/quinta_coleta
+PILOT_DIR ?= evals/reports/quinta_piloto
 
 .PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
@@ -26,7 +29,7 @@ help:
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
 dev-install:
-	cd backend && uv sync
+	cd backend && uv sync --locked
 
 eval-setup:
 	cd evals && uv sync --locked
@@ -72,6 +75,20 @@ compare-ollama:
 
 eval-ragas:
 	uv run --project evals python evals/runners/avaliar_ragas_oficial.py --coleta-dir "$(COLETA_DIR)" --evaluator-model "$(MODEL)" --embedding-model "$(EMBED_MODEL)"
+
+.PHONY: semana3-pilot semana3-run semana3-finalize eval-test
+
+eval-test:
+	uv run --project evals pytest evals/tests -q
+
+semana3-pilot:
+	uv run --project backend python evals/runners/semana3_local.py --pilot --run-dir "$(PILOT_DIR)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
+
+semana3-run:
+	uv run --project backend python evals/runners/semana3_local.py --run-dir "$(RUN_DIR)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
+
+semana3-finalize:
+	uv run --project evals python evals/runners/avaliar_ragas_oficial.py --coleta-dir "$(RUN_DIR)" --consolidate-only
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .

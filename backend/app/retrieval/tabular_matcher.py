@@ -59,8 +59,17 @@ class TabularDCBMatcher:
     def tem_numero_nao_interpretado(cls, texto: str) -> bool:
         """Número sem unidade reconhecida exige confirmação da apresentação."""
         residual = cls._DOSE.sub("", texto)
-        padrao = r"/\s*\d" if cls._DOSE.search(texto) else r"\b\d"
-        return bool(re.search(padrao, residual))
+        residual = re.sub(r"\bdiabetes\s+tipo\s+[12]\b", "", residual, flags=re.IGNORECASE)
+        # Quantidade de embalagem não é uma segunda concentração. Só aceitar
+        # números administrativos explicitamente identificados; nunca descartar
+        # o resto de uma composição porque a primeira dose foi reconhecida.
+        residual = re.sub(
+            r"\b\d+\s*(?:comprimidos|capsulas|cápsulas|ampolas|unidades)\b",
+            "",
+            residual,
+            flags=re.IGNORECASE,
+        )
+        return bool(re.search(r"\d", residual))
 
     def __init__(self, medications: list[CanonicalMedicationItem]) -> None:
         self.medications = medications

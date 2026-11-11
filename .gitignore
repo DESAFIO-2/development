@@ -45,6 +45,8 @@ evals/reports/mlruns/
 # Execuções isoladas do protocolo comparativo v2
 evals/reports/smoke_sintetico_semana3_*/
 evals/reports/coleta_real_semana3_*/
+# Diretórios nomeados de piloto/coleta e checkpoints (publicar pacote deliberadamente).
+evals/reports/*/
 
 # Artefatos legados locais
 entregavel_semana2/

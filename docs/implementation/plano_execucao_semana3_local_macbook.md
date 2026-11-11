@@ -1,165 +1,154 @@
-# Plano de Execução da Semana 3 — LLM Local (MacBook Air M4 24GB)
+# Semana 3 — execução local no MacBook Air M4 (24 GB)
 
-- **Status:** Proposto e pronto para execução presencial na quinta-feira.
-- **Hardware-Alvo:** Apple MacBook Air M4 (2025), 13 polegadas, 24 GB de Memória Unificada, 494 GB SSD, aceleração Metal via macOS.
-- **Branch:** `feat/semana3-comparativo-llm-vs-rag` (sem merge na `main` até a conclusão empírica).
-- **Normas Vinculantes:** [ADR 0003](../adr/0003_estrategia_avaliacao_metricas_ragas.md), [ADR 0004](../adr/0004_integridade_comparativo_semana3.md) e [Diretrizes de Integridade](../runbooks/diretrizes_integridade_ia.md).
+Estado: infraestrutura preparada; resultados reais e revisão humana ainda pendentes.
+Trabalhar na branch `feat/semana3-comparativo-llm-vs-rag`, sem merge automático.
+Os 22 casos são desenvolvimento/regressão; não constituem teste independente.
 
----
+## 1. Preparar uma vez
 
-## 1. Escolha de Modelos e Alocação de Memória no M4 (24 GB)
-
-Com 24 GB de memória unificada compartilhada entre CPU e GPU Metal, o hardware suporta com folga modelos entre 7B e 14B quantizados em 4 ou 8 bits.
-
-### Modelo Selecionado: `qwen2.5:14b-instruct-q4_K_M` (ou alternativamente `llama3.1:8b-instruct-q8_0`)
-
-| Papel | Modelo Escolhido | Quantização | VRAM / Memória Alocada | Taxa Esperada (M4 Metal) | Motivo da Escolha |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Gerador Pareado (Braços 1 e 2)** | `qwen2.5:14b` | `Q4_K_M` | ~9.2 GB | ~32 a 40 tokens/s | Estado da arte na faixa 14B para língua portuguesa, rigoroso em aderência a contexto, sem censuras espúrias em dados de saúde pública e excelente em evitar alucinações de formato. |
-| **Avaliador RAGAS / Juiz Factual** | `qwen2.5:14b` *(em etapa desacoplada)* | `Q4_K_M` | ~9.2 GB | ~32 a 40 tokens/s | Como a coleta e a avaliação ocorrem em fases separadas, o mesmo modelo pode avaliar as afirmações atômicas sem concorrência de memória. |
-| **Alternativa Leve (Máxima Velocidade)** | `llama3.1:8b` | `Q8_0` | ~8.5 GB | ~55 a 65 tokens/s | Excelente raciocínio e velocidade extrema se houver restrição de tempo no laboratório. |
-
-*Memória livre restante no macOS durante a execução: > 14 GB.*
-
----
-
-## 2. Desenho do Experimento e Separação em Duas Etapas
-
-Seguindo as determinações do ADR 0004, o processo é estritamente **desacoplado em duas etapas independentes**:
-
-```mermaid
-flowchart TD
-    subgraph ETAPA 1: Coleta e Persistência Pura
-        DS["Golden Set v2 Consolidado (22 casos)"] --> GEN["Gerador Local (Ollama: Qwen 2.5 14B)"]
-        GEN --> RAW["Arquivo Imutável: respostas_brutas.jsonl"]
-        GEN --> ERR["Falhas de Provedor? -> Invalida Par e Registra Latência"]
-    end
-
-    subgraph ETAPA 2: Avaliação RAGAS Oficial e Auditoria Factual
-        RAW --> RAGAS["Avaliador RAGAS Oficial (Fora do Runtime da API)"]
-        RAGAS --> METR["Faithfulness (Apenas RAG) + Answer Relevancy"]
-        RAGAS --> IR["Context Recall@3 + Context Precision@3"]
-        RAW --> FACT["Auditoria Factual Independente (Contra Gabarito Oficial)"]
-        FACT --> VER["Afirmações: Corretas / Contraditas / Não Verificáveis"]
-    end
-
-    subgraph ETAPA 3: Auditoria Humana e Empacotamento
-        METR --> REV["Revisão Cega (Amostra / Casos Críticos)"]
-        FACT --> REV
-        REV --> DOC["Relatório Final: docs/entregaveis_semana3_comparativo.md"]
-        DOC --> MLF["Registro de Linhagem no MLflow (SHA-256 e Run IDs)"]
-    end
-```
-
----
-
-## 3. As Quatro Etapas de Execução (Passo a Passo)
-
-### Etapa 1: Preparação do Ambiente no Mac (Quinta-Feira)
-
-Instalação do Ollama nativo para macOS e download do modelo:
+Instalar Git, Python/uv, Make e Ollama nativo para macOS. O servidor de modelos
+roda no host, fora do Docker. Usar a mesma revisão do código em toda a sessão.
 
 ```bash
-# 1. Instalar Ollama no macOS (caso não esteja instalado)
-brew install ollama
-# ou baixar diretamente do site oficial: https://ollama.com/download/mac
-
-# 2. Iniciar o serviço Ollama em background
-ollama serve &
-
-# 3. Baixar o modelo gerador/avaliador e o modelo de embeddings exigido pelo RAGAS
-ollama pull qwen2.5:14b
-ollama pull bge-m3
-
-# 4. Sincronizar os ambientes isolados do backend e do RAGAS (evals/)
+git status --short --branch
 make dev-install
 make eval-setup
-
-# 5. Fazer chamada de verificação de sanidade (smoke check de 1 segundo)
-curl -s http://localhost:11434/api/generate -d '{
-  "model": "qwen2.5:14b",
-  "prompt": "Responda apenas: pronto",
-  "stream": false
-}' | jq .response
+make test
+make lint
+make eval-test
+ollama serve
 ```
 
----
+Se o aplicativo Ollama já estiver ativo, não iniciar um segundo servidor.
+Deixar o servidor em outro terminal. No terminal do projeto:
 
-### Etapa 2: Coleta Pareada de Respostas (`evals/runners/comparar_semana3.py`)
-
-Execução dos 22 casos do Golden Set congelado (`golden_set_v2_consolidado.jsonl`):
-
-- **Braço 1 (`llm_sem_recuperacao`)**: Pergunta sem contexto, `temperature=0.0`, limite de 450 tokens.
-- **Braço 2 (`llm_com_rag`)**: Mesma pergunta, Top-3 chunks do `HybridRetriever`, `temperature=0.0`.
-- **Persistência**: Gravação em pasta única `evals/reports/coleta_real_semana3_<id>/` com `resultado.json`, `respostas_brutas.jsonl` e `resultado.md`.
-- **Regra**: Falhas de timeout ou erro de servidor invalidam o par e registram `error_code`. Controles determinísticos (bloqueio clínico e abstenção segura) são identificados como `CONTROLE_DETERMINISTICO`, isolados das respostas de modelo puro (`PAR_LLM`).
-
-Comando:
 ```bash
-uv run --project backend python evals/runners/comparar_semana3.py \
-  --provider ollama \
-  --model qwen2.5:14b \
-  --dataset evals/datasets/golden_set_v2_consolidado.jsonl
-# Ou via Makefile:
-# make compare-ollama MODEL=qwen2.5:14b DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+ollama pull qwen2.5:14b-instruct-q4_K_M
+ollama pull bge-m3
+ollama create semana3-qwen14 -f evals/ollama/Modelfile
 ```
 
-*(Nota: o código de saída esperado ao final da coleta pura é `2`, pois a certificação RAGAS ocorre na Etapa 3.)*
+`semana3-qwen14` fixa o modelo base Q4_K_M, contexto de 8192, temperatura 0 e
+seed 42. A coleta também envia explicitamente contexto/seed. A avaliação utiliza
+o mesmo alias via API compatível com OpenAI; os pesos são carregados localmente.
+Os manifests registram versão do servidor, digest, tamanho e detalhes dos modelos.
+Não atualizar modelos durante a execução. Não usar modelos cloud.
 
----
+Não há benchmark medido deste MacBook: não prometemos tokens/s, tempo total nem
+memória livre. Pesos, cache de contexto, embeddings, buffers e macOS compartilham
+os 24 GB. Fechar aplicações pesadas e observar pressão de memória/Swap no Monitor
+de Atividade. Usar energia externa e impedir suspensão durante a sessão.
 
-### Etapa 3: Avaliação RAGAS Oficial (`ragas==0.4.3`) e Auditoria Factual (`evals/runners/avaliar_ragas_oficial.py`)
+## 2. Piloto real obrigatório (dois casos, fora da entrega)
 
-Conforme o ADR 0003 e ADR 0004, o framework RAGAS oficial (`ragas==0.4.3`, isolado em `evals/pyproject.toml` e `evals/uv.lock`) calcula as 4 métricas formais **sem tocar no runtime nem no `uv.lock` da API**:
+```bash
+make semana3-pilot
+```
 
-1. **Faithfulness**:
-   - Medido **exclusivamente no braço RAG**, avaliando se as afirmações decorrem do contexto recuperado.
-   - No braço sem recuperação, é registrado como `NAO_APLICAVEL` (nunca zero artificial).
-2. **Answer Relevancy**:
-   - Mede se a resposta atende à dúvida do cidadão sem adicionar informações desnecessárias (em ambos os braços, com `bge-m3`).
-3. **Context Recall@3 e Context Precision@3**:
-   - Medidos no braço RAG contra a referência normativa do gabarito.
-4. **Factualidade Independente (Truthfulness)**:
-   - O avaliador gera automaticamente `auditoria_factual_humana.json` dentro do diretório da coleta para classificar afirmações em:
-     - Afirmações Corretas ($N_{corretas}$)
-     - Afirmações Contraditas / Alucinações Factuais ($N_{alucinadas}$)
-     - Afirmações Não Verificáveis ($N_{neutras}$)
-     - Taxa de Contradição Factual = $\frac{N_{alucinadas}}{N_{total\_afirmacoes}}$
+Executa coleta e quatro métricas oficiais, incluindo embeddings, em dois casos
+consecutivos. Saída: `evals/reports/quinta_piloto/`. O status é
+`PILOTO_NAO_E_ENTREGA`, mesmo se as métricas forem altas. O comando só termina
+com sucesso operacional quando todas as métricas esperadas forem calculadas.
+Anotar tempo, memória e qualquer truncamento/erro. Respostas do juiz e consumo
+informado pelo provedor ficam em `ragas_v1/http/`; latências por métrica/par ficam
+nos checkpoints. Se houver erro, resolver antes da coleta definitiva.
 
-Comando:
+O piloto precisa exercitar inferência: se já existir uma execução concluída, o
+comando retoma/reutiliza seu cache. Para novo piloto independente:
+
+```bash
+make semana3-pilot PILOT_DIR=evals/reports/quinta_piloto_02
+```
+
+## 3. Coletar e avaliar os 22 casos
+
+```bash
+make semana3-run
+```
+
+Pasta padrão: `evals/reports/quinta_coleta/`. Para outro experimento, informar
+`RUN_DIR=evals/reports/nome_novo`. O wrapper executa as etapas em ambientes
+separados e informa o status científico. Seu código 0 significa inferência
+concluída; não significa entrega aprovada. A auditoria continuará pendente.
+
+Antes de coletar, ler `docs/implementation/curadoria_semana3.md`. O dataset v2 é
+preservado para regressão. Suas limitações de apresentação/referência são
+publicadas e devem ser consideradas na revisão factual; não tratar o gabarito
+como fonte normativa independente. Nenhum caso pode ser eliminado depois de ver
+as respostas. Uma alteração futura exige nova versão do dataset e nova coleta.
+
+## 4. Interrupção, falhas e retomada
+
+Repetir `make semana3-run` na mesma pasta retoma chamadas faltantes e reutiliza
+respostas recebidas, inclusive erros registrados. Nunca executar dois processos
+na mesma pasta simultaneamente. Identidade incompatível (modelo, código, corpus,
+dataset ou parâmetros) interrompe a retomada; criar outra pasta para outro protocolo.
+Cada gravação usa arquivo temporário, fsync e substituição atômica.
+
+Uma interrupção antes de receber/gravar uma resposta pode exigir repetir aquela
+chamada em andamento; as respostas já gravadas são preservadas.
+Falha de geração invalida o par e impede a certificação dessa coleta. Investigar
+e preservar a execução; um novo experimento deve ser identificado como tal, sem
+selecionar a melhor resposta entre execuções.
+
+Para falhas do juiz, a coleta continua intacta. Tentativas adicionais são
+explícitas, limitadas a três por par e preservam histórico. Métricas já concluídas
+não são repetidas:
+
 ```bash
 uv run --project evals python evals/runners/avaliar_ragas_oficial.py \
-  --coleta-dir evals/reports/coleta_real_semana3_<id> \
-  --evaluator-model qwen2.5:14b \
-  --embedding-model bge-m3
-# Ou via Makefile:
-# make eval-ragas COLETA_DIR=evals/reports/coleta_real_semana3_<id> MODEL=qwen2.5:14b EMBED_MODEL=bge-m3
+  --coleta-dir evals/reports/quinta_coleta \
+  --evaluator-model semana3-qwen14 --embedding-model bge-m3 --retry-failed
 ```
 
----
+O SDK tem retry HTTP desativado; retries de validação estruturada do Instructor
+podem ocorrer internamente e suas respostas HTTP são registradas. Não escolher
+o maior escore. Para reavaliar deliberadamente, usar `--evaluation-name ragas_v2`,
+preservando `ragas_v1` e declarando por que o protocolo foi repetido.
 
-### Etapa 4: Auditoria Humana Cega e Empacotamento do Entregável
+## 5. Revisão humana e fechamento sem inferência
 
-1. **Revisão Humana dos 22 Casos**:
-   - Como o conjunto é pequeno (22 casos), conferir visualmente:
-     - Se o modelo sem RAG errou a gratuidade da sinvastatina/alendronato (Portaria 3.677/2024).
-     - Se tentou prescrever ou violou o Ato Médico.
-     - Se alucinou dispensação para tirzepatida/minoxidil.
-     - Se a citação tripla (Chunk + Título + Página) no braço RAG é 100% exata.
-2. **Atualização de `docs/entregaveis_semana3_comparativo.md`**:
-   - Publicar a tabela com os resultados reais observados.
-   - Declarar explicitamente os limites: conjunto de desenvolvimento/regressão, desempenho de modelo sob parâmetros congelados, e não generalização universal.
-   - Exibir reprovações de forma transparente caso alguma métrica fique abaixo dos limiares do ADR 0003.
-3. **Validação Final de CI Local**:
-   - `make lint`, `make test` (114 testes), `bandit`.
+Preencher `quinta_coleta/auditoria_factual_humana.json` para todas as respostas,
+incluindo abstenções e controles. Registrar revisor, observações e referências
+com documento/página/seção e fato verificado. Conferir cada medicamento. Não
+modificar textos, referências, IDs ou hashes. A ficha identifica os braços:
+não declarar esta revisão como cega.
 
----
+Contagens são inteiros não negativos. Quando não houver afirmações factuais,
+manter zero e justificar; taxas com denominador zero ficam nulas. Contradição e
+não verificabilidade são categorias distintas. Controles têm agregados separados.
 
-## 4. O Que Faremos Hoje na Máquina Atual (Preparação Antecipada)
+```bash
+make semana3-finalize
+```
 
-Hoje, antes da ida presencial na quinta-feira, deixaremos todo o código de automação, runner e isolamento do RAGAS pronto e testado:
+Pode desligar o Ollama antes desse comando: ele não instancia o juiz nem chama
+modelos. Cada consolidação preserva uma versão com a auditoria usada em
+`ragas_v1/consolidacoes/<id>/`. Os arquivos `avaliacao_ragas.json/md` na raiz da
+coleta apontam para a última visão. Auditoria de outra coleta é rejeitada.
 
-1. **Isolar a dependência do RAGAS** em grupo opcional/dev (`--extra eval` ou script isolado em `evals/`) para não poluir o container Docker de produção da API.
-2. **Implementar o script oficial de julgamento RAGAS** (`evals/runners/avaliar_ragas_oficial.py`) que consome o `respostas_brutas.jsonl` gerado na Etapa 2.
-3. **Garantir que todos os 114 testes de regressão continuem passando**.
-4. Assim, na quinta-feira no MacBook Air M4, bastará rodar 2 comandos para coletar, avaliar e consolidar o entregável final!
+Códigos do avaliador: 0 = entrega concluída/metas aprovadas; 1 = avaliação
+incompleta; 2 = entrega concluída/metas reprovadas; 3 = auditoria pendente ou piloto.
+O Make mostra erro para códigos não zero: conferir o status, sem alterar metas.
+
+## 6. Pacote a entregar
+
+Preservar a pasta da coleta: dataset congelado, manifesto, checkpoints de geração,
+respostas brutas, relatório de coleta, auditoria humana, manifesto da avaliação,
+checkpoints/métricas/HTTP e consolidação escolhida em JSON/Markdown. O tracking
+da etapa oficial é por artefatos JSON locais, não MLflow nativo. A etapa de coleta
+mantém seu rastreador anterior, explicitamente separado.
+
+Atualizar `docs/entregaveis_semana3_comparativo.md` com os resultados reais e os
+identificadores escolhidos. Não substituir reprovações ou métricas ausentes.
+Publicar denominadores, falhas, diferenças pareadas e limitações. Mesmo modelo
+como gerador/juiz pode compartilhar vieses; revisão humana não é opcional.
+
+## Referências de integração
+
+- https://docs.ollama.com/api/tags (digests e quantização)
+- https://docs.ollama.com/api/generate (consumo, conclusão e duração)
+- https://docs.ollama.com/api/openai-compatibility (endpoint compatível)
+
+Os testes de transporte da CI usam respostas HTTP simuladas com o RAGAS instalado.
+Eles validam integração, não desempenho científico do modelo.

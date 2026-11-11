@@ -143,6 +143,7 @@ class GenerationResultDTO:
     latency_ms: float = 0.0
     error_code: str | None = None
     execution_kind: str = "llm"
+    provider_metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

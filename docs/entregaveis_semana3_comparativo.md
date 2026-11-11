@@ -15,7 +15,7 @@ não devem ser enviados à banca nem combinados com o schema `comparativo-v2`.
 | Pytest, transporte HTTP mockado e fixture sintética | Contratos, tratamento de erros e encanamento | Automatizados em CI |
 | Benchmark determinístico v1/v2 | Recuperação e roteamento nos casos rotulados | Avaliado separadamente |
 | Comparação de respostas de modelo real | Desempenho observado de um modelo configurado | Pendente de execução real |
-| Faithfulness / Answer Relevancy / Context Recall / Context Precision RAGAS | Avaliação da geração por protocolo RAGAS | Não implementadas neste runner; não avaliadas |
+| Faithfulness / Answer Relevancy / Context Recall / Context Precision RAGAS | Avaliação da geração por protocolo RAGAS | Implementadas no estágio 2 oficial; execução real pendente |
 | Taxa de alucinação factual | Julgamento de afirmações com evidências e rubrica | Não avaliada; revisão factual pendente |
 
 ## Protocolo implementado
@@ -63,9 +63,8 @@ Os comandos usam variáveis do ambiente. Para `backend/.env`, execute a partir d
 `backend` com o caminho `../evals/runners/comparar_semana3.py`.
 
 Saídas: `evals/reports/smoke_sintetico_semana3_<id>/` ou
-`evals/reports/coleta_real_semana3_<id>/`. Código de saída 0 significa apenas smoke
-sintético completo; 1 significa par inválido; 2 significa coleta real concluída,
-com avaliação científica ainda pendente. A CI executa somente `make compare-smoke`.
+`evals/reports/coleta_real_semana3_<id>/`. Código de saída 0 significa etapa de coleta concluída (real ou sintética);
+1 significa par inválido. Isso nunca certifica a entrega científica. A CI executa somente `make compare-smoke`.
 
 ## Correção dos fixtures de auditoria
 
@@ -89,3 +88,27 @@ Nenhum resultado superior do RAG é pressuposto pelo protocolo.
 A API de auditoria continua determinística; a geração de LLM está no experimento.
 Chroma permanece adiado conforme o registro da portação. Não houve nova portação
 nem alteração do corpus nesta correção.
+
+
+## Execução local e fechamento
+
+Roteiro atualizado: [execução no MacBook](implementation/plano_execucao_semana3_local_macbook.md).
+Após preparar Ollama e o alias do Modelfile, executar `make semana3-pilot`,
+`make semana3-run`, preencher a auditoria humana e executar `make semana3-finalize`.
+A etapa 2 tem ambiente isolado `evals/` com RAGAS 0.4.3 e grava artefatos JSON locais.
+Não chamar esse armazenamento de MLflow nativo.
+
+A coleta tem retomada por braço, identidade por hashes e digest dos modelos.
+A avaliação tem cache por métrica/par. Consolidação offline preserva escores e
+versiona o relatório e a auditoria. Respostas não verificáveis não são
+automaticamente falsas; suas contagens e taxas ficam separadas das contradições.
+As métricas agregadas de LLM e de controles são identificadas separadamente.
+
+Os 22 casos são desenvolvimento/regressão e têm limitações documentadas na
+[curadoria](implementation/curadoria_semana3.md). O gerador e o juiz usam o mesmo
+modelo; a revisão humana é identificada e não cega. Não se pode inferir
+superioridade geral nem garantia de zero alucinação.
+
+Resultados reais: **PENDENTES**. Não substituir esta indicação até executar o
+modelo e concluir a revisão de todas as respostas. Metas reprovadas devem
+permanecer publicadas; conclusão da entrega e aprovação das metas são distintas.

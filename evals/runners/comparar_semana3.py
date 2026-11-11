@@ -1,5 +1,6 @@
 """Coleta pareada auditável. Diagnósticos locais não substituem RAGAS nem revisão factual."""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -19,19 +20,33 @@ RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ))
 sys.path.insert(0, str(RAIZ / "backend"))
 
-from observability.mlflow_tracker import MLflowExperimentTracker  # noqa: E402
+from observability.mlflow_tracker import MLflowExperimentTracker
 
-from app.application.ports import GenerationResultDTO, GeneratorPort, RetrievalHitDTO, RetrieverPort  # noqa: E402
-from app.infrastructure.llm import build_generator  # noqa: E402
-from app.infrastructure.llm.generator import PROMPT_VERSION, SYSTEM_PROMPT  # noqa: E402
-from app.infrastructure.persistence.repositories.canonical_medication_repository import (  # noqa: E402
+from app.application.ports import (
+    GenerationResultDTO,
+    GeneratorPort,
+    RetrievalHitDTO,
+    RetrieverPort,
+)
+from app.infrastructure.llm import build_generator
+from app.infrastructure.llm.generator import PROMPT_VERSION, SYSTEM_PROMPT
+from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
 )
-from app.infrastructure.persistence.repositories.normative_chunk_repository import (  # noqa: E402
+from app.infrastructure.persistence.repositories.normative_chunk_repository import (
     LocalNormativeChunkRepository,
 )
-from app.retrieval.hybrid_retriever import HybridRetriever  # noqa: E402
-from app.retrieval.text_normalizer import tokenizar_com_ngrams  # noqa: E402
+from app.retrieval.hybrid_retriever import HybridRetriever
+from app.retrieval.text_normalizer import tokenizar_com_ngrams
+from evals.runners.artifacts import (
+    atomic_json,
+    atomic_text,
+    bind_manifest,
+    digest,
+    read_json,
+    source_hashes,
+)
+from evals.runners.collection_checkpoint import CheckpointGenerator
 
 DATASET_PADRAO = RAIZ / "evals/datasets/golden_set_v2_consolidado.jsonl"
 Gerador = GeneratorPort | Callable[[str, tuple[RetrievalHitDTO, ...]], str]
@@ -281,6 +296,8 @@ def executar_experimento_comparativo(
         raise ValueError("Dataset vazio ou com IDs duplicados")
     pares: list[dict[str, Any]] = []
     for caso in casos:
+        if isinstance(gerador, CheckpointGenerator):
+            gerador.case_id = caso["id"]
         a, b = comparar_caso(
             caso_id=caso["id"],
             pergunta=caso["query"],
@@ -359,6 +376,8 @@ def executar_experimento_comparativo(
             "system_prompt": SYSTEM_PROMPT,
             "temperature": 0.0,
             "max_output_tokens": 450,
+            "ollama_num_ctx": 8192,
+            "ollama_seed": 42,
             "retriever": "injetado"
             if type(retriever) is not HybridRetriever
             else "hybrid_dcb_tfidf_bm25_rrf",
@@ -423,6 +442,12 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=float, help="Timeout em segundos por requisição")
     parser.add_argument("--output-dir", type=Path, default=RAIZ / "evals/reports")
+    parser.add_argument(
+        "--run-dir", type=Path, help="Diretório fixo: criar ou retomar a mesma coleta"
+    )
+    parser.add_argument(
+        "--limit", type=int, help="Piloto: primeiros N casos; nunca entrega completa"
+    )
     args = parser.parse_args()
     if args.synthetic_smoke and args.provider:
         parser.error("Escolha simulação ou provedor real, nunca ambos")
@@ -437,13 +462,50 @@ def main() -> int:
             base_url=args.base_url,
             timeout_seconds=args.timeout,
         )
-    relatorio = executar_experimento_comparativo(args.dataset.resolve(), gerador=gerador)
     prefixo = "smoke_sintetico_semana3" if args.synthetic_smoke else "coleta_real_semana3"
-    # Diretório único mantém falhas e sucessos anteriores auditáveis.
     from uuid import uuid4
 
-    destino = args.output_dir / f"{prefixo}_{uuid4().hex}"
-    destino.mkdir(parents=True)
+    destino = args.run_dir or args.output_dir / f"{prefixo}_{uuid4().hex}"
+    dataset_text = args.dataset.resolve().read_text(encoding="utf-8")
+    if args.limit is not None:
+        if args.limit < 1:
+            parser.error("--limit deve ser positivo")
+        dataset_text = "\n".join(dataset_text.splitlines()[: args.limit]) + "\n"
+    identity = {
+        "dataset_sha256": digest(dataset_text),
+        "source_sha256": source_hashes(RAIZ),
+        "provider": getattr(gerador, "provider", "synthetic"),
+        "model": getattr(gerador, "model_name", "synthetic"),
+        "base_url": getattr(gerador, "base_url", None),
+        "timeout": getattr(gerador, "timeout_seconds", None),
+        "pilot": args.limit is not None,
+    }
+    if identity["provider"] == "ollama_local":
+        from evals.runners.local_preflight import ollama_identity
+
+        identity["ollama"] = ollama_identity(str(identity["base_url"]), [str(identity["model"])])
+    bind_manifest(destino, identity)
+    dataset_snapshot = destino / "dataset.jsonl"
+    atomic_text(dataset_snapshot, dataset_text)
+    # Um resultado já fechado é imutável. A retomada só processa chamadas faltantes.
+    if (destino / "resultado.json").exists():
+        print(f"Coleta já concluída: {destino}")
+        return 1 if read_json(destino / "resultado.json")["pares_invalidos"] else 0
+    print(f"Coleta/checkpoints: {destino}", flush=True)
+    relatorio = executar_experimento_comparativo(
+        dataset_snapshot, gerador=CheckpointGenerator(gerador, destino / "geracoes")
+    )
+    relatorio["dataset"] = args.dataset.name
+    relatorio["manifesto_experimento"] = identity
+    relatorio["piloto"] = args.limit is not None
+    if identity["provider"] == "ollama_local":
+        if (
+            ollama_identity(str(identity["base_url"]), [str(identity["model"])])
+            != identity["ollama"]
+        ):
+            raise ValueError(
+                "Pesos/servidor mudaram durante a coleta; preserve checkpoints e investigue"
+            )
     tracker = MLflowExperimentTracker(raiz_repo=RAIZ)
     run = tracker.registrar_execucao(
         run_name=prefixo,
@@ -457,23 +519,22 @@ def main() -> int:
             "pares_invalidos": float(relatorio["pares_invalidos"]),
             "total_casos": float(relatorio["total_casos"]),
         },
-        dataset_path=args.dataset,
+        dataset_path=dataset_snapshot,
         extra_tags={"status_entregavel": relatorio["status_entregavel"]},
     )
     relatorio["tracking_run_id"] = run.run_id
-    (destino / "resultado.json").write_text(
-        json.dumps(relatorio, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    (destino / "respostas_brutas.jsonl").write_text(
+    atomic_text(
+        destino / "respostas_brutas.jsonl",
         "\n".join(json.dumps(caso, ensure_ascii=False) for caso in relatorio["casos"]) + "\n",
-        encoding="utf-8",
     )
-    (destino / "resultado.md").write_text(gerar_relatorio_markdown(relatorio), encoding="utf-8")
+    atomic_text(destino / "resultado.md", gerar_relatorio_markdown(relatorio))
+    atomic_json(destino / "resultado.json", relatorio)
     print(f"Relatorio: {destino}")
     print(f"Pares invalidos: {relatorio['pares_invalidos']}; RAGAS e factualidade: NAO AVALIADOS")
     if not relatorio["execucao_completa"]:
         return 1
-    return 0 if args.synthetic_smoke else 2
+    # Sucesso desta etapa não significa aprovação científica.
+    return 0
 
 
 if __name__ == "__main__":

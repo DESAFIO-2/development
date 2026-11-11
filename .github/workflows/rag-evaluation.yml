@@ -12,6 +12,16 @@ on:
       - ".github/workflows/rag-evaluation.yml"
 
 jobs:
+  contrato-ragas-oficial:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Instalar avaliação isolada
+        run: uv sync --locked --project evals
+      - name: Exercitar SDK e quatro métricas oficiais com HTTP simulado
+        run: uv run --project evals pytest evals/tests -q
+
   benchmark-deterministico:
     runs-on: ubuntu-latest
     steps:

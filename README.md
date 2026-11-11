@@ -53,7 +53,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado v5 com 1.787 registros. |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
-| **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | Protocolo corrigido; avaliação real pendente | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md) e [Auditoria](docs/auditoria_semana3.md) |
+| **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
@@ -107,19 +107,23 @@ challenge2/
 │   ├── processed/               # Tabelas canônicas limpas (medicamentos_sus_canonical)
 │   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
 ├── docs/                        # Documentação Técnica e Decisões
-│   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002 e 0003)
-│   ├── architecture/            # Diagramas C4, Matriz de Métricas e Especificação RAG Semana 2
+│   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002, 0003 e 0004)
+│   ├── architecture/            # Diagramas C4, Matriz de Métricas e Especificação RAG
 │   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
 │   ├── data_sources/            # Dicionários de dados das fontes oficiais
-│   ├── runbooks/                # Procedimentos de execução e incidentes
+│   ├── runbooks/                # Procedimentos de execução, portações e diretrizes de integridade para IA
+│   ├── implementation/          # Roteiro de execução M4, curadoria e relatórios de validação
 │   └── security/                # Modelo de ameaças e conformidade LGPD
 ├── evals/                       # Suíte Contínua de LLMOps e Métricas RAGAS
-│   ├── datasets/                # Datasets rotulados (Guardrail Clínico v1 e Golden Set)
-│   ├── metrics/                 # Métricas de Faithfulness, Answer Relevancy, Context Recall
-│   ├── runners/                 # Runners de benchmark automatizados (guardrail_runner.py)
-│   ├── configs/                 # Configurações de parâmetros de chunking/top_k
-│   ├── baselines/               # Linhas de base comparativas (Palavras-chave, LLM pura)
-│   └── reports/                 # Relatórios consolidados de avaliação
+│   ├── datasets/                # Datasets rotulados (Guardrail Clínico v1, Golden Set v1 e v2)
+│   ├── metrics/                 # Definições formais das métricas ADR 0003
+│   ├── runners/                 # Runners desacoplados (coleta, checkpoints, RAGAS oficial, auditoria factual)
+│   ├── ollama/                  # Modelfile congelado com contexto 8192, temp 0 e seed 42
+│   ├── baselines/               # Fixtures offline para smoke tests sintéticos
+│   ├── tests/                   # Testes de contrato de transporte e integração RAGAS
+│   ├── pyproject.toml           # Ambiente isolado de avaliação (ragas==0.4.3, sem poluir a API)
+│   ├── uv.lock                  # Lockfile independente de evals
+│   └── reports/                 # Relatórios consolidados, checkpoints e auditorias (ignorado no Git)
 ├── observability/               # Instrumentação de telemetria, tracing e latência
 ├── CONTRIBUTING.md              # Guia de contribuição e GitFlow do squad
 ├── SECURITY.md                  # Política de segurança e proteção de dados de saúde
@@ -132,30 +136,38 @@ challenge2/
 ## Comandos Rápidos
 
 ```bash
-# 1. Instalar dependências (via uv no backend)
+# 1. Instalar dependências da API (uv no backend) e ambiente isolado de avaliação
 make dev-install
+make eval-setup
 
-# 2. Executar suíte de testes do backend
+# 2. Executar suíte completa de testes do backend e contrato RAGAS
 make test
+make eval-test
 
-# 3. Executar linter e checagem de tipos
+# 3. Executar linter e checagem de tipos estrita
 make lint
+make format
 
 # 4. Iniciar API FastAPI local
 make run-api
 
-# 5. Executar suíte de avaliações e guardrails éticos
+# 5. Executar validação de datasets e guardrails éticos
 make eval
 
-# 6. Demonstrador Oficial da Semana 2 (Dona Helena e Lucas Mendes)
+# 6. Demonstrador Oficial RAG (Dona Helena e Lucas Mendes)
 make demo
 
-# 7. Benchmark determinístico (Golden Set v1 por padrão)
+# 7. Benchmark determinístico (Golden Set v1 e v2)
 make benchmark
 make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 
-# 8. Smoke offline do protocolo (não mede desempenho de LLM)
+# 8. Smoke offline do protocolo comparativo (teste de encanamento sem custo de LLM)
 make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+
+# 9. Execução Experimental Semana 3 no MacBook M4 (Ollama local: semana3-qwen14 + bge-m3)
+make semana3-pilot     # Piloto rápido de 2 casos para verificar hardware e contexto
+make semana3-run       # Coleta pareada (22 casos) + RAGAS oficial desacoplado com checkpoints
+make semana3-finalize  # Consolidação offline após auditoria factual humana
 ```
 
 ### Endpoints Principais da API (FastAPI)
@@ -163,4 +175,21 @@ make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 - `GET /health` — Verificação de prontidão do sistema e telemetria básica.
 - `GET /api/v1/medications/autocomplete?q=losartana` — Autocomplete assistido de fármacos da RENAME com princípios ativos DCB.
 - `POST /api/v1/prescriptions/audit` — Auditoria normativa de receitas médicas, mascaramento LGPD, roteiro de gratuidade e preservação do Ato Médico.
+
+---
+
+## Protocolo de Avaliação da Semana 3 (LLM pura vs. RAG)
+
+Seguindo o [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e as [Diretrizes de Integridade de IA](docs/runbooks/diretrizes_integridade_ia.md), o comparativo opera em dois estágios rigorosamente desacoplados:
+
+1. **Estágio 1 — Coleta Pareada (`evals/runners/comparar_semana3.py`):**
+   - Executa os 22 casos do `golden_set_v2_consolidado.jsonl` em dois braços: sem recuperação vs. com RAG híbrido (`top_k=3`).
+   - Cada chamada é persistida com checkpoints atômicos (`evals/runners/collection_checkpoint.py`), vinculados ao hash SHA-256 do código, dataset e modelo.
+   - Respostas truncadas (`done_reason: length`) são invalidadas (`RESPOSTA_TRUNCADA`) e controles determinísticos de segurança (bloqueio clínico e abstenção) são segregados (`CONTROLE_DETERMINISTICO`) das inferências puras de modelo (`PAR_LLM`).
+
+2. **Estágio 2 — Avaliação RAGAS Oficial & Auditoria Factual (`evals/runners/avaliar_ragas_oficial.py`):**
+   - Utiliza a biblioteca oficial `ragas==0.4.3` isolada em `evals/pyproject.toml` (sem contaminação do ambiente de produção da API).
+   - Calcula formalmente as metas do [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md): `Faithfulness` ($\ge 0{,}92$, medido exclusivamente sobre o contexto recuperado do RAG), `Answer Relevancy` ($\ge 0{,}88$), `Context Recall` ($\ge 0{,}90$) e `Context Precision` ($\ge 0{,}88$).
+   - Acompanha ficha de auditoria factual independente (`auditoria_factual_humana.json`) com vinculação criptográfica e separação estrita de denominadores para aferição de alucinações normativas reais, sem métricas sintéticas.
+   - Permite consolidação offline instantânea via `make semana3-finalize`.
 

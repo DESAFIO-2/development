@@ -1,10 +1,46 @@
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize(
+    "nome",
+    [
+        "losartana 50 mg + 999 mEq",
+        "losartana 50 mg + 999 xyz",
+        "losartana 50 mg 999",
+        "losartana 50 mg/999 xyz",
+    ],
+)
+def test_api_abstem_composicao_parcialmente_reconhecida(nome: str) -> None:
+    response = client.post("/api/v1/prescriptions/audit", json={"itens": [{"nome_digitado": nome}]})
+    assert response.status_code == 200
+    assert response.json()["itens"][0]["via_retirada"] == "NAO_PADRONIZADO"
+
+
+def test_quantidade_explicitamente_administrativa_nao_altera_dose() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={"itens": [{"nome_digitado": "losartana 50 mg 30 comprimidos"}]},
+    )
+    assert response.json()["itens"][0]["via_retirada"] == "FARMACIA_POPULAR"
+
+
+def test_tipo_de_diabetes_nao_e_concentracao() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={
+            "itens": [
+                {"nome_digitado": "insulina glargina 100 UI/mL para diabetes tipo 1 na rede SES-DF"}
+            ]
+        },
+    )
+    assert response.json()["itens"][0]["via_retirada"] == "FARMACIA_ALTO_CUSTO"
 
 
 def test_api_audit_prescription_sucesso() -> None:

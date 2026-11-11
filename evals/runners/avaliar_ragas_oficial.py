@@ -1,8 +1,8 @@
 """Estágio 2 do comparativo Semana 3: Avaliação oficial RAGAS (0.4.3) e auditoria factual."""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
-import argparse
 import asyncio
 import hashlib
 import importlib
@@ -10,17 +10,20 @@ import json
 import math
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
+from uuid import uuid4
 
 RAIZ = Path(__file__).resolve().parents[2]
 for _cam in (RAIZ, RAIZ / "backend"):
     if str(_cam) not in sys.path:
         sys.path.insert(0, str(_cam))
 
-from observability.mlflow_tracker import MLflowExperimentTracker  # noqa: E402
+from evals.runners.artifacts import atomic_json, digest, read_json
+from evals.runners.factual_audit import consolidar_auditoria_factual
 
 
 def avaliar_limiares(metricas: dict[str, float | None]) -> dict[str, dict[str, Any]]:
@@ -76,17 +79,19 @@ class RagasEvaluatorPort(Protocol):
 
 
 def _validar_escore_finito(nome: str, valor: Any) -> float:
+    if isinstance(valor, bool):
+        raise ValueError("Booleano não é escore")
     numero = float(valor)
     if not math.isfinite(numero) or numero < 0.0 or numero > 1.0:
         raise ValueError(f"Escore RAGAS inválido ou não finito em {nome}: {valor!r}")
-    return round(numero, 4)
+    return numero
 
 
 def _media_completa(valores: list[float | None], esperado: int) -> float | None:
     if esperado == 0 or len(valores) != esperado or any(v is None for v in valores):
         return None
     finitos = [float(v) for v in valores if v is not None]
-    return round(sum(finitos) / len(finitos), 4)
+    return sum(finitos) / len(finitos)
 
 
 class OfficialRagasCollectionsEvaluator:
@@ -100,6 +105,8 @@ class OfficialRagasCollectionsEvaluator:
         base_url: str = "http://localhost:11434/v1",
         api_key: str = "ollama",
         provider_label: str = "ollama_openai_compat",
+        metric_cache: Path | None = None,
+        timeout: float = 180.0,
     ) -> None:
         os.environ["RAGAS_DO_NOT_TRACK"] = "true"
         self.evaluator_provider = provider_label
@@ -113,12 +120,46 @@ class OfficialRagasCollectionsEvaluator:
         ragas_embeddings = importlib.import_module("ragas.embeddings.base")
         ragas_collections = importlib.import_module("ragas.metrics.collections")
 
-        async_client = openai_mod.AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        self._runner = asyncio.Runner()
+        self._metric_cache = metric_cache
+        httpx = importlib.import_module("httpx")
+
+        async def request_hook(request: Any) -> None:
+            request.extensions["eval_started"] = time.perf_counter()
+
+        async def response_hook(response: Any) -> None:
+            if metric_cache is None:
+                return
+            await response.aread()
+            atomic_json(
+                metric_cache.parent / "http" / f"{uuid4().hex}.json",
+                {
+                    "endpoint": response.request.url.path,
+                    "model": json.loads(response.request.content).get("model"),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "latency_seconds": time.perf_counter()
+                    - response.request.extensions["eval_started"],
+                    "status": response.status_code,
+                    "request_body": json.loads(response.request.content),
+                    "response_body": response.text,
+                },
+            )
+
+        async_client = openai_mod.AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=timeout,
+            max_retries=0,
+            http_client=httpx.AsyncClient(
+                event_hooks={"request": [request_hook], "response": [response_hook]}
+            ),
+        )
+        self._client = async_client
         llm = ragas_llms.llm_factory(
             self.evaluator_model,
             provider="openai",
             client=async_client,
-            temperature=0.01,
+            temperature=0.0,
             max_tokens=2048,
         )
         embeddings = ragas_embeddings.embedding_factory(
@@ -135,6 +176,32 @@ class OfficialRagasCollectionsEvaluator:
         self._context_recall = ragas_collections.ContextRecall(llm=llm)
         self._context_precision = ragas_collections.ContextPrecision(llm=llm)
 
+    async def _score(self, name: str, metric: Any, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+
+        path = self._metric_cache / f"{digest([name, kwargs])}.json" if self._metric_cache else None
+        if path and path.exists():
+            saved = read_json(path)
+            if digest(saved["payload"]) != saved["sha256"]:
+                raise ValueError("Checkpoint de métrica corrompido")
+            return SimpleNamespace(value=saved["payload"]["value"])
+        start = time.perf_counter()
+        score = await metric.ascore(**kwargs)
+        value = _validar_escore_finito(name, score.value)
+        if path:
+            payload = {
+                "metric": name,
+                "input": kwargs,
+                "value": value,
+                "latency_seconds": time.perf_counter() - start,
+            }
+            atomic_json(path, {"payload": payload, "sha256": digest(payload)})
+        return SimpleNamespace(value=value)
+
+    def close(self) -> None:
+        self._runner.run(self._client.close())
+        self._runner.close()
+
     async def _avaliar_async(
         self,
         *,
@@ -144,25 +211,35 @@ class OfficialRagasCollectionsEvaluator:
         resposta_com_rag: str,
         contextos_com_rag: list[str],
     ) -> EscoresCasoRagas:
-        ar_sem = await self._answer_relevancy.ascore(
+        ar_sem = await self._score(
+            "answer_relevancy",
+            self._answer_relevancy,
             user_input=pergunta,
             response=resposta_sem_rag,
         )
-        faith_com = await self._faithfulness.ascore(
+        faith_com = await self._score(
+            "faithfulness",
+            self._faithfulness,
             user_input=pergunta,
             response=resposta_com_rag,
             retrieved_contexts=contextos_com_rag,
         )
-        ar_com = await self._answer_relevancy.ascore(
+        ar_com = await self._score(
+            "answer_relevancy",
+            self._answer_relevancy,
             user_input=pergunta,
             response=resposta_com_rag,
         )
-        cr_com = await self._context_recall.ascore(
+        cr_com = await self._score(
+            "context_recall",
+            self._context_recall,
             user_input=pergunta,
             retrieved_contexts=contextos_com_rag,
             reference=referencia,
         )
-        cp_com = await self._context_precision.ascore(
+        cp_com = await self._score(
+            "context_precision",
+            self._context_precision,
             user_input=pergunta,
             reference=referencia,
             retrieved_contexts=contextos_com_rag,
@@ -190,7 +267,7 @@ class OfficialRagasCollectionsEvaluator:
         resposta_com_rag: str,
         contextos_com_rag: list[str],
     ) -> EscoresCasoRagas:
-        return asyncio.run(
+        return self._runner.run(
             self._avaliar_async(
                 pergunta=pergunta,
                 referencia=referencia,
@@ -199,94 +276,6 @@ class OfficialRagasCollectionsEvaluator:
                 contextos_com_rag=contextos_com_rag,
             )
         )
-
-
-def gerar_template_auditoria_factual(coleta: dict[str, Any]) -> dict[str, Any]:
-    """Gera estrutura auditável para verificação factual independente contra a referência."""
-    itens: list[dict[str, Any]] = []
-    for caso in coleta.get("casos", []):
-        if caso.get("categoria") != "POSITIVO" or caso.get("status_par") != "PAR_LLM":
-            continue
-        itens.append(
-            {
-                "caso_id": caso["caso_id"],
-                "pergunta": caso["com_rag"]["pergunta"],
-                "referencia_normativa": caso["com_rag"]["referencia"],
-                "sem_rag": {
-                    "resposta": caso["sem_rag"]["geracao"]["text"],
-                    "afirmacoes_corretas": 0,
-                    "afirmacoes_contraditas": 0,
-                    "afirmacoes_nao_verificaveis": 0,
-                    "revisado": False,
-                    "observacoes": "",
-                },
-                "com_rag": {
-                    "resposta": caso["com_rag"]["geracao"]["text"],
-                    "afirmacoes_corretas": 0,
-                    "afirmacoes_contraditas": 0,
-                    "afirmacoes_nao_verificaveis": 0,
-                    "revisado": False,
-                    "observacoes": "",
-                },
-            }
-        )
-    return {
-        "schema_version": "auditoria-factual-v1",
-        "instrucoes": (
-            "Para cada resposta positiva (sem_rag e com_rag), classifique cada afirmação "
-            "factual contra a referencia_normativa em: afirmacoes_corretas, "
-            "afirmacoes_contraditas ou afirmacoes_nao_verificaveis, e marque revisado=true."
-        ),
-        "casos": itens,
-    }
-
-
-def consolidar_auditoria_factual(
-    auditoria: dict[str, Any],
-    ids_positivos_esperados: set[str],
-) -> dict[str, Any]:
-    """Calcula taxas factuais com denominadores explícitos somente quando 100% revisado."""
-    casos_map = {item["caso_id"]: item for item in auditoria.get("casos", [])}
-    if not ids_positivos_esperados or set(casos_map.keys()) != ids_positivos_esperados:
-        return {"completa": False, "sem_rag": None, "com_rag": None}
-
-    resumo: dict[str, Any] = {"completa": True}
-    for braco in ("sem_rag", "com_rag"):
-        corretas = 0
-        contraditas = 0
-        nao_verificaveis = 0
-        casos_com_contradicao = 0
-        for cid in sorted(ids_positivos_esperados):
-            bloco = casos_map[cid].get(braco, {})
-            if bloco.get("revisado") is not True:
-                return {"completa": False, "sem_rag": None, "com_rag": None}
-            c_ok = int(bloco.get("afirmacoes_corretas", 0))
-            c_err = int(bloco.get("afirmacoes_contraditas", 0))
-            c_nv = int(bloco.get("afirmacoes_nao_verificaveis", 0))
-            if c_ok < 0 or c_err < 0 or c_nv < 0 or (c_ok + c_err + c_nv) == 0:
-                return {"completa": False, "sem_rag": None, "com_rag": None}
-            corretas += c_ok
-            contraditas += c_err
-            nao_verificaveis += c_nv
-            if c_err > 0:
-                casos_com_contradicao += 1
-        total_afirmacoes = corretas + contraditas + nao_verificaveis
-        resumo[braco] = {
-            "total_casos_avaliados": len(ids_positivos_esperados),
-            "total_afirmacoes": total_afirmacoes,
-            "afirmacoes_corretas": corretas,
-            "afirmacoes_contraditas": contraditas,
-            "afirmacoes_nao_verificaveis": nao_verificaveis,
-            "taxa_contradicao_por_afirmacao": round(contraditas / total_afirmacoes, 4),
-            "taxa_nao_verificavel_por_afirmacao": round(nao_verificaveis / total_afirmacoes, 4),
-            "taxa_erro_factual_por_afirmacao": round(
-                (contraditas + nao_verificaveis) / total_afirmacoes, 4
-            ),
-            "taxa_casos_com_contradicao": round(
-                casos_com_contradicao / len(ids_positivos_esperados), 4
-            ),
-        }
-    return resumo
 
 
 def avaliar_coleta_ragas(
@@ -305,6 +294,20 @@ def avaliar_coleta_ragas(
         raise ValueError(
             "Coleta possui pares inválidos ou está incompleta; corrija a coleta antes do RAGAS."
         )
+
+    casos = coleta.get("casos", [])
+    if (
+        not casos
+        or coleta.get("total_casos") != len(casos)
+        or len({c["caso_id"] for c in casos}) != len(casos)
+        or any(c["status_par"] not in {"PAR_LLM", "CONTROLE_DETERMINISTICO"} for c in casos)
+    ):
+        raise ValueError("Coleta inconsistente: contagem, IDs ou status inválidos")
+    for caso in casos:
+        for braco in ("sem_rag", "com_rag"):
+            geracao = caso[braco]["geracao"]
+            if geracao.get("error_code") or not geracao.get("text", "").strip():
+                raise ValueError("Coleta contém resposta vazia ou falha de provedor")
 
     casos_avaliados: list[dict[str, Any]] = []
     sem_ar_vals: list[float | None] = []
@@ -447,7 +450,7 @@ def avaliar_coleta_ragas(
     )
 
     factual_consolidado = (
-        consolidar_auditoria_factual(auditoria_factual, ids_positivos)
+        consolidar_auditoria_factual(auditoria_factual, coleta)
         if auditoria_factual is not None
         else {"completa": False, "sem_rag": None, "com_rag": None}
     )
@@ -553,119 +556,63 @@ def gerar_relatorio_ragas_markdown(relatorio: dict[str, Any]) -> str:
                 f"| Taxa de contradição por afirmação | "
                 f"{f_sem['taxa_contradicao_por_afirmacao']} | "
                 f"{f_com['taxa_contradicao_por_afirmacao']} |",
-                f"| Taxa de erro factual total (contraditas + não verificáveis) | "
-                f"{f_sem['taxa_erro_factual_por_afirmacao']} | "
-                f"{f_com['taxa_erro_factual_por_afirmacao']} |",
+                f"| Proporção não confirmada (contradita ou não verificável) | "
+                f"{f_sem['taxa_afirmacoes_nao_confirmadas']} | "
+                f"{f_com['taxa_afirmacoes_nao_confirmadas']} |",
             ]
         )
+        linhas.extend(
+            [
+                "",
+                "Os totais acima incluem controles; comparação por origem abaixo.",
+                "",
+                "| Origem | Braço | Respostas | Afirmações | Contradições | Não verificáveis |",
+                "| --- | --- | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for origem, bracos in factual["por_origem"].items():
+            for braco, valores in bracos.items():
+                linhas.append(
+                    f"| {origem} | {braco} | {valores['total_casos_avaliados']} | "
+                    f"{valores['total_afirmacoes']} | {valores['afirmacoes_contraditas']} | "
+                    f"{valores['afirmacoes_nao_verificaveis']} |"
+                )
     else:
         linhas.append(
             "Auditoria factual humana **NAO CONCLUIDA**. Preencha `auditoria_factual_humana.json` "
-            "no diretório da coleta (`revisado: true` em todos os casos positivos) e reexecute "
-            "este avaliador para consolidar a taxa de alucinação factual sem regenerar respostas."
+            "no diretório da coleta. Execute --consolidate-only "
+            "para consolidar sem novas chamadas ao juiz."
         )
+    linhas.extend(
+        [
+            "",
+            "## Diferenças pareadas de Answer Relevancy",
+            "",
+            "| Caso | Sem RAG | Com RAG | Diferença (com − sem) |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for caso in relatorio["casos"]:
+        metricas = caso["ragas"]
+        if metricas["aplicavel"] and not metricas.get("erro_avaliador"):
+            a = metricas["sem_rag"]["answer_relevancy"]
+            b = metricas["com_rag"]["answer_relevancy"]
+            linhas.append(f"| {caso['caso_id']} | {a:.4f} | {b:.4f} | {b - a:.4f} |")
+    linhas.extend(
+        [
+            "",
+            "Limitações: desenvolvimento/regressão, sem teste independente de generalização. "
+            "Gerador e juiz iguais podem compartilhar vieses. Revisão identificada, não cega. "
+            "Faithfulness não comprova verdade factual nem garante ausência de alucinações.",
+        ]
+    )
     return "\n".join(linhas) + "\n"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--coleta-dir",
-        type=Path,
-        required=True,
-        help="Diretório gerado por comparar_semana3.py contendo resultado.json",
-    )
-    parser.add_argument(
-        "--evaluator-model",
-        default="qwen2.5:14b",
-        help="Modelo juiz para RAGAS (ex.: qwen2.5:14b)",
-    )
-    parser.add_argument(
-        "--embedding-model",
-        default="bge-m3",
-        help="Modelo de embeddings para AnswerRelevancy no RAGAS (ex.: bge-m3)",
-    )
-    parser.add_argument(
-        "--base-url",
-        default="http://localhost:11434/v1",
-        help="Endpoint OpenAI-compatível do provedor (default: http://localhost:11434/v1)",
-    )
-    parser.add_argument(
-        "--api-key",
-        default=os.environ.get("OPENAI_API_KEY", "ollama"),
-        help="API key para o endpoint compatível (default: ollama)",
-    )
-    parser.add_argument(
-        "--auditoria-humana",
-        type=Path,
-        help="Caminho opcional para auditoria_factual_humana.json preenchida",
-    )
-    args = parser.parse_args()
+    from evals.runners.evaluation_cli import main as executar
 
-    coleta_dir = args.coleta_dir.resolve()
-    caminho_resultado = coleta_dir / "resultado.json"
-    if not caminho_resultado.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {caminho_resultado}")
-
-    coleta = json.loads(caminho_resultado.read_text(encoding="utf-8"))
-    caminho_auditoria = args.auditoria_humana or (coleta_dir / "auditoria_factual_humana.json")
-    if not caminho_auditoria.exists():
-        template = gerar_template_auditoria_factual(coleta)
-        caminho_auditoria.write_text(
-            json.dumps(template, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    auditoria_dados = json.loads(caminho_auditoria.read_text(encoding="utf-8"))
-
-    avaliador = OfficialRagasCollectionsEvaluator(
-        evaluator_model=args.evaluator_model,
-        embedding_model=args.embedding_model,
-        base_url=args.base_url,
-        api_key=args.api_key,
-    )
-    relatorio_final = avaliar_coleta_ragas(
-        coleta,
-        avaliador=avaliador,
-        auditoria_factual=auditoria_dados,
-    )
-
-    tracker = MLflowExperimentTracker(raiz_repo=RAIZ)
-    metricas_tracker: dict[str, float] = {
-        "erros_avaliador": float(relatorio_final["erros_avaliador"]),
-    }
-    for chave, valor in relatorio_final["ragas_oficial"]["com_rag"].items():
-        if isinstance(valor, (int, float)):
-            metricas_tracker[f"com_rag_{chave}"] = float(valor)
-    ar_sem = relatorio_final["ragas_oficial"]["sem_rag"]["answer_relevancy"]
-    if isinstance(ar_sem, (int, float)):
-        metricas_tracker["sem_rag_answer_relevancy"] = float(ar_sem)
-
-    run = tracker.registrar_execucao(
-        run_name="avaliacao_ragas_semana3",
-        params={
-            "evaluator_model": args.evaluator_model,
-            "embedding_model": args.embedding_model,
-            "dataset": relatorio_final["dataset"],
-        },
-        metrics=metricas_tracker,
-        dataset_path=RAIZ / "evals/datasets" / relatorio_final["dataset"],
-        extra_tags={"status_entregavel": relatorio_final["status_entregavel"]},
-    )
-    relatorio_final["ragas_tracking_run_id"] = run.run_id
-
-    (coleta_dir / "avaliacao_ragas.json").write_text(
-        json.dumps(relatorio_final, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (coleta_dir / "avaliacao_ragas.md").write_text(
-        gerar_relatorio_ragas_markdown(relatorio_final),
-        encoding="utf-8",
-    )
-    print(f"Avaliacao RAGAS salva em: {coleta_dir / 'avaliacao_ragas.json'}")
-    print(f"Status entregavel: {relatorio_final['status_entregavel']}")
-    if not relatorio_final["avaliacao_ragas_completa"]:
-        return 1
-    return 0 if relatorio_final["sucesso_criterios_rag"] else 2
+    return executar()
 
 
 if __name__ == "__main__":

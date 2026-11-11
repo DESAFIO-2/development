@@ -56,6 +56,7 @@ class RESTGenerator(GeneratorPort):
         rag_mode: bool | None = None,
     ) -> GenerationResultDTO:
         inicio = time.perf_counter()
+        metadata: dict[str, Any] = {}
         is_rag = bool(evidences) if rag_mode is None else rag_mode
 
         def result(
@@ -69,6 +70,7 @@ class RESTGenerator(GeneratorPort):
                 latency_ms=round((time.perf_counter() - inicio) * 1000, 2),
                 error_code=error,
                 execution_kind=kind,
+                provider_metadata=metadata or None,
             )
 
         with trace_operation("guardrail"):
@@ -92,6 +94,25 @@ class RESTGenerator(GeneratorPort):
                 ) as response,
             ):
                 body = json.loads(response.read().decode("utf-8"))
+            if self.provider == "ollama_local":
+                metadata.update(
+                    {
+                        key: body[key]
+                        for key in (
+                            "model",
+                            "done",
+                            "done_reason",
+                            "prompt_eval_count",
+                            "eval_count",
+                            "total_duration",
+                            "load_duration",
+                            "eval_duration",
+                        )
+                        if key in body
+                    }
+                )
+                if body.get("done_reason") == "length" or body.get("done") is False:
+                    return result(str(body.get("response", "")), error="RESPOSTA_TRUNCADA")
             text = self._text(body)
             if not text.strip():
                 return result(error="RESPOSTA_VAZIA")
@@ -174,7 +195,12 @@ class OllamaRESTGeneratorAdapter(RESTGenerator):
                     "system": SYSTEM_PROMPT,
                     "prompt": prompt,
                     "stream": False,
-                    "options": {"temperature": 0.0, "num_predict": 450},
+                    "options": {
+                        "temperature": 0.0,
+                        "num_predict": 450,
+                        "num_ctx": 8192,
+                        "seed": 42,
+                    },
                 }
             ).encode("utf-8"),
             headers={"Content-Type": "application/json"},

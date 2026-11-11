@@ -33,7 +33,27 @@ quando recebia múltiplas doses e aplicava um limite de texto à receita inteira
 
 Relatórios antigos do commit 9912090 ficam invalidados como evidência científica.
 A geração real exige configuração explícita de modelo. A coleta não aprova o
-entregável sem RAGAS e revisão factual. Nenhum SDK ou dependência nova foi adicionado.
+entregável sem RAGAS e revisão factual. SDKs de avaliação ficam em `evals/`, com
+lockfile próprio; o lockfile da API permanece inalterado.
 Para reverter tecnicamente, restaurar os arquivos de aplicação, runner, fixtures,
 CI e documentação juntos a partir de 9912090; isso reintroduz os defeitos conhecidos
  e não autoriza republicar suas conclusões como resultados reais.
+
+## Endurecimento operacional de 2026-11-11
+
+- Coleta com checkpoint atômico por braço e identidade de código/dataset/corpus/modelo.
+  Resposta persistida, inclusive erro, nunca é substituída na retomada.
+- Avaliação com um event loop por cliente assíncrono, cache por métrica/par e
+  histórico de tentativas. Retentativas explícitas limitadas a três por par.
+- Consolidação offline não instancia cliente nem regenera escores. Cada versão
+  do relatório preserva a auditoria correspondente.
+- Auditoria v2 vinculada aos hashes da coleta, dos casos e das respostas. Inclui
+  todas as respostas, separando agregados de LLM e controles. Contagens inteiras;
+  zero afirmações é válido e produz taxa nula, com justificativa do revisor.
+- Contradição e não verificabilidade permanecem distintas. Proporção não confirmada
+  não recebe o nome de taxa de erro factual.
+- Saída da avaliação: 0 completo/aprovado, 1 incompleto, 2 completo/reprovado,
+  3 auditoria pendente ou piloto. Saída 0 do orquestrador indica apenas inferência
+  concluída e imprime explicitamente o status científico.
+- Testes do ambiente isolado exercitam o SDK e as quatro métricas oficiais com
+  HTTP simulado. Não constituem evidência sobre qualidade do modelo local.
