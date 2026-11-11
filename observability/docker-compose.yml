@@ -1,0 +1,11 @@
+# Stack local de observabilidade do SUS Cidadão.
+# Subir:  docker compose -f observability/docker-compose.yml up -d
+# Jaeger (traces): http://localhost:16686
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    container_name: sus-jaeger
+    ports:
+      - "16686:16686" # interface web do Jaeger
+      - "4318:4318"   # recebe traces via OTLP/HTTP (é para cá que a API manda)
+    restart: unless-stopped
