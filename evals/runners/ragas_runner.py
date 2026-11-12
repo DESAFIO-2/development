@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import io
 import json
+import math
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -41,6 +42,50 @@ from app.retrieval.hybrid_retriever import HybridRetriever  # noqa: E402
 
 DATASET_GOLDEN = RAIZ / "evals" / "datasets" / "golden_set_v1.jsonl"
 PASTA_RELATORIOS = RAIZ / "evals" / "reports"
+TOP_K = 3
+
+
+@dataclass(frozen=True)
+class MetricasRanking:
+    """Métricas de recuperação de um caso, só com IDs (sem juiz LLM).
+
+    Relevância binária: um chunk é relevante se está em `relevant_chunk_ids`.
+    Definições em Manning, Raghavan e Schütze (2008), cap. 8, e nDCG em
+    Järvelin e Kekäläinen (2002).
+    """
+
+    hit: bool
+    recall: float
+    reciprocal_rank: float
+    precision_at_1: float
+    precision_at_k: float
+    r_precision: float
+    ndcg_at_k: float
+    teto_precision_at_k: float
+
+
+def metricas_de_ranking(
+    recuperados: list[str], relevantes: set[str], k: int = TOP_K
+) -> MetricasRanking:
+    """Calcula as métricas de recuperação de um caso a partir dos IDs."""
+    if not relevantes:
+        raise ValueError("Métricas de ranking exigem ao menos um chunk relevante.")
+    top_k = recuperados[:k]
+    acertos = [chunk_id in relevantes for chunk_id in top_k]
+    rank = next((i for i, acerto in enumerate(acertos, 1) if acerto), 0)
+    r = len(relevantes)
+    dcg = sum(1.0 / math.log2(i + 1) for i, acerto in enumerate(acertos, 1) if acerto)
+    idcg = sum(1.0 / math.log2(i + 1) for i in range(1, min(r, k) + 1))
+    return MetricasRanking(
+        hit=any(acertos),
+        recall=len(relevantes.intersection(top_k)) / r,
+        reciprocal_rank=1.0 / rank if rank else 0.0,
+        precision_at_1=float(bool(acertos) and acertos[0]),
+        precision_at_k=sum(acertos) / k,
+        r_precision=len(relevantes.intersection(recuperados[:r])) / r,
+        ndcg_at_k=dcg / idcg,
+        teto_precision_at_k=min(r, k) / k,
+    )
 
 
 @dataclass(frozen=True)
@@ -51,6 +96,11 @@ class BenchmarkMetrics:
     hit_rate_at_3: float
     recall_at_3: float
     mrr: float
+    precision_at_1: float
+    precision_at_3: float
+    teto_precision_at_3: float
+    r_precision: float
+    ndcg_at_3: float
     acuracia_roteamento: float
     taxa_bloqueio_clinico: float
     acuracia_abstencao: float
@@ -78,9 +128,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         raise ValueError(f"Dataset sem casos: {caminho_dataset}")
 
     falhas: dict[str, list[str]] = {}
-    hits_count = 0
-    total_recall = 0.0
-    reciprocal_ranks: list[float] = []
+    por_caso: list[MetricasRanking] = []
     rotas_corretas = 0
     guardrail_corretos = 0
     abstencoes_corretas = 0
@@ -111,7 +159,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
                 falhas[caso["id"]] = ["bloqueio_clinico"]
             continue
 
-        retrieved_ids = [hit.chunk_id for hit in retriever.search(query, top_k=3)]
+        retrieved_ids = [hit.chunk_id for hit in retriever.search(query, top_k=TOP_K)]
         rota_obtida = (
             audit_res.itens_auditados[0].via_retirada.value if audit_res.itens_auditados else None
         )
@@ -127,15 +175,9 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         if not chunks_relevantes:
             raise ValueError(f"{caso['id']}: caso positivo sem chunks relevantes")
 
-        intersect = chunks_relevantes.intersection(retrieved_ids)
-        hits_count += bool(intersect)
-        total_recall += len(intersect) / len(chunks_relevantes)
-        rank = next(
-            (i for i, chunk_id in enumerate(retrieved_ids, 1) if chunk_id in chunks_relevantes),
-            0,
-        )
-        reciprocal_ranks.append(1.0 / rank if rank else 0.0)
-        if intersect != chunks_relevantes or rank != 1:
+        metricas_caso = metricas_de_ranking(retrieved_ids, chunks_relevantes)
+        por_caso.append(metricas_caso)
+        if metricas_caso.recall < 1.0 or metricas_caso.reciprocal_rank != 1.0:
             erros.append("recuperacao")
 
         rotas = {
@@ -155,9 +197,9 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
     if not (casos_positivos and casos_clinicos and casos_abstencao):
         raise ValueError("O benchmark exige casos positivos, clínicos e de abstenção.")
 
-    hit_rate = hits_count / casos_positivos if casos_positivos else 1.0
-    recall = total_recall / casos_positivos if casos_positivos else 1.0
-    mrr = sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 1.0
+    def media(valores: list[float]) -> float:
+        return round(sum(valores) / len(valores), 4)
+
     route_acc = rotas_corretas / casos_positivos if casos_positivos else 1.0
     guardrail_acc = guardrail_corretos / casos_clinicos if casos_clinicos else 1.0
     abstention_acc = abstencoes_corretas / casos_abstencao if casos_abstencao else 1.0
@@ -166,9 +208,14 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
 
     return BenchmarkMetrics(
         total_casos=len(casos),
-        hit_rate_at_3=round(hit_rate, 4),
-        recall_at_3=round(recall, 4),
-        mrr=round(mrr, 4),
+        hit_rate_at_3=media([float(m.hit) for m in por_caso]),
+        recall_at_3=media([m.recall for m in por_caso]),
+        mrr=media([m.reciprocal_rank for m in por_caso]),
+        precision_at_1=media([m.precision_at_1 for m in por_caso]),
+        precision_at_3=media([m.precision_at_k for m in por_caso]),
+        teto_precision_at_3=media([m.teto_precision_at_k for m in por_caso]),
+        r_precision=media([m.r_precision for m in por_caso]),
+        ndcg_at_3=media([m.ndcg_at_k for m in por_caso]),
         acuracia_roteamento=round(route_acc, 4),
         taxa_bloqueio_clinico=round(guardrail_acc, 4),
         acuracia_abstencao=round(abstention_acc, 4),
@@ -213,6 +260,11 @@ def main() -> int:
             "hit_rate_at_3": metricas.hit_rate_at_3,
             "recall_at_3": metricas.recall_at_3,
             "mrr": metricas.mrr,
+            "precision_at_1": metricas.precision_at_1,
+            "precision_at_3": metricas.precision_at_3,
+            "teto_precision_at_3": metricas.teto_precision_at_3,
+            "r_precision": metricas.r_precision,
+            "ndcg_at_3": metricas.ndcg_at_3,
             "acuracia_roteamento": metricas.acuracia_roteamento,
             "taxa_bloqueio_clinico": metricas.taxa_bloqueio_clinico,
             "acuracia_abstencao": metricas.acuracia_abstencao,
@@ -224,6 +276,13 @@ def main() -> int:
     print(f"Hit Rate@3:                  {metricas.hit_rate_at_3:.2%}")
     print(f"Recall@3:                    {metricas.recall_at_3:.2%}")
     print(f"Mean Reciprocal Rank (MRR):  {metricas.mrr:.4f}")
+    print(f"Precision@1:                 {metricas.precision_at_1:.2%}")
+    print(
+        f"Precision@3:                 {metricas.precision_at_3:.2%}"
+        f"  (teto do dataset: {metricas.teto_precision_at_3:.2%})"
+    )
+    print(f"R-Precision:                 {metricas.r_precision:.2%}")
+    print(f"nDCG@3:                      {metricas.ndcg_at_3:.4f}")
     print(f"Acurácia de Roteamento:      {metricas.acuracia_roteamento:.2%}")
     print(f"Taxa Bloqueio Clínico:       {metricas.taxa_bloqueio_clinico:.2%}")
     print(f"Acurácia de Abstenção:       {metricas.acuracia_abstencao:.2%}")
