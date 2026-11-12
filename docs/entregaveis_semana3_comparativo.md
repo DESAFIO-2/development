@@ -1,6 +1,6 @@
 # Semana 3 — protocolo de comparação e situação da entrega
 
-**Situação: implementação corrigida; experimento científico ainda não concluído.**
+**Situação em 12/11/2026: coleta real e RAGAS oficial concluídos. Revisão factual humana pendente.**
 
 ## Retificação dos resultados anteriores
 
@@ -14,8 +14,8 @@ não devem ser enviados à banca nem combinados com o schema `comparativo-v2`.
 | --- | --- | --- |
 | Pytest, transporte HTTP mockado e fixture sintética | Contratos, tratamento de erros e encanamento | Automatizados em CI |
 | Benchmark determinístico v1/v2 | Recuperação e roteamento nos casos rotulados | Avaliado separadamente |
-| Comparação de respostas de modelo real | Desempenho observado de um modelo configurado | Pendente de execução real |
-| Faithfulness / Answer Relevancy / Context Recall / Context Precision RAGAS | Avaliação da geração por protocolo RAGAS | Implementadas no estágio 2 oficial; execução real pendente |
+| Comparação de respostas de modelo real | Desempenho observado de um modelo configurado | 22 casos coletados no MacBook M4, com 18 pares de LLM e quatro casos de controle |
+| Faithfulness / Answer Relevancy / Context Recall / Context Precision RAGAS | Avaliação da geração por protocolo RAGAS | 18 pares avaliados sem erro. Duas das quatro metas do ADR 0003 atingidas |
 | Taxa de alucinação factual | Julgamento de afirmações com evidências e rubrica | Não avaliada; revisão factual pendente |
 
 ## Protocolo implementado
@@ -35,7 +35,7 @@ não devem ser enviados à banca nem combinados com o schema `comparativo-v2`.
   Isso não comprova que as afirmações do texto sejam verdadeiras.
 - Overlap de tokens do contexto usa apenas os trechos efetivamente recuperados, sem
   acrescentar o gabarito. Overlap da pergunta é outra heurística lexical. Nenhum é RAGAS.
-- Taxa de alucinação e métricas RAGAS ficam `null` / `NAO_AVALIADO`. O ADR 0003 mantém
+- Na etapa de coleta, taxa de alucinação e métricas RAGAS ficam `null` / `NAO_AVALIADO`. O ADR 0003 mantém
   os mínimos 0,92 / 0,88 / 0,90 / 0,88; ausência de medida nunca resulta em aprovação.
 - Cada execução gera JSON e Markdown em diretório único, com hashes normalizados LF
   do dataset, corpus e código do protocolo. A versão do schema é `comparativo-v2`.
@@ -109,6 +109,72 @@ Os 22 casos são desenvolvimento/regressão e têm limitações documentadas na
 modelo; a revisão humana é identificada e não cega. Não se pode inferir
 superioridade geral nem garantia de zero alucinação.
 
-Resultados reais: **PENDENTES**. Não substituir esta indicação até executar o
-modelo e concluir a revisão de todas as respostas. Metas reprovadas devem
-permanecer publicadas; conclusão da entrega e aprovação das metas são distintas.
+## Execução local de 12/11/2026
+
+A execução usou a revisão `b24fceb`, o Golden Set v2 de desenvolvimento, o
+corpus v5 e `semana3-qwen14` (Qwen 2.5 14B Instruct Q4_K_M) no Ollama 0.32.0.
+O piloto de dois casos, com BGE-M3 e RAGAS 0.4.3, concluiu a inferência em
+6 min 38 s. Os seus escores ficam no relatório do piloto.
+
+O run `db9e9c3e933d46e7ae9f617743314f78` registrou 22 pares, sem falhas de
+provedor ou pares inválidos. Os quatro casos de controle são duas consultas
+de abstenção e dois bloqueios clínicos. Os agregados abaixo usam os 18 casos
+positivos com dois braços gerados pelo modelo.
+
+O RAGAS calculou os 90 escores dos 18 pares na primeira tentativa. A coleta
+completa e a avaliação levaram 1 h 3 min 58 s. Consolidação
+`ragas_v1/consolidacoes/a49634ca9c484123bcefe5df6949e90c`.
+
+| Métrica oficial | Sem RAG | Com RAG | Meta ADR 0003 | Resultado |
+| --- | ---: | ---: | ---: | --- |
+| Faithfulness | Não aplicável | 0,8698 | 0,92 | Reprovado |
+| Answer Relevancy | 0,3239 | 0,6751 | 0,88 | Reprovado |
+| Context Recall | Não aplicável | 0,9491 | 0,90 | Aprovado |
+| Context Precision | Não aplicável | 1,0000 | 0,88 | Aprovado |
+
+O braço com RAG teve Answer Relevancy maior nos 18 pares, com diferença
+média de 0,3512 na escala de 0 a 1. Os resultados descrevem o conjunto de
+desenvolvimento sob julgamento do mesmo modelo que gerou as respostas.
+
+| Diagnóstico | Sem RAG | Com RAG |
+| --- | ---: | ---: |
+| Rota detectada pela heurística coincide com o rótulo | 7/18 | 18/18 |
+| Latência mediana da geração | 10,62 s | 22,06 s |
+| Respostas com todas as citações válidas | Não aplicável | 1/18 |
+
+O ganho de 11 casos na heurística de rota equivale a 61,1 pontos percentuais
+neste conjunto. Cinco respostas com RAG omitiram a citação no formato pedido.
+Doze incluíram citações que falharam na validação, por exemplo a troca de
+`nº` por `no`, título abreviado ou duas fontes agrupadas no mesmo colchete.
+A conferência de metadados tem escopo distinto da revisão das afirmações.
+
+Na inspeção dos textos e dos trechos recuperados, três casos merecem revisão:
+
+- `GOLD-018` atribui ao Dignidade Menstrual a opção de retirada por procuração
+  e omite a autorização que consta de `expected_documents`. O trecho recuperado
+  reúne regras para públicos e itens distintos.
+- `GOLD-020` combina o trecho sobre aplicação de injetáveis na UBS com o trecho
+  sobre receita de controle especial. O contexto descreve os requisitos em
+  frases separadas, e o caso também deixa a apresentação em aberto.
+- `GOLD-022` passa na validação do trio de metadados, mas atribui ao médico a
+  assinatura da Declaração Autorizadora. O trecho citado atribui ao médico a
+  assinatura do LME. A resposta também deixa de informar os campos do LME
+  pedidos na pergunta.
+
+Validação local com os ambientes travados. Passaram 142 testes do backend,
+um teste de transporte do RAGAS, Ruff, Mypy, os dois benchmarks determinísticos
+e o smoke sintético. O Docker serviu health, autocomplete e auditoria via
+HTTP. O corpus foi regenerado em uma pasta temporária com os mesmos arquivos
+derivados e hashes.
+
+A precisão por IDs dos chunks retornados foi 55,00% micro (22/40) e
+59,26% macro nos 18 casos positivos. Com três posições fixas por consulta,
+Precision@3 foi 40,74% (22/54). O recall macro por IDs foi 100%. Essas medidas
+usam os rótulos congelados do Golden Set.
+
+Consulte o [relatório oficial por caso](resultados/semana3-2026-11-12/avaliacao_ragas.md)
+e baixe o [pacote de evidências](resultados/semana3-2026-11-12/semana3-evidencias.zip).
+O pacote inclui o dataset, as respostas, os manifests, os registros do juiz,
+os checkpoints e a ficha de auditoria factual humana pendente. Extraia o ZIP,
+entre na pasta `semana3-evidencias` e rode `python3 verificar.py` com Python 3.12+
+para conferir os hashes e recalcular as médias e a precisão por IDs sem inferência.
