@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Runbook de Portações e Handoff
+    url: https://github.com/DESAFIO-2/development/blob/main/docs/runbooks/portacoes.md
+    about: Consulte antes de abrir uma portação entre repositórios ou branches.
+  - name: Diretrizes de Integridade Científica (IA)
+    url: https://github.com/DESAFIO-2/development/blob/main/docs/runbooks/diretrizes_integridade_ia.md
+    about: Regras obrigatórias para experimentos, métricas RAGAS e uso de mocks.

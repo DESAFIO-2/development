@@ -1,0 +1,93 @@
+name: Tarefa / Feature por Frente
+description: Nova tarefa, entrega semanal, experimento ou correção com dono e critérios claros no GitHub Projects.
+title: "[Semana X][Frente] "
+labels:
+  - triagem
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Preencha os campos abaixo para facilitar a priorização no quadro do **GitHub Projects (`DESAFIO-2`)** e evitar sobreposição de trabalho entre frentes.
+
+  - type: dropdown
+    id: frente
+    attributes:
+      label: Frente responsável
+      description: Selecione a frente principal que conduzirá esta entrega até o merge.
+      options:
+        - "IA & Agentes (@samucabsb)"
+        - "Arquitetura, API & Mobile (@mickeiascharles)"
+        - "Engenharia de Dados (@jhsribeiro)"
+        - "Ciência de Dados (@oficialmarlonmd)"
+        - "MLOps / LLMOps (@Amistice)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: semana
+    attributes:
+      label: Semana do Roadmap
+      options:
+        - Semana 3 — Avaliação LLM × RAG
+        - Semana 4 — Sistema Multiagentes
+        - Semana 5 — Pipeline Multimodal
+        - Semana 6 — Integração Ponta a Ponta & Mobile
+        - Semana 7 — Testes com Usuários & DCS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo da demanda
+      options:
+        - Feature
+        - Experimento / Eval
+        - Revisão Humana / Auditoria
+        - Infraestrutura / CI
+        - Bug / Correção
+        - Documentação / ADR
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo e Escopo
+      description: O que precisa ser feito e o que fica explicitamente fora do escopo desta tarefa.
+      placeholder: |
+        Objetivo: ...
+        Fora do escopo: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: Dependências ou Bloqueios (opcional)
+      description: Indique se depende de outra Issue, revisão humana de PDF, gate de recuperação ou outro repositório (ex. engenharia-dados).
+      placeholder: "Ex.: Depende da aprovação do release v9 em DESAFIO-2/engenharia-dados."
+    validations:
+      required: false
+
+  - type: textarea
+    id: criterios_aceite
+    attributes:
+      label: Critérios de Aceite
+      description: Como validaremos que a tarefa está pronta (comandos, métricas, testes ou entregável esperado).
+      value: |
+        - [ ] Implementação/alteração concluída na branch dedicada (`feat/...` ou `fix/...`)
+        - [ ] `make format`, `make lint` e `make test` aprovados
+        - [ ] Revisão por CODEOWNER competente realizada
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: integridade
+    attributes:
+      label: Integridade Científica e Governança (quando aplicável)
+      options:
+        - label: Se envolver IA/evals, comprometo-me a cumprir o ADR 0004 e as Diretrizes de Integridade Científica (zero mock como evidência empírica, zero fallback silencioso, métricas não medidas marcadas como NAO_AVALIADO).
+          required: false
+        - label: Se alterar domínio, RAG ou guardrails, registrarei/atualizarei o ADR correspondente em `docs/adr/`.
+          required: false
