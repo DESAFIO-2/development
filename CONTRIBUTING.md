@@ -24,3 +24,11 @@ make test     # Roda a suíte de testes unitários e de integração
 ## 📜 Registros de Decisões de Arquitetura (ADRs)
 
 Qualquer alteração estrutural no domínio, na recuperação RAG ou nos guardrails deve ser acompanhada de um ADR na pasta `docs/adr/`.
+
+## Portação entre branches e repositórios
+
+Siga o [procedimento de portações](docs/runbooks/portacoes.md) para fixar a revisão de origem, selecionar artefatos, validar os contratos do destino e documentar a reversão.
+
+## Integridade Científica e Desenvolvimento com IA
+
+Toda contribuição que envolva avaliação de LLMs, geração de métricas ou integração com provedores de IA deve seguir rigorosamente as [Diretrizes de Integridade para IA](docs/runbooks/diretrizes_integridade_ia.md) e o [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md). Mocks de teste são restritos a fixtures e jamais podem ser apresentados como evidência científica empírica.

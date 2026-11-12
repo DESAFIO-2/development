@@ -15,6 +15,7 @@ htmlcov/
 .env
 .env*.local
 .venv
+evals/.venv
 env/
 venv/
 ENV/
@@ -30,6 +31,9 @@ data/raw/*.tar.gz
 # Evaluation transient outputs
 evals/reports/*.json
 evals/reports/*.csv
+evals/reports/*.md
+evals/reports/mlflow_runs/
+evals/reports/mlruns/
 
 # OS & Editors
 .DS_Store
@@ -37,3 +41,12 @@ evals/reports/*.csv
 .vscode/
 *~
 *.swp
+
+# Execuções isoladas do protocolo comparativo v2
+evals/reports/smoke_sintetico_semana3_*/
+evals/reports/coleta_real_semana3_*/
+# Diretórios nomeados de piloto/coleta e checkpoints (publicar pacote deliberadamente).
+evals/reports/*/
+
+# Artefatos legados locais
+entregavel_semana2/

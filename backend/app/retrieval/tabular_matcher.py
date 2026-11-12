@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.application.ports import CanonicalMedicationItem
 from app.retrieval.text_normalizer import normalizar_texto_pt
 
@@ -32,23 +34,69 @@ class TabularDCBMatcher:
         }
     )
 
+    _DOSE_PART = (
+        r"\b\d+(?:[.,]\d+)*(?:/\d+(?:[.,]\d+)*)*\s*"
+        r"(?:mcg|mg|g|ui|ml|%)(?!\w)"
+        r"(?:\s*/\s*(?:\d+(?:[.,]\d+)*\s*)?(?:ml|g|dose)\b)?"
+    )
+    _DOSE = re.compile(_DOSE_PART + r"(?:\s*\+\s*" + _DOSE_PART + r")*", re.IGNORECASE)
+
+    @staticmethod
+    def normalizar_concentracao(concentracao: str) -> str:
+        valor = re.sub(r"\s+", "", concentracao.lower().replace(",", "."))
+        # Abreviação de composição (97/103 mg), sem somar doses ou converter unidades.
+        composto = re.fullmatch(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)(mcg|mg|g|ui)", valor)
+        if composto:
+            primeiro, segundo, unidade = composto.groups()
+            return f"{primeiro}{unidade}+{segundo}{unidade}"
+        return valor
+
+    @classmethod
+    def doses_no_texto(cls, texto: str) -> set[str]:
+        return {cls.normalizar_concentracao(dose) for dose in cls._DOSE.findall(texto)}
+
+    @classmethod
+    def tem_numero_nao_interpretado(cls, texto: str) -> bool:
+        """Número sem unidade reconhecida exige confirmação da apresentação."""
+        residual = cls._DOSE.sub("", texto)
+        residual = re.sub(r"\bdiabetes\s+tipo\s+[12]\b", "", residual, flags=re.IGNORECASE)
+        # Quantidade de embalagem não é uma segunda concentração. Só aceitar
+        # números administrativos explicitamente identificados; nunca descartar
+        # o resto de uma composição porque a primeira dose foi reconhecida.
+        residual = re.sub(
+            r"\b\d+\s*(?:comprimidos|capsulas|cápsulas|ampolas|unidades)\b",
+            "",
+            residual,
+            flags=re.IGNORECASE,
+        )
+        return bool(re.search(r"\d", residual))
+
     def __init__(self, medications: list[CanonicalMedicationItem]) -> None:
         self.medications = medications
 
-    def casar(self, consulta: str) -> list[tuple[float, CanonicalMedicationItem]]:
+    def casar(
+        self, consulta: str, *, concentracao: str = "", forma: str = "", deduplicar: bool = True
+    ) -> list[tuple[float, CanonicalMedicationItem]]:
         """Retorna medicamentos canônicos casados com a consulta e score em [0, 1]."""
         norm_query = normalizar_texto_pt(consulta)
         query_tokens = set(norm_query.split())
         matches: list[tuple[float, CanonicalMedicationItem]] = []
 
+        dose = self.normalizar_concentracao(concentracao)
+        forma_norm = normalizar_texto_pt(forma)
+
         for med in self.medications:
+            if dose and self.normalizar_concentracao(med.concentration) != dose:
+                continue
+            if forma_norm and normalizar_texto_pt(med.pharmaceutical_form) != forma_norm:
+                continue
             norm_dcb = normalizar_texto_pt(med.dcb_name)
             dcb_tokens = [t for t in norm_dcb.split() if len(t) > 2]
             core_tokens = [t for t in dcb_tokens if t not in self._IGNORED_SALTS] or dcb_tokens
             if not core_tokens:
                 continue
 
-            if norm_dcb in norm_query:
+            if f" {norm_dcb} " in f" {norm_query} ":
                 score = 0.95
             else:
                 matched_core = [t for t in core_tokens if t in query_tokens]
@@ -64,6 +112,9 @@ class TabularDCBMatcher:
             matches.append((round(score, 4), med))
 
         matches.sort(key=lambda item: item[0], reverse=True)
+
+        if not deduplicar:
+            return matches
 
         # Deduplica por dcb_name mantendo maior score
         vistos: set[str] = set()

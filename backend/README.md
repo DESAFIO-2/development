@@ -102,7 +102,7 @@ Audita os itens de uma receita médica prescrita e retorna o roteiro estruturado
         ],
         "dias_validade_receita": 180,
         "dias_restantes": 180,
-        "citacao_normativa": "PFPB_2024 — Portaria GM/MS nº 6.324/2024 / REME-DF"
+        "citacao_normativa": "PFPB_2024 (p. 14)"
       }
     ],
     "resumo_acolhedor": "Auditamos 2 item(ns) da sua receita para a região de Ceilândia...",
@@ -111,7 +111,7 @@ Audita os itens de uma receita médica prescrita e retorna o roteiro estruturado
   ```
 
 ### `GET /api/v1/medications/autocomplete?q=losartana&limite=10`
-Fornece sugestões assistidas instantâneas de medicamentos padronizados na RENAME (latência média < 5ms).
+Fornece sugestões assistidas instantâneas de medicamentos padronizados na RENAME.
 
 ---
 
@@ -139,7 +139,8 @@ uv run ruff format .
 
 ```bash
 # Construção da imagem otimizada com usuário não-root:
-docker build -t sus-cidadao-backend .
+# Execute a partir da raiz do repositório
+docker build -t sus-cidadao-backend -f backend/Dockerfile .
 
 # Execução do container:
 docker run --rm -p 8000:8000 sus-cidadao-backend

@@ -9,12 +9,14 @@ from app.application.ports import (
     MedicationRepositoryPort,
     RetrieverPort,
 )
+from app.core.telemetry import trace_operation
 from app.domain.guidance import CitizenGuidanceCard, ItemRoteiroCidadao
 from app.domain.medication import CoverageRoute
 from app.domain.prescription import PrescriptionAuditRequest
 from app.guardrails.clinical import ClinicalGuardrail
 from app.guardrails.pii import PIIMasker
 from app.retrieval.tabular_matcher import TabularDCBMatcher
+from app.retrieval.text_normalizer import normalizar_texto_pt
 
 
 class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
@@ -35,24 +37,39 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
         # 1. Guardrail Clínico e de Ato Médico
-        consulta_completa = " ".join(
-            [item.nome_digitado for item in request.itens]
-            + ([request.pergunta_adicional] if request.pergunta_adicional else [])
-        )
+        campos = [
+            value
+            for item in request.itens
+            for value in (
+                item.nome_digitado,
+                item.principio_ativo_dcb,
+                item.concentracao,
+                item.forma_farmaceutica,
+                item.posologia,
+                item.quantidade_prescrita,
+            )
+            if value
+        ] + [request.pergunta_adicional or "", request.regiao_administrativa]
 
-        check_clinico = self.guardrail.inspecionar(consulta_completa)
-        if check_clinico.bloqueado:
+        regiao = self.pii_masker.mascarar(request.regiao_administrativa).texto_sanitizado
+        with trace_operation("guardrail"):
+            bloqueios = [
+                check
+                for campo in campos
+                if campo
+                if (check := self.guardrail.inspecionar(campo)).bloqueado
+            ]
+        if bloqueios:
+            check_clinico = next(
+                (check for check in bloqueios if check.alerta_emergencia), bloqueios[0]
+            )
             return CitizenGuidanceCard(
                 sucesso=False,
-                regiao_administrativa=request.regiao_administrativa,
+                regiao_administrativa=regiao,
                 itens_auditados=[],
                 resumo_acolhedor=check_clinico.mensagem_acolhedora,
-                solicitou_automedicacao=True,
+                solicitou_automedicacao=check_clinico.motivo != "PROMPT_INJECTION",
             )
-
-        # 2. Desidentificação LGPD (PII Masking)
-        if request.pergunta_adicional:
-            _ = self.pii_masker.mascarar(request.pergunta_adicional)
 
         hoje = date.today()
         data_base = request.data_emissao or hoje
@@ -60,7 +77,37 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
         # 3. Auditoria Farmacêutica para cada item da receita
         for item in request.itens:
-            matches = self.tabular_matcher.casar(item.nome_digitado)
+            nome = self.pii_masker.mascarar(item.nome_digitado).texto_sanitizado
+            dcb = self.pii_masker.mascarar(item.principio_ativo_dcb or "").texto_sanitizado
+            forma = self.pii_masker.mascarar(item.forma_farmaceutica or "").texto_sanitizado
+            doses = self.tabular_matcher.doses_no_texto(nome)
+            dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
+            # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
+            dose_ambigua = (
+                self.tabular_matcher.tem_numero_nao_interpretado(nome)
+                or len(doses) > 1
+                or bool(
+                    item.concentracao
+                    and doses
+                    and doses != {self.tabular_matcher.normalizar_concentracao(item.concentracao)}
+                )
+            )
+            consulta = dcb or nome
+            with trace_operation("retrieval"):
+                matches = (
+                    self.tabular_matcher.casar(
+                        consulta, concentracao=dose, forma=forma, deduplicar=False
+                    )
+                    if not dose_ambigua
+                    else []
+                )
+            if dcb:
+                dcb_norm = normalizar_texto_pt(dcb)
+                matches = [
+                    (score, med)
+                    for score, med in matches
+                    if normalizar_texto_pt(med.dcb_name) == dcb_norm
+                ]
 
             if matches:
                 _, med_canonico = matches[0]
@@ -68,10 +115,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
                 if route_str == "FARMACIA_POPULAR":
                     via = CoverageRoute.FARMACIA_POPULAR
-                    local = (
-                        f"Drogarias privadas credenciadas ao Farmácia Popular em "
-                        f"{request.regiao_administrativa} ou nas farmácias das UBSs do DF."
-                    )
+                    local = f"Drogarias privadas credenciadas ao Farmácia Popular em {regiao}."
                 elif route_str == "ALTO_CUSTO_CEAF":
                     via = CoverageRoute.FARMACIA_ALTO_CUSTO
                     local = (
@@ -81,20 +125,30 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 elif route_str == "UBS_ATENCAO_PRIMARIA":
                     via = CoverageRoute.UBS_REME_DF
                     local = (
-                        f"Farmácia da Unidade Básica de Saúde (UBS) de referência "
-                        f"da sua quadra/bairro em {request.regiao_administrativa}."
+                        f"Canal registrado na REME-DF: {'; '.join(med_canonico.df_channels)}. "
+                        "Confirme as condições de atendimento com o serviço."
+                        if med_canonico.df_channels
+                        else "Confirme na UBS de referência qual unidade atende esta apresentação."
                     )
+                elif route_str == "HOSPITALAR":
+                    via = CoverageRoute.HOSPITALAR
+                    local = "Consulte o serviço hospitalar responsável pelo atendimento."
                 else:
                     via = CoverageRoute.NAO_PADRONIZADO
                     local = "Consulte a gerência de assistência farmacêutica da UBS."
 
-                validade_dias = med_canonico.prescription_validity_days
-                data_limite = data_base + timedelta(days=validade_dias)
-                dias_restantes = max(0, (data_limite - hoje).days)
-                alerta_vencimento = dias_restantes <= 15
+                insumo = med_canonico.item_type == "supply"
+                validade_dias = None if insumo else med_canonico.prescription_validity_days
+                data_limite = (
+                    data_base + timedelta(days=validade_dias) if validade_dias is not None else None
+                )
+                dias_restantes = max(0, (data_limite - hoje).days) if data_limite else None
+                alerta_vencimento = dias_restantes is not None and dias_restantes <= 15
 
                 docs = list(med_canonico.required_documents or [])
-                if not docs:
+                if insumo:
+                    docs = ["Confira a documentação e os critérios do programa para este insumo."]
+                elif not docs:
                     if via == CoverageRoute.FARMACIA_POPULAR:
                         docs = [
                             "Receita médica válida com CRM legível",
@@ -116,11 +170,11 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                             "Documento oficial com foto e CPF",
                         ]
 
-                citacao = f"{med_canonico.source_id} — Portaria GM/MS nº 6.324/2024 / REME-DF"
+                citacao = f"{med_canonico.source_id} (p. {med_canonico.source_page})"
 
                 itens_roteiro.append(
                     ItemRoteiroCidadao(
-                        medicamento_ou_exame=item.nome_digitado,
+                        medicamento_ou_exame=nome,
                         principio_ativo_dcb=med_canonico.dcb_name.upper(),
                         via_retirada=via,
                         local_sugerido=local,
@@ -134,15 +188,28 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 )
             else:
                 # Consulta busca híbrida para itens não tabulados diretamente
-                hits = self.retriever.search(item.nome_digitado, top_k=1)
-                if hits:
+                with trace_operation("retrieval"):
+                    hits = (
+                        self.retriever.search(nome, top_k=1)
+                        if not (dcb or forma or dose_ambigua)
+                        else []
+                    )
+                if dose:
+                    # Evidência textual genérica não confirma uma concentração fora do catálogo.
+                    hits = [hit for hit in hits if hit.route_category == "SISREG_EXAME_CONSULTA"]
+                if hits and hits[0].route_category in {
+                    "SISREG_EXAME_CONSULTA",
+                    "ALTO_CUSTO_CEAF",
+                    "FARMACIA_POPULAR",
+                    "UBS_ATENCAO_PRIMARIA",
+                }:
                     hit = hits[0]
                     cat = hit.route_category
                     if cat == "SISREG_EXAME_CONSULTA":
                         via = CoverageRoute.SISREG_EXAME_CONSULTA
                         local = (
                             f"Regulação Ambulatorial / SISREG III na UBS ou "
-                            f"Policlínica Regional de {request.regiao_administrativa}."
+                            f"Policlínica Regional de {regiao}."
                         )
                         docs = [
                             "Pedido médico com CID-10 e justificativa clínica",
@@ -166,10 +233,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                         val_dias = 90
                     elif cat == "FARMACIA_POPULAR":
                         via = CoverageRoute.FARMACIA_POPULAR
-                        local = (
-                            f"Drogarias credenciadas ao Farmácia Popular em "
-                            f"{request.regiao_administrativa}."
-                        )
+                        local = f"Drogarias credenciadas ao Farmácia Popular em {regiao}."
                         docs = [
                             "Receita médica válida com CRM legível",
                             "Documento oficial com foto",
@@ -179,8 +243,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                     else:
                         via = CoverageRoute.UBS_REME_DF
                         local = (
-                            f"Farmácia da Unidade Básica de Saúde (UBS) de referência "
-                            f"em {request.regiao_administrativa}."
+                            f"Farmácia da Unidade Básica de Saúde (UBS) de referência em {regiao}."
                         )
                         docs = [
                             "Receita médica válida",
@@ -193,31 +256,33 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                     d_restantes = max(0, (dt_limite - hoje).days)
                     itens_roteiro.append(
                         ItemRoteiroCidadao(
-                            medicamento_ou_exame=item.nome_digitado,
+                            medicamento_ou_exame=nome,
                             principio_ativo_dcb=hit.matched_dcb.upper()
                             if hit.matched_dcb
-                            else item.nome_digitado.upper(),
+                            else nome.upper(),
                             via_retirada=via,
                             local_sugerido=local,
                             o_que_levar=docs,
                             dias_validade_receita=val_dias,
                             data_limite_validade=dt_limite,
                             dias_restantes=d_restantes,
-                            alerta_vencimento_proximo=False,
+                            alerta_vencimento_proximo=d_restantes <= 15,
                             citacao_normativa=f"{hit.document_title} (Pág. {hit.page_number})",
                         )
                     )
                 else:
                     itens_roteiro.append(
                         ItemRoteiroCidadao(
-                            medicamento_ou_exame=item.nome_digitado,
-                            principio_ativo_dcb=item.nome_digitado.upper(),
+                            medicamento_ou_exame=nome,
+                            principio_ativo_dcb=nome.upper(),
                             via_retirada=CoverageRoute.NAO_PADRONIZADO,
-                            local_sugerido="Item não localizado na RENAME 2024 ou REME-DF.",
-                            o_que_levar=["Receita médica"],
-                            dias_validade_receita=30,
-                            data_limite_validade=data_base + timedelta(days=30),
-                            dias_restantes=max(0, (data_base + timedelta(days=30) - hoje).days),
+                            local_sugerido=(
+                                "Apresentação ou cobertura não confirmada no catálogo consultado."
+                            ),
+                            o_que_levar=[],
+                            dias_validade_receita=None,
+                            data_limite_validade=None,
+                            dias_restantes=None,
                             alerta_vencimento_proximo=False,
                             citacao_normativa=(
                                 "Sem cobertura de gratuidade localizada nas relações públicas."
@@ -235,19 +300,15 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         )
 
         partes: list[str] = [
-            f"Auditamos {len(itens_roteiro)} item(ns) da sua receita para a região de "
-            f"{request.regiao_administrativa}."
+            f"Auditamos {len(itens_roteiro)} item(ns) da sua receita para a região de {regiao}."
         ]
         if total_pfpb > 0:
             partes.append(
-                f"Você pode retirar {total_pfpb} remédio(s) de graça diretamente na "
-                "Farmácia Popular (drogarias privadas credenciadas com seu CPF)."
+                f"{total_pfpb} item(ns) constam no elenco do Farmácia Popular. "
+                "Confira os critérios de acesso de cada item."
             )
         if total_ubs > 0:
-            partes.append(
-                f"{total_ubs} remédio(s) são entregues gratuitamente na farmácia da "
-                "sua Unidade Básica de Saúde (UBS)."
-            )
+            partes.append(f"Para {total_ubs} item(ns), confira o canal de atendimento no roteiro.")
         if total_ceaf > 0:
             partes.append(
                 f"{total_ceaf} medicamento(s) fazem parte do Componente de Alto Custo (CEAF) "
@@ -258,7 +319,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
         return CitizenGuidanceCard(
             sucesso=True,
-            regiao_administrativa=request.regiao_administrativa,
+            regiao_administrativa=regiao,
             itens_auditados=itens_roteiro,
             resumo_acolhedor=resumo,
             solicitou_automedicacao=False,

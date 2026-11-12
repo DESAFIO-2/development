@@ -19,7 +19,9 @@ MAX_CARACTERES = {"texto": 2_000, "pdf": 20_000, "voz": 2_000}
 logger = logging.getLogger("app.seguranca")
 
 # Hash das regras: diz no log e no MLflow qual versão do detector decidiu.
-VERSAO_REGRAS = hashlib.sha256((Path(__file__).parent / "injecao.py").read_bytes()).hexdigest()[:12]
+VERSAO_REGRAS = hashlib.sha256(
+    (Path(__file__).parent / "injecao.py").read_bytes().replace(b"\r\n", b"\n")
+).hexdigest()[:12]
 
 
 class Canal(StrEnum):

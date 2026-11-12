@@ -11,6 +11,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from app.seguranca.esteira import Canal, inspecionar_entrada
+
 
 def _normalizar(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
@@ -97,7 +99,8 @@ class ClinicalGuardrail:
     )
 
     def inspecionar(self, pergunta: str) -> ClinicalCheckResult:
-        """Avalia se a pergunta do usuário deve ser bloqueada."""
+        """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
+        check_injecao = inspecionar_entrada(pergunta, Canal.TEXTO)
         norm = _normalizar(pergunta)
 
         tem_emergencia = any(flag in norm for flag in self._EMERGENCY_FLAGS)
@@ -138,6 +141,19 @@ class ClinicalGuardrail:
                         alerta_emergencia=tem_emergencia,
                         mensagem_acolhedora=msg,
                     )
+
+        if check_injecao.bloqueado:
+            return ClinicalCheckResult(
+                bloqueado=True,
+                motivo="PROMPT_INJECTION",
+                alerta_emergencia=tem_emergencia,
+                mensagem_acolhedora=(
+                    "Aviso de Segurança (Preservação do Ato Médico — Lei nº 12.842/2013): "
+                    "A solicitação contém instruções incompatíveis com o escopo de navegação "
+                    "administrativa do SUS Cidadão. Informe apenas o nome do medicamento ou "
+                    "exame prescrito para consultar as rotas oficiais de acesso gratuito."
+                ),
+            )
 
         return ClinicalCheckResult(
             bloqueado=False,

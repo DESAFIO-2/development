@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/DESAFIO-2/engenharia-dados.git",
+  "commit": "b530b38861c2d59ab0ee29d3c4e033356cacd98c",
+  "release_path": "data/releases/corpus-consolidado-v5-aprovado-2026-11-10",
+  "release_version": "corpus-consolidado-v5-aprovado-2026-11-10",
+  "schema_version": "consolidated-release-v2",
+  "release_manifest_sha256": "70ae21fe0dd88685aadda826acaf379096a0970e035c11645bb8ec2c9e9c8144",
+  "approval_scope": "Consulta de presença de apresentações e insumos nas edições F01, F03 e F04, com proveniência e evidência literal.",
+  "source_files_sha256": {
+    "catalog.jsonl": "3b72209a7793ce768ccc58392cee626828ae7f134664e97704b440982b2b6530",
+    "domain_review.json": "c65f7cb982b5bd3f88a0b909074f07289e1373ae8bd589d21c448ef2ba85fd5f",
+    "evidencias.jsonl": "4c27b7a28bd7d6333b8c2888c22656a52d8bb62734ec0505d4e033a998323817",
+    "exclusions.jsonl": "fcd2fa50a461109fc4759fa2bbe4f7f51b4e652c166f6cdec4439b7efe225383",
+    "f03_descriptions.json": "5c166ff9dfa10900bd8ff0dfa48f1cbc25cbafe75b52281b703eea6250d1dab7",
+    "occurrences.jsonl": "b7d364d406b39ed83d645ff81c560333bc0ca8a7fae6a52e53e4a75be59148c8",
+    "quality_report.json": "1fa349c82db635b0d673fc2924529da03747756b191e527168c25e7cd8903b47"
+  },
+  "staging_sha256": "80a1d4bdd750ae1249d42f4d2bb06a4ca00c8c0941addb65b8faab72f0c7e68e",
+  "excluded_occurrences": [
+    {
+      "occurrence_id": "occ-dd3666cce6867d6246aae72f",
+      "raw_text": "987.",
+      "reason": "Linha numerada sem item na célula DESCRIÇÃO; excluída da publicação",
+      "source": {
+        "page": 55,
+        "sha256": "299ff632a4e55d1dabbc953dc9c9e09f1cf6bbe2cabef8bf45fec5fbd5139fb6",
+        "source_id": "F03",
+        "url": "https://www.saude.df.gov.br/documents/d/saude/reme_df___29_10_2026___final-pdf",
+        "version": "REME-DF 2026-10-29"
+      },
+      "source_row_number": 987
+    }
+  ]
+}
