@@ -37,6 +37,8 @@ jobs:
         run: make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
       - name: Smoke sintético do protocolo Semana 3 (não mede LLM)
         run: make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
+      - name: Smoke da suíte de segurança dos 4 braços (não mede LLM)
+        run: make seguranca-smoke
       - name: Guardar relatórios do benchmark
         if: always()
         uses: actions/upload-artifact@v7
@@ -45,3 +47,4 @@ jobs:
           path: |
             evals/reports/rag_benchmark_golden_set_*.json
             evals/reports/smoke_sintetico_semana3_*/**
+            evals/reports/seguranca_smoke/seguranca.*
