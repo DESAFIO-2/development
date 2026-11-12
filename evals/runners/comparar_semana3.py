@@ -448,6 +448,12 @@ def main() -> int:
     parser.add_argument(
         "--limit", type=int, help="Piloto: primeiros N casos; nunca entrega completa"
     )
+    parser.add_argument(
+        "--variante",
+        choices=("padrao", "blindado"),
+        default="padrao",
+        help="blindado: mesmo protocolo + esteira de entrada e validação de saída (braço D)",
+    )
     args = parser.parse_args()
     if args.synthetic_smoke and args.provider:
         parser.error("Escolha simulação ou provedor real, nunca ambos")
@@ -463,6 +469,11 @@ def main() -> int:
             timeout_seconds=args.timeout,
         )
     prefixo = "smoke_sintetico_semana3" if args.synthetic_smoke else "coleta_real_semana3"
+    if args.variante == "blindado":
+        from evals.runners.variantes import GeradorBlindado
+
+        gerador = GeradorBlindado(gerador)
+        prefixo = f"{prefixo}_blindado"
     from uuid import uuid4
 
     destino = args.run_dir or args.output_dir / f"{prefixo}_{uuid4().hex}"
@@ -480,6 +491,10 @@ def main() -> int:
         "timeout": getattr(gerador, "timeout_seconds", None),
         "pilot": args.limit is not None,
     }
+    if args.variante != "padrao":
+        # Só entra no manifesto quando não é o padrão: o manifesto do braço padrão
+        # fica com as mesmas chaves de antes.
+        identity["variante"] = args.variante
     if identity["provider"] == "ollama_local":
         from evals.runners.local_preflight import ollama_identity
 
@@ -498,6 +513,7 @@ def main() -> int:
     relatorio["dataset"] = args.dataset.name
     relatorio["manifesto_experimento"] = identity
     relatorio["piloto"] = args.limit is not None
+    relatorio["variante"] = args.variante
     if identity["provider"] == "ollama_local":
         if (
             ollama_identity(str(identity["base_url"]), [str(identity["model"])])

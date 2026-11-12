@@ -20,6 +20,7 @@ def main() -> int:
     parser.add_argument("--embedding-model", default="bge-m3")
     parser.add_argument("--base-url", default="http://localhost:11434")
     parser.add_argument("--pilot", action="store_true")
+    parser.add_argument("--variante", choices=("padrao", "blindado"), default="padrao")
     args = parser.parse_args()
     directory = args.run_dir.resolve()
     started = time.perf_counter()
@@ -45,6 +46,8 @@ def main() -> int:
     ]
     if args.pilot:
         collect += ["--limit", "2"]
+    if args.variante != "padrao":
+        collect += ["--variante", args.variante]
     result = subprocess.run(collect, cwd=ROOT, check=False)
     if result.returncode:
         return result.returncode
