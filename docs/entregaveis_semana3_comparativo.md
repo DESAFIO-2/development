@@ -136,6 +136,13 @@ O braço com RAG teve Answer Relevancy maior nos 18 pares, com diferença
 média de 0,3512 na escala de 0 a 1. Os resultados descrevem o conjunto de
 desenvolvimento sob julgamento do mesmo modelo que gerou as respostas.
 
+Sete casos sem RAG (`GOLD-002`, `GOLD-007`, `GOLD-010`, `GOLD-017`, `GOLD-018`,
+`GOLD-019` e `GOLD-021`) receberam Answer Relevancy 0,0000. Nesses casos o modelo
+respondeu de forma genérica ou declarou não poder confirmar a informação, e o juiz
+marcou a resposta como evasiva (`noncommittal = 1`), o que zera a métrica no
+RAGAS 0.4.3. Os registros do juiz estão no pacote de evidências. Não houve falha
+de execução nesses pares.
+
 | Diagnóstico | Sem RAG | Com RAG |
 | --- | ---: | ---: |
 | Rota detectada pela heurística coincide com o rótulo | 7/18 | 18/18 |
