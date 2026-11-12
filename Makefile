@@ -5,6 +5,10 @@ COLETA_DIR ?=
 LOCAL_MODEL ?= semana3-qwen14
 RUN_DIR ?= evals/reports/quinta_coleta
 PILOT_DIR ?= evals/reports/quinta_piloto
+RUN_DIR_BLINDADO ?= evals/reports/coleta_blindada
+SEG_DIR ?= evals/reports/seguranca_variantes
+COLETA_PADRAO ?= $(RUN_DIR)
+QUATRO_DIR ?= evals/reports/quatro_bracos
 
 .PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
@@ -25,7 +29,11 @@ help:
 	@echo "  make compare-ollama - Estágio 1: Coleta pareada via Ollama local (MODEL=qwen2.5:14b)"
 	@echo "  make eval-ragas     - Estágio 2: Avalia coleta real com RAGAS oficial (COLETA_DIR=...)"
 	@echo "  make compare-smoke  - Testa o protocolo com fixture sintética offline"
-	@echo "  make docker-build   - Constrói a imagem Docker do backend"
+	@echo "  make semana3-run-blindado  - Braço D: coleta + RAGAS com esteira de entrada e validação de saída"
+	@echo "  make seguranca-smoke       - Suíte de segurança dos 4 braços com fixture sintética (não mede LLM)"
+	@echo "  make seguranca-run         - Suíte de segurança dos 4 braços com o modelo local (LOCAL_MODEL)"
+	@echo "  make semana3-quatro-bracos - Tabela única dos 4 braços e braço escolhido (COLETA_PADRAO=...)"
+	@echo "  make docker-build  - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
 dev-install:
@@ -89,6 +97,20 @@ semana3-run:
 
 semana3-finalize:
 	uv run --project evals python evals/runners/avaliar_ragas_oficial.py --coleta-dir "$(RUN_DIR)" --consolidate-only
+
+.PHONY: semana3-run-blindado seguranca-smoke seguranca-run semana3-quatro-bracos
+
+semana3-run-blindado:
+	uv run --project backend python evals/runners/semana3_local.py --variante blindado --run-dir "$(RUN_DIR_BLINDADO)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
+
+seguranca-smoke:
+	uv run --project backend python evals/runners/suite_seguranca.py --synthetic-smoke --saida-dir evals/reports/seguranca_smoke
+
+seguranca-run:
+	uv run --project backend python evals/runners/suite_seguranca.py --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR)"
+
+semana3-quatro-bracos:
+	uv run --project backend python evals/runners/consolidar_quatro_bracos.py --coleta-padrao "$(COLETA_PADRAO)" --coleta-blindada "$(RUN_DIR_BLINDADO)" --seguranca "$(SEG_DIR)/seguranca.json" --saida-dir "$(QUATRO_DIR)"
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .
