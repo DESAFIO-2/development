@@ -1,4 +1,4 @@
-> Atualização de 11/11/2026: este registro contém resultados históricos da portação.
+> Atualizações de 11/11/2026 e 12/11/2026: este registro contém resultados históricos da portação.
 > Para o protocolo corrigido e a retirada dos resultados sintéticos como evidência científica,
 > consulte [o entregável atualizado](entregaveis_semana3_comparativo.md) e o ADR 0004.
 
@@ -17,7 +17,7 @@ A API FastAPI carrega o catálogo consolidado e os chunks normativos locais na i
 | Guardrail clínico | Recall de bloqueio de 100% e falso bloqueio de 0% no dataset versionado. |
 | Golden Set v1 | 16 casos, 100% em Hit@3, Recall@3, roteamento, bloqueio e abstenção. MRR de 1,0. |
 | Golden Set v2 | 22 casos, 18/18 (100%) no roteamento positivo, 100% em Hit@3, Recall@3, bloqueio e abstenção. MRR de 1,0. |
-| Comparativo LLM × RAG | 22 casos pareados (`comparar_semana3.py`): roteamento subiu de 16,67% (sem RAG) para 100,00% (com RAG), alucinação factual caiu de 77,27% para 0,00% e Faithfulness subiu de 0,1780 para 0,9754. |
+| Comparativo LLM × RAG | ~~Resultados de `9912090` produzidos por respostas sintéticas~~, retirados pelo ADR 0004. Coleta real de 12/11/2026 (`semana3-qwen14`, 18 pares de LLM): Faithfulness 0,8698 (meta 0,92, reprovado), Answer Relevancy de 0,3239 sem RAG para 0,6751 com RAG (meta 0,88, reprovado), Context Recall 0,9491 e Context Precision 1,0000 (aprovados). Revisão factual humana pendente. Ver o [entregável atualizado](entregaveis_semana3_comparativo.md#execução-local-de-12112026). |
 | Docker | O Dockerfile inclui o corpus e a CI testa o carregamento da imagem. O daemon local estava indisponível para executar o build. |
 
 O benchmark usa a pergunta original, mede a rota do primeiro cartão e registra as divergências por ID. Consultas com vários itens precisam de um fixture estruturado com a rota esperada por apresentação para medir a cobertura integral. A aprovação exige todos os critérios determinísticos da spec. O v2 fica informativo na CI enquanto a divergência abaixo estiver aberta.
