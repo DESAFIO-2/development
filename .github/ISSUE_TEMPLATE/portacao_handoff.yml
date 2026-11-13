@@ -1,0 +1,76 @@
+name: Portação / Handoff entre Repositórios
+description: Passagem de bastão rastreável de dados, modelos, scripts ou releases (ex. engenharia-dados -> development).
+title: "[Portação] "
+labels:
+  - portacao
+  - triagem
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Template alinhado ao [Runbook de Portações (`docs/runbooks/portacoes.md`)](https://github.com/DESAFIO-2/development/blob/main/docs/runbooks/portacoes.md).
+        **Importante:** não execute nem promova dados externos antes de fixar o SHA de origem e registrar a decisão por artefato.
+
+  - type: dropdown
+    id: origem_repo
+    attributes:
+      label: Repositório de origem
+      options:
+        - DESAFIO-2/engenharia-dados
+        - DESAFIO-2/Data-Science
+        - Branch interna de DESAFIO-2/development
+        - Outro
+    validations:
+      required: true
+
+  - type: input
+    id: origem_sha
+    attributes:
+      label: Branch/Tag e SHA imutável de origem + SHA da última portação
+      description: Informe exatamente o commit SHA de origem e o SHA base da portação anterior (ex. b530b38).
+      placeholder: "Origem: main @ <SHA-40-chars> | Última portação: <SHA>"
+    validations:
+      required: true
+
+  - type: input
+    id: destino_branch
+    attributes:
+      label: Branch de destino em development
+      placeholder: "Ex.: feat/port-corpus-v9"
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisao_artefatos
+    attributes:
+      label: Decisão por artefato (Importar, Adaptar, Referenciar ou Adiar)
+      description: Liste cada artefato da origem com sua decisão e justificativa.
+      value: |
+        | Artefato / Caminho | Decisão | Condição / Observação |
+        | --- | --- | --- |
+        |  | Importar / Adaptar / Referenciar / Adiar |  |
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema_hashes
+    attributes:
+      label: Versão de schema, manifestos, hashes e escopo de aprovação
+      description: Registre versão do release, SHA-256 dos arquivos e restrições de uso (ex. presença vs. estoque/elegibilidade).
+      placeholder: "Versão: ... | release.json sha256: ... | Limitações: ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: validacao_reversao
+    attributes:
+      label: Validação no consumidor e plano de reversão
+      description: Quais testes/benchmarks rodaram antes e depois no destino e como reverter com segurança.
+      value: |
+        **Consumidores afetados:**
+        **Validação (antes/depois):**
+        - [ ] `make lint` e `make test`
+        - [ ] Golden Sets v1 e v2 + startup/autocomplete/auditoria
+        **Procedimento de reversão:**
+    validations:
+      required: true
