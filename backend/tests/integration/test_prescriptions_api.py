@@ -9,6 +9,38 @@ client = TestClient(app)
 
 
 @pytest.mark.parametrize(
+    ("pergunta", "permitido"),
+    [
+        ("qual a validade da receita e posso dobrar a dose do remédio", False),
+        ("esqueci a receita e posso substituir o remédio por outro", False),
+        ("não tenho dor no peito, só quero retirar losartana", True),
+        ("não estou com dor no peito, quero retirar losartana", True),
+        ("onde retiro losartana para paciente com histórico de infarto", True),
+        ("eu tenho histórico de infarto, onde retiro losartana?", True),
+        ("não estou com infarto, onde retiro losartana?", True),
+        ("histórico de infarto e agora estou com dor no peito", False),
+        ("não tenho receita e tenho dor no peito", False),
+    ],
+)
+def test_api_escopo_clinico_em_pergunta_adicional(pergunta: str, permitido: bool) -> None:
+    with TestClient(app) as local_client:
+        response = local_client.post(
+            "/api/v1/prescriptions/audit",
+            json={
+                "itens": [{"nome_digitado": "losartana potássica 50 mg"}],
+                "pergunta_adicional": pergunta,
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sucesso"] is permitido
+    if permitido:
+        assert data["itens"][0]["via_retirada"] == "FARMACIA_POPULAR"
+    else:
+        assert data["itens"] == []
+
+
+@pytest.mark.parametrize(
     "nome",
     [
         "losartana 50 mg + 999 mEq",

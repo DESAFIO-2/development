@@ -18,7 +18,7 @@ ClinicalCheckResult = ClinicalCheckDTO
 
 def _normalizar(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
-    return " ".join(sem_acento.lower().split())
+    return "\n".join(" ".join(linha.split()) for linha in sem_acento.lower().splitlines())
 
 
 def _clausulas(texto_normalizado: str) -> list[str]:
@@ -51,18 +51,14 @@ _FAMILIAR_TERCEIRO = (
 class ClinicalGuardrail:
     """Validador composicional de segurança clínica e ética médica."""
 
-    # Contexto administrativo explícito que nunca deve ser bloqueado como clínica
+    # Remover apenas o gatilho ambíguo, nunca seu objeto ou verbos clínicos vizinhos.
+    # Validade de receita e preparo de exame não precisam de exceção às regras clínicas.
     _ADMINISTRATIVO_PERMITIDO: tuple[re.Pattern[str], ...] = (
-        re.compile(r"\b(?:que horas?|horario)\b(?:\W+\w+){0,4}?\W+\b(?:tomo|tomar)\b"),
+        re.compile(r"\b(?:que horas?|horario)(?: de| para)?(?= (?:eu )?(?:tomo|tomar)\b)"),
         re.compile(
-            r"\b(?:jejum|beber agua|preparo)\b(?:\W+\w+){0,5}?\W+"
-            r"\b(?:exame|hemograma|ultrassom|colesterol)\b"
+            r"\besqueci(?=(?: a| as| o| os| minha| minhas| meu| meus){0,2} "
+            r"(?:orientacoes|documentos?|receita)\b)"
         ),
-        re.compile(
-            r"\b(?:quantos? dias?|quando vence|renovar|renovacao|validade)\b"
-            r"(?:\W+\w+){0,5}?\W+\breceita\b"
-        ),
-        re.compile(r"\besqueci\b(?:\W+\w+){0,4}?\W+\b(?:orientac\w*|documentos?|receita)\b"),
     )
 
     # 1. Prescrição / Recomendação para sintoma ou alvo clínico
@@ -134,7 +130,8 @@ class ClinicalGuardrail:
             r"|pelos?\s+(?:meus?\s+)?sintomas?)\b"
         ),
         re.compile(
-            r"\b(?:eu\s+tenho|estou\s+com)\b(?:\W+\w+){0,5}?\W+"
+            r"(?<!nao )\b(?:eu\s+tenho|estou\s+com)\b"
+            r"(?!\s+(?:historico|historia|antecedente)\b)(?:\W+\w+){0,5}?\W+"
             r"\b(?:diabetes|dengue|covid|doenca|alergia|infeccao|anemia|infarto|avc|grave)\b"
         ),
         re.compile(
@@ -230,14 +227,40 @@ class ClinicalGuardrail:
         "tratamento."
     )
 
-    def _clausula_e_administrativa(self, clausula: str) -> bool:
-        return any(p.search(clausula) for p in self._ADMINISTRATIVO_PERMITIDO)
+    def _subclausulas_clinicas(self, texto: str) -> list[str]:
+        for pattern in self._ADMINISTRATIVO_PERMITIDO:
+            texto = pattern.sub(" ", texto)
+        return _clausulas(texto)
+
+    def _tem_emergencia_ativa(self, texto: str) -> bool:
+        """Negação/histórico devem estar ligados à ocorrência, não à frase inteira.
+
+        Regras conservadoras de escopo textual, não classificação ou triagem médica.
+        Listas negativas podem compartilhar a negação; antecedentes históricos só
+        qualificam a ocorrência imediatamente seguinte.
+        """
+        sinais = "|".join(re.escape(flag) for flag in self._EMERGENCY_FLAGS)
+        negacao = re.compile(
+            r"\b(?:nao(?: (?:tenho|sinto|apresento|estou com|esta com|tem|ha))?"
+            r"|sem|nega|negando|negativo para|ausencia de|nem) "
+            rf"(?:(?:{sinais})\s+(?:e|nem|ou)\s+)*$"
+        )
+        historico = re.compile(
+            r"\b(?:historico de|historia previa de|antecedente de|antecedentes de"
+            r"|historia pregressa de|ja teve|teve|sofreu)(?: um| uma)? $"
+        )
+        for trecho in re.split(r"[.?!;,\n]+|\b(?:mas|porem|contudo|entretanto|todavia)\b", texto):
+            for ocorrencia in re.finditer(rf"\b(?:{sinais})\b", trecho):
+                prefixo = trecho[: ocorrencia.start()]
+                if not negacao.search(prefixo) and not historico.search(prefixo):
+                    return True
+        return False
 
     def inspecionar(self, pergunta: str) -> ClinicalCheckDTO:
         """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
         check_injecao = inspecionar_entrada(pergunta, Canal.TEXTO)
         norm = _normalizar(pergunta)
-        if any(flag in norm for flag in self._EMERGENCY_FLAGS):
+        if self._tem_emergencia_ativa(norm):
             return ClinicalCheckDTO(
                 bloqueado=True,
                 motivo="EMERGENCIA_MEDICA",
@@ -245,7 +268,7 @@ class ClinicalGuardrail:
                 mensagem_acolhedora=self._MSG_EMERGENCIA,
             )
 
-        clausulas = _clausulas(norm) or [norm]
+        clausulas = self._subclausulas_clinicas(norm)
 
         todas_as_regras = (
             ("PRESCRICAO", self._PATTERNS_PRESCRICAO),
@@ -256,8 +279,6 @@ class ClinicalGuardrail:
         )
 
         for clausula in clausulas:
-            if self._clausula_e_administrativa(clausula):
-                continue
             for motivo, patterns in todas_as_regras:
                 if any(pattern.search(clausula) for pattern in patterns):
                     return ClinicalCheckDTO(

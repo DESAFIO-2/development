@@ -1,8 +1,12 @@
+import io
 import logging
+import zlib
 
 import pytest
+from pypdf import PdfReader
+from pypdf.generic import DictionaryObject, IndirectObject
 
-from app.seguranca import Canal, inspecionar_entrada
+from app.seguranca import Canal, arquivos, inspecionar_entrada
 from app.seguranca.arquivos import MAX_BYTES_PDF, validar_audio, validar_pdf
 from app.seguranca.esteira import delimitar_nao_confiavel
 from app.seguranca.texto import contar_invisiveis, forma_de_comparacao, limpar
@@ -147,23 +151,115 @@ def test_pdf_aa_e_encrypt_recusados(marcador: bytes, motivo: str) -> None:
     assert motivo in resultado.motivos
 
 
+def _pdf_objstm(
+    *,
+    profundidade: int = 0,
+    ativo: bool = False,
+    extra_catalogo: bytes = b"",
+    retorno: bool = False,
+) -> bytes:
+    """PDF 1.5 com objetos comprimidos e xref tipo 2 apontando para seu índice real."""
+    acao = b" /AA << /O << /S /JavaScript /JS (void 0) >> >>" if ativo else b""
+    objetos = [
+        b"<< /Type /Catalog /Pages 2 0 R " + extra_catalogo + b" >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        + (b"/Extra 4 0 R" if profundidade else acao)
+        + b" >>",
+    ]
+    for nivel in range(profundidade):
+        fim = b" /Extra 2 0 R" if retorno else acao
+        conteudo = f" /Extra {nivel + 5} 0 R".encode() if nivel + 1 < profundidade else fim
+        objetos.append(b"<<" + conteudo + b" >>")
+    corpo = bytearray()
+    indice = bytearray()
+    for numero, objeto in enumerate(objetos, 1):
+        indice.extend(f"{numero} {len(corpo)} ".encode())
+        corpo.extend(objeto + b"\n")
+    comprimido = zlib.compress(bytes(indice + corpo))
+    stream_id = len(objetos) + 1
+    xref_id = stream_id + 1
+    pdf = bytearray(b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n")
+    stream_offset = len(pdf)
+    pdf.extend(
+        f"{stream_id} 0 obj\n<< /Type /ObjStm /N {len(objetos)} /First {len(indice)} "
+        f"/Filter /FlateDecode /Length {len(comprimido)} >>\nstream\n".encode()
+        + comprimido
+        + b"\nendstream\nendobj\n"
+    )
+    xref_offset = len(pdf)
+    entradas = [(0, 0, 65535)]
+    entradas.extend((2, stream_id, i) for i in range(len(objetos)))
+    entradas.extend([(1, stream_offset, 0), (1, xref_offset, 0)])
+    xref = b"".join(bytes([tipo]) + a.to_bytes(4) + b.to_bytes(2) for tipo, a, b in entradas)
+    pdf.extend(
+        f"{xref_id} 0 obj\n<< /Type /XRef /Size {xref_id + 1} /Root 1 0 R "
+        f"/W [1 4 2] /Length {len(xref)} >>\nstream\n".encode()
+        + xref
+        + b"\nendstream\nendobj\n"
+        + f"startxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    return bytes(pdf)
+
+
 def test_pdf_com_objstm_comprimido_e_inspecionado() -> None:
-    import io
-
-    from pypdf import PdfWriter
-
-    writer = PdfWriter()
-    for _ in range(11):
-        writer.add_blank_page(width=200, height=200)
-    writer.compress_identical_objects()
-    buf = io.BytesIO()
-    writer.write(buf)
-    raw = buf.getvalue()
-    if b"/ObjStm" not in raw:
-        raw = raw.replace(b"%%EOF", b"/ObjStm\n%%EOF")
+    raw = _pdf_objstm(ativo=True)
+    assert b"/Type /ObjStm" in raw and b"/Type /XRef" in raw
+    assert b"/JavaScript" not in raw and b"/AA" not in raw
+    reader = PdfReader(io.BytesIO(raw), strict=True)
+    aa = reader.pages[0]["/AA"]
+    assert isinstance(aa, DictionaryObject)
+    acao = aa["/O"]
+    assert isinstance(acao, DictionaryObject)
+    assert str(acao["/S"]) == "/JavaScript"
     resultado = validar_pdf(raw)
     assert not resultado.aceito
-    assert "PDF_PAGINAS_DEMAIS" in resultado.motivos
+    assert "PDF_AA" in resultado.motivos
+
+
+def test_pdf_objstm_benigno_com_ciclo_de_paginas_aceito() -> None:
+    raw = _pdf_objstm()
+    assert len(PdfReader(io.BytesIO(raw), strict=True).pages) == 1
+    resultado = validar_pdf(raw)
+    assert resultado.aceito
+    assert resultado.alertas == ("PDF_OBJSTM",)
+
+
+def test_pdf_referencia_ja_inspecionada_nao_excede_profundidade() -> None:
+    # /Pages já inspecionado reaparece no nível 13; não há conteúdo novo a percorrer.
+    resultado = validar_pdf(_pdf_objstm(profundidade=8, retorno=True))
+    assert resultado.aceito
+
+
+@pytest.mark.parametrize("ativo", [False, True])
+def test_pdf_profundo_falha_fechada(ativo: bool) -> None:
+    raw = _pdf_objstm(profundidade=15, ativo=ativo)
+    assert len(PdfReader(io.BytesIO(raw), strict=True).pages) == 1
+    assert "PDF_ESTRUTURA_INCOMPLETA" in validar_pdf(raw).motivos
+
+
+@pytest.mark.parametrize("campo", [b"/Extra", b"/OpenAction"])
+def test_pdf_referencia_indireta_inexistente_falha_fechada(campo: bytes) -> None:
+    raw = _pdf_objstm(extra_catalogo=campo + b" 999 0 R")
+    assert "PDF_ESTRUTURA_INCOMPLETA" in validar_pdf(raw).motivos
+
+
+def test_pdf_orcamento_limita_tambem_fila(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(arquivos, "_MAX_OBJETOS_PDF", 32)
+    raw = _pdf_objstm(extra_catalogo=b"/Extra [" + b"0 " * 100 + b"]")
+    assert "PDF_ESTRUTURA_INCOMPLETA" in validar_pdf(raw).motivos
+
+
+def test_pdf_erro_ao_resolver_objeto_falha_fechada(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolver = arquivos._resolver
+
+    def falhar_no_extra(obj: object) -> object:
+        if isinstance(obj, IndirectObject) and obj.idnum == 4:
+            raise ValueError("objeto corrompido")
+        return resolver(obj)
+
+    monkeypatch.setattr(arquivos, "_resolver", falhar_no_extra)
+    assert "PDF_ESTRUTURA_INCOMPLETA" in validar_pdf(_pdf_objstm(profundidade=1)).motivos
 
 
 def test_pdf_grande_demais_recusado() -> None:

@@ -40,3 +40,10 @@ jobs:
           from app.api.routes.prescriptions import autocomplete_medications
           assert autocomplete_medications("losartana", 1).total_encontrados == 1
           '
+      - name: Validar servidor HTTP no container
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker logs sus-cidadao-smoke; docker rm -f sus-cidadao-smoke' EXIT
+          docker run -d --name sus-cidadao-smoke -p 127.0.0.1:8000:8000 sus-cidadao-backend:ci
+          python3 backend/tests/smoke_http.py --base-url http://127.0.0.1:8000

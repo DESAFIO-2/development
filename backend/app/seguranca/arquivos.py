@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import io
 import re
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
+from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, NullObject
 
 MAX_BYTES_PDF = 5 * 1024 * 1024
 MAX_PAGINAS_PDF = 10
@@ -82,16 +83,21 @@ def _nomes_pdf(conteudo: bytes) -> set[str]:
 
 def _resolver(obj: Any) -> Any:
     if isinstance(obj, IndirectObject):
-        return obj.get_object()
+        resolvido = obj.get_object()
+        if resolvido is None or isinstance(resolvido, NullObject):
+            raise PdfReadError("Referência indireta não resolvida")
+        return resolvido
     return obj
 
 
 def _inspecionar_open_action_estrutural(reader: PdfReader) -> tuple[bool, bool]:
     """Retorna (tem_open_action, bloquear_por_acao)."""
     root = _resolver(reader.trailer.get("/Root"))
-    if not isinstance(root, DictionaryObject) or "/OpenAction" not in root:
+    if not isinstance(root, DictionaryObject):
+        raise PdfReadError("Catálogo ausente ou inválido")
+    if "/OpenAction" not in root:
         return False, False
-    acao = _resolver(root["/OpenAction"])
+    acao = _resolver(root.get("/OpenAction"))
     # Destinos de navegação/zoom ([page_ref /Fit] ou /XYZ) são legítimos em PDFs clínicos.
     if isinstance(acao, ArrayObject):
         for item in acao:
@@ -111,38 +117,56 @@ def _inspecionar_open_action_estrutural(reader: PdfReader) -> tuple[bool, bool]:
     return True, True
 
 
-def _nomes_proibidos_estruturais(reader: PdfReader) -> set[str]:
-    """Varre objetos descomprimidos de forma limitada para pegar objetos ocultos em /ObjStm."""
+def _nomes_proibidos_estruturais(reader: PdfReader) -> tuple[set[str], bool]:
+    """BFS limitada; nenhuma interrupção da inspeção é interpretada como aprovação.
+
+    O orçamento inclui entradas enfileiradas, não apenas objetos já resolvidos.
+    Referências repetidas são descartadas antes de verificar a profundidade.
+    """
     encontrados: set[str] = set()
     proibidos_slash = {f"/{nome}" for nome in _PDF_PROIBIDOS}
-    visitados: set[int] = set()
-    fila: list[tuple[Any, int]] = [(reader.trailer, 0)]
-    passos = 0
+    visitados: set[tuple[int, int]] = set()
+    containers: set[int] = set()
+    fila: deque[tuple[Any, int]] = deque([(reader.trailer, 0)])
+    agendados = 1
+    incompleta = False
 
-    while fila and passos < _MAX_OBJETOS_PDF:
-        atual, profundidade = fila.pop()
-        if profundidade > _MAX_PROFUNDIDADE_PDF:
-            continue
-        passos += 1
+    while fila:
+        atual, profundidade = fila.popleft()
         if isinstance(atual, IndirectObject):
-            chave = (atual.idnum << 16) | (atual.generation & 0xFFFF)
+            chave = (atual.idnum, atual.generation)
             if chave in visitados:
                 continue
             visitados.add(chave)
             try:
-                atual = atual.get_object()
+                atual = _resolver(atual)
             except Exception:
+                incompleta = True
                 continue
+        if isinstance(atual, (DictionaryObject, ArrayObject)):
+            if id(atual) in containers:
+                continue
+            containers.add(id(atual))
+        if profundidade > _MAX_PROFUNDIDADE_PDF:
+            incompleta = True
+            continue
         if isinstance(atual, DictionaryObject):
-            for k, v in atual.items():
+            for k in atual:
                 k_str = str(k)
                 if k_str in proibidos_slash:
                     encontrados.add(f"PDF_{k_str.lstrip('/').upper()}")
-                fila.append((v, profundidade + 1))
+            filhos = iter(atual.values())
         elif isinstance(atual, ArrayObject):
-            for item in atual:
-                fila.append((item, profundidade + 1))
-    return encontrados
+            filhos = iter(atual)
+        else:
+            continue
+        for item in filhos:
+            if agendados >= _MAX_OBJETOS_PDF:
+                incompleta = True
+                break
+            fila.append((item, profundidade + 1))
+            agendados += 1
+    return encontrados, incompleta
 
 
 def validar_pdf(conteudo: bytes) -> ResultadoArquivo:
@@ -164,25 +188,26 @@ def validar_pdf(conteudo: bytes) -> ResultadoArquivo:
     exige_parser = "ObjStm" in nomes or "OpenAction" in nomes
     try:
         reader = PdfReader(io.BytesIO(conteudo), strict=False)
-    except (PdfReadError, Exception):
+    except Exception:
         if exige_parser:
             motivos_set.add("PDF_ESTRUTURA_INVALIDA")
     else:
         if reader.is_encrypted:
             motivos_set.add("PDF_ENCRYPT")
         else:
+            encontrados, incompleta = _nomes_proibidos_estruturais(reader)
+            motivos_set.update(encontrados)
             try:
-                if len(reader.pages) > MAX_PAGINAS_PDF:
-                    motivos_set.add("PDF_PAGINAS_DEMAIS")
-            except Exception:
-                if exige_parser:
-                    motivos_set.add("PDF_ESTRUTURA_INVALIDA")
-            if "OpenAction" in nomes:
                 _, bloquear_open_action = _inspecionar_open_action_estrutural(reader)
                 if bloquear_open_action:
                     motivos_set.add("PDF_OPENACTION_ACAO")
-            if "ObjStm" in nomes:
-                motivos_set.update(_nomes_proibidos_estruturais(reader))
+                # Não percorrer novamente uma árvore cujo orçamento já foi excedido.
+                if not incompleta and len(reader.pages) > MAX_PAGINAS_PDF:
+                    motivos_set.add("PDF_PAGINAS_DEMAIS")
+            except Exception:
+                incompleta = True
+            if incompleta:
+                motivos_set.add("PDF_ESTRUTURA_INCOMPLETA")
 
     motivos = tuple(sorted(motivos_set))
     alertas = tuple(sorted(alertas_set))

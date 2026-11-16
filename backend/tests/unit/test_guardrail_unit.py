@@ -1,3 +1,5 @@
+import pytest
+
 from app.application.ports import GuardrailPort
 from app.guardrails import LocalGuardrailAdapter
 from app.guardrails.clinical import ClinicalGuardrail, deve_bloquear
@@ -23,6 +25,82 @@ def test_clinical_guardrail_bloqueia_automedicacao() -> None:
 def test_deve_bloquear_funcao_alvo() -> None:
     assert deve_bloquear("Posso tomar dois comprimidos hoje?") is True
     assert deve_bloquear("Como renovar receita de remédio controlado?") is False
+
+
+@pytest.mark.parametrize("separador", [" e ", ", ", "? ", "\n"])
+@pytest.mark.parametrize("inverter", [False, True])
+@pytest.mark.parametrize(
+    ("administrativo", "clinico", "motivo"),
+    [
+        ("qual a validade da receita", "posso dobrar a dose do remédio", "DOSAGEM"),
+        ("esqueci a receita", "posso substituir o remédio por outro", "TROCA_TERAPEUTICA"),
+        ("preciso de jejum para exame", "posso aumentar a dose do remédio", "DOSAGEM"),
+    ],
+)
+def test_excecao_administrativa_nao_libera_pedido_clinico(
+    separador: str, inverter: bool, administrativo: str, clinico: str, motivo: str
+) -> None:
+    partes = [administrativo, clinico] if not inverter else [clinico, administrativo]
+    resultado = ClinicalGuardrail().inspecionar(separador.join(partes))
+    assert resultado.bloqueado
+    assert resultado.motivo == motivo
+
+
+@pytest.mark.parametrize(
+    "pergunta",
+    [
+        "que horas tomo dois comprimidos de uma vez",
+        "esqueci de dobrar a dose da receita",
+        "qual a validade para dobrar a dose da receita",
+        "posso dobrar, por favor, a dose do remédio",
+        "posso substituir o jejum para exame por remédio",
+        "posso substituir a validade da receita por remédio",
+    ],
+)
+def test_excecao_nao_apaga_verbo_ou_objeto_clinico(pergunta: str) -> None:
+    assert ClinicalGuardrail().inspecionar(pergunta).bloqueado
+
+
+@pytest.mark.parametrize(
+    "pergunta",
+    [
+        "quantos dias vale a receita de losartana?",
+        "esqueci a receita, onde tiro outra?",
+        "que horas tomo meu próximo remédio?",
+        "não tenho dor no peito, só quero retirar losartana",
+        "não estou com dor no peito, quero retirar losartana",
+        "onde retiro losartana para paciente com histórico de infarto",
+        "não tenho dor no peito nem falta de ar",
+        "sem dor no peito ou falta de ar, onde retiro losartana?",
+        "paciente já teve infarto, onde retiro losartana?",
+        "eu tenho histórico de infarto, onde retiro losartana?",
+        "não estou com infarto, onde retiro losartana?",
+    ],
+)
+def test_administracao_negacao_e_historico_permitidos(pergunta: str) -> None:
+    resultado = ClinicalGuardrail().inspecionar(pergunta)
+    assert not resultado.bloqueado
+    assert not resultado.alerta_emergencia
+
+
+@pytest.mark.parametrize(
+    "pergunta",
+    [
+        "tenho histórico de infarto e agora estou com dor no peito",
+        "não tenho falta de ar, mas estou com dor no peito",
+        "não tenho receita e tenho dor no peito",
+        "tenho histórico de infarto e falta de ar agora",
+        "não tenho dor no peito e estou com falta de ar",
+        "não tenho dor no peito\nestou com falta de ar",
+        "não apenas dor no peito, também falta de ar",
+        "não sei se é infarto",
+    ],
+)
+def test_sintoma_positivo_preserva_prioridade_de_emergencia(pergunta: str) -> None:
+    resultado = ClinicalGuardrail().inspecionar(pergunta)
+    assert resultado.bloqueado
+    assert resultado.alerta_emergencia
+    assert resultado.motivo == "EMERGENCIA_MEDICA"
 
 
 def test_clinical_guardrail_emergencia_prioritaria_e_sem_falso_positivo() -> None:
