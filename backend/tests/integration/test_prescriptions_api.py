@@ -9,6 +9,38 @@ client = TestClient(app)
 
 
 @pytest.mark.parametrize(
+    ("pergunta", "permitido"),
+    [
+        ("qual a validade da receita e posso dobrar a dose do remédio", False),
+        ("esqueci a receita e posso substituir o remédio por outro", False),
+        ("não tenho dor no peito, só quero retirar losartana", True),
+        ("não estou com dor no peito, quero retirar losartana", True),
+        ("onde retiro losartana para paciente com histórico de infarto", True),
+        ("eu tenho histórico de infarto, onde retiro losartana?", True),
+        ("não estou com infarto, onde retiro losartana?", True),
+        ("histórico de infarto e agora estou com dor no peito", False),
+        ("não tenho receita e tenho dor no peito", False),
+    ],
+)
+def test_api_escopo_clinico_em_pergunta_adicional(pergunta: str, permitido: bool) -> None:
+    with TestClient(app) as local_client:
+        response = local_client.post(
+            "/api/v1/prescriptions/audit",
+            json={
+                "itens": [{"nome_digitado": "losartana potássica 50 mg"}],
+                "pergunta_adicional": pergunta,
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sucesso"] is permitido
+    if permitido:
+        assert data["itens"][0]["via_retirada"] == "FARMACIA_POPULAR"
+    else:
+        assert data["itens"] == []
+
+
+@pytest.mark.parametrize(
     "nome",
     [
         "losartana 50 mg + 999 mEq",
@@ -245,3 +277,29 @@ def test_api_valida_composicao_completa_sem_somar_doses() -> None:
     assert a["via_retirada"] == "FARMACIA_ALTO_CUSTO"
     assert b["via_retirada"] == "UBS_REME_DF"
     assert c["via_retirada"] == "NAO_PADRONIZADO"
+    assert c["principio_ativo_dcb"] == "NAO_IDENTIFICADO"
+
+
+def test_api_lifespan_aquece_container_com_matcher_unico() -> None:
+    with TestClient(app) as local_client:
+        services = local_client.app.state.services  # type: ignore[attr-defined]
+        assert services.audit_use_case.tabular_matcher is services.hybrid_retriever.tabular
+        assert local_client.get("/health").status_code == 200
+
+
+def test_api_unifica_imunoglobulina_anti_hepatite_b_milhar_para_hospitalar() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={
+            "itens": [
+                {"nome_digitado": "imunoglobulina humana anti-hepatite b 1000 UI"},
+                {"nome_digitado": "imunoglobulina humana anti-hepatite b 1.000 UI"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    a, b = response.json()["itens"]
+    assert a["via_retirada"] == "HOSPITALAR"
+    assert b["via_retirada"] == "HOSPITALAR"
+    assert a["principio_ativo_dcb"] == "IMUNOGLOBULINA HUMANA ANTI-HEPATITE B"
+    assert b["principio_ativo_dcb"] == "IMUNOGLOBULINA HUMANA ANTI-HEPATITE B"

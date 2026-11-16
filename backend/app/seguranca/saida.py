@@ -3,14 +3,13 @@
 Complementa a esteira de entrada (OWASP LLM01) com três regras determinísticas:
 
 - PII na resposta (OWASP LLM02 Sensitive Information Disclosure): CPF, Cartão SUS,
-  telefone, e-mail ou nome de paciente, com os mesmos padrões do `PIIMasker`.
-- Orientação de dose ou de troca de remédio (OWASP LLM05 Improper Output Handling):
-  isso é ato médico (Lei nº 12.842/2013). Frases negadas ("não troque o remédio")
-  são avisos de segurança e passam.
+  RG, CRM, CID-10, CEP, endereço, telefone, e-mail ou nome de paciente, com os
+  mesmos padrões do `PIIMasker`.
+- Orientação de dose, fracionamento, compartilhamento ou troca de remédio
+  (OWASP LLM05 Improper Output Handling): ato médico (Lei nº 12.842/2013).
+  Frases negadas na mesma cláusula ("não troque o remédio") passam como aviso.
 - Citação de documento fora do contexto (OWASP LLM09 Misinformation): toda citação
   `Fonte: ID | título` precisa apontar um chunk que a busca realmente devolveu.
-  Esta regra NÃO confere título e página (isso é a validação estrita do comparativo)
-  e citação válida não prova veracidade factual (diretrizes, Regra 3).
 
 O log registra só a decisão e os motivos, nunca o texto (LGPD).
 """
@@ -28,19 +27,23 @@ from app.seguranca.texto import limpar
 
 logger = logging.getLogger("app.seguranca")
 
-_ACAO = r"\b(?:dobr|aument|diminu|reduz|suspend|interromp|substitu|troc|troqu)\w*"
+_ACAO = (
+    r"\b(?:dobr|aument|diminu|reduz|suspend|interromp|substitu|troc|troqu"
+    r"|part|quebr|divid|cort|compartilh|emprest)\w*"
+)
 _ALVO = (
     r"(?:a dose|as doses|a dosagem|o remedio|os remedios|o medicamento|os medicamentos"
-    r"|a medicacao|o comprimido|os comprimidos)"
+    r"|a medicacao|o comprimido|os comprimidos|a capsula|as capsulas|o xarope)"
 )
 _POSOLOGIA = re.compile(
-    rf"{_ACAO}(?:\W+\w+){{0,2}}?\W+{_ALVO}"
+    rf"{_ACAO}(?:\W+\w+){{0,3}}?\W+{_ALVO}"
     r"|\bde \d+ em \d+ ?h(?:oras)?\b"
     r"|\ba cada \d+ ?h(?:oras)?\b"
     r"|\b\d+ ?(?:x|vezes) (?:ao|por) dia\b"
     r"|\btom[ea]r? \d+ (?:comprimidos?|capsulas?|gotas|doses?)\b"
 )
-# "não", "nunca", "sem orientação" etc. logo antes transformam a frase em aviso.
+# Delimitador de oração ou conjunção adversativa impede que "não" inicial libere "mas tome 2".
+_FRONTEIRA_CLAUSULA = re.compile(r"(?:[.;!?]|\b(?:mas|porem|contudo|entretanto|todavia)\b)")
 _NEGACAO = re.compile(r"\b(?:nao|nunca|jamais|evite|sem orientacao|sem falar)\b[^.;!?]{0,40}$")
 # Cada documento citado: "Fonte: <ID> | <título>". "[Fonte: Conhecimento Geral]" não
 # afirma documento nenhum e por isso não é tratado como citação.
@@ -63,9 +66,15 @@ def _forma_para_regras(texto: str) -> str:
 
 def _orienta_posologia(texto: str) -> bool:
     forma = _forma_para_regras(texto)
-    return any(
-        not _NEGACAO.search(forma[: achado.start()]) for achado in _POSOLOGIA.finditer(forma)
-    )
+    for achado in _POSOLOGIA.finditer(forma):
+        prefixo = forma[: achado.start()]
+        ultimo_corte = 0
+        for fronteira in _FRONTEIRA_CLAUSULA.finditer(prefixo):
+            ultimo_corte = fronteira.end()
+        clausula_anterior = prefixo[ultimo_corte:]
+        if not _NEGACAO.search(clausula_anterior):
+            return True
+    return False
 
 
 def citacoes_fora_do_contexto(texto: str, ids_contexto: Collection[str]) -> list[str]:

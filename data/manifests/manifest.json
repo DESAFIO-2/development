@@ -1,18 +1,22 @@
 {
-  "manifest_version": "2026.3.1",
-  "generated_at_utc": "2026-11-10T20:32:45.236833+00:00",
-  "engineering_source": "corpus-consolidado-v5-aprovado-2026-11-10",
-  "engineering_source_commit": "b530b38861c2d59ab0ee29d3c4e033356cacd98c",
-  "engineering_source_manifest_sha256": "70ae21fe0dd88685aadda826acaf379096a0970e035c11645bb8ec2c9e9c8144",
-  "canonical_medications_sha256": "b361d73d28c997b6aec7c9ac223a104387c70aaa66136cee02cfaeb28836358c",
+  "manifest_version": "2026.4.0",
+  "generated_at_utc": "2026-11-16T15:55:31.511841+00:00",
+  "engineering_source": "corpus-consolidado-v9-aprovado-2026-11-12",
+  "engineering_source_commit": "8d76f923354a4707810be38e238a8a3ea035554e",
+  "engineering_source_manifest_sha256": "a31a695cca85237aa94e52b6fa3211ef140361f0ac9cd47b9985d93f6e0761ae",
+  "canonical_medications_sha256": "47099cfcdf9b890ecee27ae9912efbe196b4ebc5196d64b7e5ace68f0457429a",
   "normative_chunks_sha256": "4e69c4c4fba158905f6bee19e5dd79d9db7032e5f3679c04ca2a6744f9801c3d",
-  "unified_pdf_chunks_sha256": "db80640c11044aaa46d9bad16e3fc66b2df1c089e48e0dc42a4a36968ebf7494",
-  "curated_occurrences_sha256": "80a1d4bdd750ae1249d42f4d2bb06a4ca00c8c0941addb65b8faab72f0c7e68e",
-  "combined_sha256": "7e5b4ba7254dacc2503b0d4667348f9bca77c3c09abdae7e3ca806df2833e250",
+  "evidence_chunks_v2_sha256": "458749503f20cb5bd9a218a1021320dec226fbcabe6bfb9ef76e2df9da8348ba",
+  "evidence_chunks_v2_recipe": "one-evidence-v2:structured-fields;F03-description-cell;F04-indication;source-provenance;no-old-chunks",
+  "evidence_chunks_v2_recipe_sha256": "6bd5a945bfeccf21b8bdfabb2e2d009e4c884a3888632819ff2ab04b5513b199",
+  "curated_occurrences_sha256": "d6fb343e6fbeea8cf33fdc91473ddd85231d20c1ad57c801f39a25c2722a3e7f",
+  "curated_evidencias_sha256": "95319e1a7ec6d31a2683a64fa62bc0f3960eaddba15c24dcac20560e1484a65f",
+  "combined_sha256": "7ff7a7313cccdbf549eaa774ffacbd552fdf744d8f301abf5523e5f14d8e97ed",
   "record_counts": {
-    "canonical_medications": 1787,
+    "canonical_medications": 1775,
     "normative_chunks": 20,
-    "unified_pdf_chunks": 70,
-    "curated_occurrences_f01_f03_f04": 2114
+    "evidence_chunks_v2": 2114,
+    "curated_occurrences_f01_f03_f04": 2114,
+    "curated_evidencias_f01_f03_f04": 2114
   }
 }

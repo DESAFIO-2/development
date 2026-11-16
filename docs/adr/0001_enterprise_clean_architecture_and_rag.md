@@ -1,6 +1,6 @@
 # ADR 0001: Adoção de Clean Architecture (src-layout) e Recuperação Híbrida para o RAG do SUS Cidadão
 
-* **Status:** Aprovado
+* **Status:** Aprovado *(Nota de Atualização Pré-Semana 4 — 2026-11-16: na implementação real, o código reside em `backend/app/`, o cliente de interface cidadã foi definido em React Native/Expo pelo [ADR 0002](0002_mobile_first_react_native_client.md) em vez de Streamlit, e o runtime ativo utiliza recuperação determinística tabular DCB + lexical BM25/TF-IDF sem ChromaDB/embeddings densos conforme evidenciado nos benchmarks da Semana 3.)*
 * **Data:** 2026-11-03
 * **Decisores:** Samuel de Souza Rodrigues (AI Engineer / Tech Lead), Mickeias Paiva (Arquiteto de Software), Marlon Marques (Cientista de Dados), Jhiovana Ribeiro (Engenheira de Dados), Tayrine Zitkoski (MLOps/LLMOps)
 

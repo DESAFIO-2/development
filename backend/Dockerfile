@@ -20,7 +20,7 @@ USER appuser
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 CMD ["fastapi", "run", "app/main.py", "--port", "8000"]

@@ -1,3 +1,4 @@
+from app.guardrails.adapter import LocalGuardrailAdapter
 from app.guardrails.clinical import (
     ClinicalCheckResult,
     ClinicalGuardrail,
@@ -6,6 +7,7 @@ from app.guardrails.clinical import (
 from app.guardrails.pii import PIIMasker, PIIMaskingResult, mascarar_pii
 
 __all__ = [
+    "LocalGuardrailAdapter",
     "ClinicalGuardrail",
     "ClinicalCheckResult",
     "deve_bloquear",

@@ -13,34 +13,16 @@ from app.api.schemas.prescription_response import (
     ItemRoteiroDTO,
     PrescriptionAuditResponseDTO,
 )
-from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
+from app.container import get_services
 from app.domain.prescription import MedicationItemInput, PrescriptionAuditRequest
-from app.infrastructure.persistence.repositories.canonical_medication_repository import (
-    LocalCanonicalMedicationRepository,
-)
-from app.infrastructure.persistence.repositories.normative_chunk_repository import (
-    LocalNormativeChunkRepository,
-)
-from app.retrieval.hybrid_retriever import HybridRetriever
 
 router = APIRouter(prefix="/api/v1", tags=["prescriptions"])
-
-# Instanciação dos repositórios e serviços de aplicação
-_medication_repo = LocalCanonicalMedicationRepository()
-_chunk_repo = LocalNormativeChunkRepository()
-_hybrid_retriever = HybridRetriever(
-    medications=_medication_repo.listar_todos(),
-    chunks=_chunk_repo.listar_todos(),
-)
-_audit_use_case = AuditPrescriptionUseCase(
-    medication_repo=_medication_repo,
-    retriever=_hybrid_retriever,
-)
 
 
 @router.post("/prescriptions/audit", response_model=PrescriptionAuditResponseDTO)
 def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAuditResponseDTO:
     """Audita itens da receita médica e entrega o roteiro de obtenção gratuita no SUS."""
+    services = get_services()
     domain_items = [
         MedicationItemInput(
             nome_digitado=it.nome_digitado,
@@ -48,6 +30,7 @@ def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAudi
             concentracao=it.concentracao,
             forma_farmaceutica=it.forma_farmaceutica,
             posologia=it.posologia,
+            quantidade_prescrita=it.quantidade_prescrita,
         )
         for it in payload.itens
     ]
@@ -56,10 +39,11 @@ def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAudi
         itens=domain_items,
         data_emissao=payload.data_emissao,
         regiao_administrativa=payload.regiao_administrativa,
+        tipo_prescritor=payload.tipo_prescritor,
         pergunta_adicional=payload.pergunta_adicional,
     )
 
-    guidance = _audit_use_case.executar(domain_request)
+    guidance = services.audit_use_case.executar(domain_request)
 
     dto_itens = [
         ItemRoteiroDTO(
@@ -92,7 +76,8 @@ def autocomplete_medications(
     limite: int = Query(default=10, ge=1, le=50),
 ) -> MedicationAutocompleteResponseDTO:
     """Sugestão assistida de medicamentos padronizados (DCB) para o autocomplete do app."""
-    sugestoes = _medication_repo.sugerir_autocomplete(q, limite=limite)
+    services = get_services()
+    sugestoes = services.medication_repo.sugerir_autocomplete(q, limite=limite)
 
     itens = [
         MedicationAutocompleteItemDTO(

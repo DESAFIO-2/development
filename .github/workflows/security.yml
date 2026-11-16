@@ -46,11 +46,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
-      - name: Exportar dependências travadas do uv.lock
+      - name: Exportar dependências travadas do backend (runtime)
         working-directory: backend
-        run: uv export --frozen --no-hashes --no-emit-project -o /tmp/requirements.txt
-      - name: Auditar CVEs conhecidas
-        run: uvx pip-audit -r /tmp/requirements.txt --progress-spinner off
+        run: uv export --frozen --no-hashes --no-emit-project -o /tmp/requirements-backend.txt
+      - name: Auditar CVEs conhecidas no backend (zero exceções)
+        run: uvx pip-audit -r /tmp/requirements-backend.txt --progress-spinner off
+      - name: Exportar dependências travadas de evals (offline, isolado)
+        working-directory: evals
+        run: uv export --frozen --no-hashes --no-emit-project -o /tmp/requirements-evals.txt
+      - name: Auditar CVEs conhecidas em evals (exceções explícitas documentadas)
+        # Limitação transitória do ambiente offline evals/: ragas==0.4.3 exige
+        # langchain<1 (evals/pyproject.toml). As 7 CVEs abaixo correspondem aos
+        # 6 pacotes travados no ramo 0.3.x / 0.4.3 sem fix compatível (ver
+        # docs/security/matriz_cves_evals.md). Qualquer CVE nova em evals/ falha o CI.
+        run: |
+          uvx pip-audit -r /tmp/requirements-evals.txt --progress-spinner off \
+            --ignore-vuln PYSEC-2026-2447 \
+            --ignore-vuln PYSEC-2026-2192 \
+            --ignore-vuln PYSEC-2026-2193 \
+            --ignore-vuln PYSEC-2026-2562 \
+            --ignore-vuln PYSEC-2026-77 \
+            --ignore-vuln PYSEC-2026-76 \
+            --ignore-vuln PYSEC-2026-3046
 
   sast:
     runs-on: ubuntu-latest
@@ -58,7 +75,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: Análise estática de segurança (média e alta)
-        run: uvx bandit -r backend/app evals -ll
+        run: uvx bandit -r backend/app evals -x "evals/.venv,backend/.venv" -ll
 
   anti-injection:
     runs-on: ubuntu-latest

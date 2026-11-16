@@ -41,15 +41,37 @@ class TabularDCBMatcher:
     )
     _DOSE = re.compile(_DOSE_PART + r"(?:\s*\+\s*" + _DOSE_PART + r")*", re.IGNORECASE)
 
+    _EQUIVALENCIAS_CONCENTRACAO_SCOPED: dict[str, tuple[frozenset[str], ...]] = {
+        "sacubitril valsartana sodica hidratada": (
+            frozenset({"97mg+103mg", "200mg"}),
+            frozenset({"49mg+51mg", "100mg"}),
+            frozenset({"24mg+26mg", "50mg"}),
+        ),
+        "sulfato de salbutamol": (frozenset({"100mcg", "100mcg/dose"}),),
+    }
+
     @staticmethod
     def normalizar_concentracao(concentracao: str) -> str:
-        valor = re.sub(r"\s+", "", concentracao.lower().replace(",", "."))
+        # Remove separador de milhar brasileiro (5.000, 1.000) preservando decimais (0.25).
+        sem_milhar = re.sub(
+            r"(?<![\d.,])([1-9]\d{0,2}(?:\.\d{3})+)(?![\d.,])",
+            lambda m: m.group(1).replace(".", ""),
+            concentracao,
+        )
+        valor = re.sub(r"\s+", "", sem_milhar.lower().replace(",", "."))
         # Abreviação de composição (97/103 mg), sem somar doses ou converter unidades.
         composto = re.fullmatch(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)(mcg|mg|g|ui)", valor)
         if composto:
             primeiro, segundo, unidade = composto.groups()
             return f"{primeiro}{unidade}+{segundo}{unidade}"
         return valor
+
+    @classmethod
+    def _doses_equivalentes(cls, norm_dcb: str, dose_consulta: str, dose_catalogo: str) -> bool:
+        if not dose_consulta or dose_consulta == dose_catalogo:
+            return True
+        pares = cls._EQUIVALENCIAS_CONCENTRACAO_SCOPED.get(norm_dcb, ())
+        return any(dose_consulta in par and dose_catalogo in par for par in pares)
 
     @classmethod
     def doses_no_texto(cls, texto: str) -> set[str]:
@@ -86,11 +108,13 @@ class TabularDCBMatcher:
         forma_norm = normalizar_texto_pt(forma)
 
         for med in self.medications:
-            if dose and self.normalizar_concentracao(med.concentration) != dose:
+            norm_dcb = normalizar_texto_pt(med.dcb_name)
+            if not self._doses_equivalentes(
+                norm_dcb, dose, self.normalizar_concentracao(med.concentration)
+            ):
                 continue
             if forma_norm and normalizar_texto_pt(med.pharmaceutical_form) != forma_norm:
                 continue
-            norm_dcb = normalizar_texto_pt(med.dcb_name)
             dcb_tokens = [t for t in norm_dcb.split() if len(t) > 2]
             core_tokens = [t for t in dcb_tokens if t not in self._IGNORED_SALTS] or dcb_tokens
             if not core_tokens:

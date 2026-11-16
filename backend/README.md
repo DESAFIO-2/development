@@ -13,20 +13,22 @@ O backend do **SUS Cidadão** foi construído seguindo rigorosamente os padrões
 
 ```text
 backend/app/
-├── main.py                  # Entrypoint da aplicação FastAPI
-├── core/                    # Configurações com Pydantic Settings e telemetria
+├── main.py                  # Entrypoint da aplicação FastAPI + lifespan
+├── container.py             # Composição de dependências e instância única de TabularDCBMatcher
+├── core/                    # Configurações com Pydantic Settings, logs JSON e telemetria OTel
 ├── domain/                  # Entidades e modelos puros de negócio (Prescription, Guidance, Medication)
 ├── application/             # Casos de uso e portas abstratas (Clean Architecture)
-│   ├── ports/               # Contratos abstratos (RetrieverPort, MedicationRepositoryPort, etc.)
-│   └── use_cases/           # AuditPrescriptionUseCase (orquestração do fluxo em 4 etapas)
-├── infrastructure/          # Adaptadores concretos (ChromaDB, repositórios em JSON/memória)
-│   ├── persistence/         # Repositórios concretos do catálogo canônico e chunks normativos
-│   └── vectorstores/        # ChromaVectorStoreAdapter (multi-coleções)
+│   ├── ports/               # Contratos e DTOs desacoplados (RetrieverPort, GuardrailPort, GeneratorPort, etc.)
+│   └── use_cases/           # AuditPrescriptionUseCase (orquestração do fluxo)
+├── infrastructure/          # Adaptadores concretos (repositórios em JSON e adaptadores REST LLM)
+│   ├── llm/                 # GeminiRESTGeneratorAdapter e OllamaRESTGeneratorAdapter
+│   └── persistence/         # Repositórios concretos do catálogo canônico e chunks normativos
 ├── retrieval/               # Motor de Recuperação Híbrida (Tabular DCB + BM25Okapi + TF-IDF RRF)
 ├── guardrails/              # Preservação do Ato Médico (Lei 12.842/2013) e Mascaramento LGPD (PII)
-├── ingestion/               # Pipelines de extração da RENAME 2024 e cliente InfoSaúde-DF (Power BI)
-└── api/                     # Camada de apresentação REST (rotas, schemas e dependências)
-    └── routes/              # /health e /api/v1/prescriptions
+├── seguranca/               # Esteira anti-injection, validação de PDF/áudio e validação de saída
+├── ingestion/               # Pipeline determinístico de consolidação do corpus
+└── api/                     # Camada de apresentação REST (rotas, middleware e schemas)
+    └── routes/              # /health, /api/v1/medications/autocomplete e /api/v1/prescriptions/audit
 ```
 
 ---

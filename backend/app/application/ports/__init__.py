@@ -8,8 +8,25 @@ from typing import Any
 
 from app.domain.guidance import CitizenGuidanceCard
 from app.domain.prescription import PrescriptionAuditRequest
-from app.guardrails.clinical import ClinicalCheckResult
-from app.guardrails.pii import PIIMaskingResult
+
+
+@dataclass(frozen=True)
+class ClinicalCheckDTO:
+    """Resultado da inspeção do Guardrail Clínico e ético."""
+
+    bloqueado: bool
+    motivo: str
+    alerta_emergencia: bool
+    mensagem_acolhedora: str
+
+
+@dataclass(frozen=True)
+class PIIMaskingDTO:
+    """Resultado auditável da desidentificação LGPD."""
+
+    texto_sanitizado: str
+    tipos_detectados: list[str]
+    total_substituicoes: int
 
 
 @dataclass(frozen=True)
@@ -113,13 +130,13 @@ class GuardrailPort(ABC):
     """Porta para verificação ética de Ato Médico e desidentificação LGPD."""
 
     @abstractmethod
-    def verificar_ato_medico(self, pergunta: str) -> ClinicalCheckResult:
+    def verificar_ato_medico(self, pergunta: str) -> ClinicalCheckDTO:
         """Avalia se a requisição viola limites clínicos."""
         ...
 
     @abstractmethod
-    def desidentificar_dados_pessoais(self, texto: str) -> PIIMaskingResult:
-        """Mascaramento prévio de PII (CPF, Cartão SUS, telefone, nome)."""
+    def desidentificar_dados_pessoais(self, texto: str) -> PIIMaskingDTO:
+        """Mascaramento prévio de PII (CPF, Cartão SUS, RG, CRM, telefone, endereço, nome)."""
         ...
 
 
@@ -173,6 +190,8 @@ class GeneratorPort(ABC):
 
 
 __all__ = [
+    "ClinicalCheckDTO",
+    "PIIMaskingDTO",
     "RetrievalHitDTO",
     "CanonicalMedicationItem",
     "RetrieverPort",

@@ -1,18 +1,18 @@
 """Pipeline determinístico de consolidação multi-fonte (RENAME + REME-DF + Farmácia Popular).
 
-Adapta o release v5 de Engenharia de Dados e preserva as fontes complementares C01-C14
-para os contratos da Clean Architecture:
+Adapta o release aprovado v9 de Engenharia de Dados (`occurrences.jsonl` + `evidencias.jsonl`)
+e preserva as fontes complementares C01-C14 para os contratos da Clean Architecture:
 - `data/processed/medicamentos_sus_canonical.json`
-- `data/processed/medicamentos_sus_canonical_full.json`
 - `data/processed/normative_chunks.json`
-- `data/processed/unified_pdf_chunks.json`
+- `data/processed/evidence_chunks_v2.json` (`one-evidence-v2`)
 - `data/manifests/manifest.json`
 
 Garante:
-1. Detecção de Schema Drift (`validate_occurrence_drift`);
-2. Normalização de unidades e concentrações entre F01 (RENAME), F03 (REME-DF) e F04 (PFPB);
-3. Regeneração 100% consolidada de chunks (zero chunks com `review_status == "pending"` ou
-   referências defasadas ao antigo protótipo de 24 medicamentos).
+1. Detecção de Schema Drift e vínculo 1:1 ocorrências/evidências (`validate_occurrence_drift`,
+   `validate_evidencia_drift`);
+2. Normalização de unidades, separadores de milhar e concentrações entre F01, F03 e F04, sem
+   itens sintéticos sem ocorrência (`occ == 0`);
+3. Geração determinística dos 2.114 chunks literais `one-evidence-v2` com proveniência completa.
 """
 
 from __future__ import annotations
@@ -28,10 +28,14 @@ from typing import Any
 
 RAIZ_REPO = Path(__file__).resolve().parents[3]
 
+CHUNK_RECIPE_V2 = (
+    "one-evidence-v2:structured-fields;F03-description-cell;F04-indication;"
+    "source-provenance;no-old-chunks"
+)
+
 EXPECTED_OCCURRENCE_KEYS: frozenset[str] = frozenset(
     {
         "occurrence_id",
-        "medicine_id",
         "active_ingredient",
         "strength",
         "form",
@@ -44,14 +48,74 @@ EXPECTED_OCCURRENCE_KEYS: frozenset[str] = frozenset(
         "release_characteristic",
         "review_status",
         "source",
-        "evidence_id",
         "raw_text",
+        "bbox",
+        "context",
+        "chunk_ids",
+        "line_start",
+        "line_end",
+        "parser",
+        "uncertainties",
     }
 )
 
 VALID_SOURCES: frozenset[str] = frozenset({"F01", "F03", "F04"})
 
-OPTIONAL_OCCURRENCE_KEYS = {"description_cell", "description_provenance", "indication", "supply_id"}
+OPTIONAL_OCCURRENCE_KEYS = {"medicine_id", "supply_id", "supply_name"}
+
+EXPECTED_EVIDENCIA_KEYS: frozenset[str] = frozenset(
+    {
+        "evidence_id",
+        "occurrence_id",
+        "medicine_id",
+        "active_ingredient",
+        "strength",
+        "form",
+        "item_type",
+        "release_characteristic",
+        "review_status",
+        "source",
+        "source_row_number",
+        "line_start",
+        "line_end",
+        "text",
+    }
+)
+
+OPTIONAL_EVIDENCIA_KEYS = {"description_cell", "description_provenance", "indication", "supply_id"}
+
+_CANONICAL_GROUP_KEY_ALIASES: dict[tuple[str, str, str, str], tuple[str, str, str, str]] = {
+    ("dapagliflozina propanodiol", "10mg", "comprimido", ""): (
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        "",
+    ),
+    ("dapagliflozina", "10mg", "comprimido revestido", ""): (
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        "",
+    ),
+    ("dapagliflozina", "10mg", "forma nao informada", ""): (
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        "",
+    ),
+    ("sulfato de salbutamol", "100mcg", "forma nao informada", ""): (
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        "",
+    ),
+    ("salbutamol (sulfato)", "100mcg/dose", "spray ou aerossol para inalacao oral", ""): (
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        "",
+    ),
+}
 
 
 ANTIMICROBIAL_KEYWORDS: frozenset[str] = frozenset(
@@ -390,13 +454,21 @@ PRIORITY_24_ITEMS: list[dict[str, Any]] = [
         "required_documents": [
             "Documento oficial com foto e CPF",
             "Receita médica válida (SUS ou particular) com CRM, carimbo e data",
+            (
+                "Alternativa via Farmácia de Alto Custo (CEAF SES-DF Cód. 36801, caso "
+                "fora da elegibilidade clínica do PFPB): LME, receita em 2 vias, CNS, "
+                "comprovante de residência no DF e exames exigidos pelo PCDT"
+            ),
         ],
         "prescription_validity_days": 180,
-        "source_id": "PFPB_2024",
-        "source_page": 12,
+        "source_id": "PFPB_2026",
+        "source_page": 1,
         "notes": (
-            "Gratuidade na Farmácia Popular para DM2 associada a doença cardiovascular "
-            "(>= 65 anos) ou via CEAF."
+            "Fontes consolidadas: F01, F03, F04. Cód. SES-DF: 36801. Local REME-DF: "
+            "Farmácia do Componente Especializado. Gratuidade no Programa Farmácia "
+            "Popular do Brasil (PFPB) condicionada à elegibilidade clínica do programa "
+            "(DM2 com doença cardiovascular estabelecida conforme protocolo vigente); "
+            "alternativamente disponível no Alto Custo (CEAF) mediante LME."
         ),
     },
     {
@@ -927,19 +999,23 @@ def normalizar_concentracao(conc: str) -> str:
 
 
 def chave_normalizada_concentracao(conc: str) -> str:
-    """Gera chave canônica de concentração sem espaços redundantes para fusão F01/F03/F04."""
-    norm = remover_acentos(normalizar_concentracao(conc))
+    """Gera chave canônica de concentração sem espaços ou separador de milhar."""
+    sem_milhar = re.sub(
+        r"(?<![\d.,])([1-9]\d{0,2}(?:\.\d{3})+)(?![\d.,])",
+        lambda m: m.group(1).replace(".", ""),
+        conc,
+    )
+    norm = remover_acentos(normalizar_concentracao(sem_milhar))
     return re.sub(r"\s+", "", norm)
 
 
 def validate_occurrence_drift(occurrences: list[dict[str, Any]]) -> SchemaDriftReport:
-    """Valida se as ocorrências curadas respeitam o contrato esperado sem schema drift."""
+    """Valida se as ocorrências curadas respeitam o contrato v9 esperado sem schema drift."""
     unexpected: set[str] = set()
     missing: set[str] = set()
     errors: list[str] = []
     valid_count = 0
     occurrence_ids: set[str] = set()
-    evidence_ids: set[str] = set()
     if not occurrences:
         errors.append("Corpus vazio")
 
@@ -968,16 +1044,12 @@ def validate_occurrence_drift(occurrences: list[dict[str, Any]]) -> SchemaDriftR
             continue
 
         occurrence_id = row.get("occurrence_id")
-        evidence_id = row.get("evidence_id")
         if (
             not isinstance(occurrence_id, str)
             or not occurrence_id
             or occurrence_id in occurrence_ids
-            or not isinstance(evidence_id, str)
-            or not evidence_id
-            or evidence_id in evidence_ids
         ):
-            errors.append(f"Row {idx}: ID ausente ou repetido")
+            errors.append(f"Row {idx}: occurrence_id ausente ou repetido")
             continue
         item_type = row.get("item_type")
         if not (
@@ -987,11 +1059,72 @@ def validate_occurrence_drift(occurrences: list[dict[str, Any]]) -> SchemaDriftR
             errors.append(f"Row {idx}: tipo de item ou vínculo inválido")
             continue
         occurrence_ids.add(occurrence_id)
-        evidence_ids.add(evidence_id)
         valid_count += 1
 
     return SchemaDriftReport(
         total_records=len(occurrences),
+        valid_records=valid_count,
+        unexpected_fields=sorted(unexpected),
+        missing_fields=sorted(missing),
+        errors=errors,
+    )
+
+
+def validate_evidencia_drift(
+    evidencias: list[dict[str, Any]], occurrences: list[dict[str, Any]]
+) -> SchemaDriftReport:
+    """Valida vínculo 1:1 das evidências aprovadas v9 com occurrences.jsonl."""
+    unexpected: set[str] = set()
+    missing: set[str] = set()
+    errors: list[str] = []
+    valid_count = 0
+    evidence_ids: set[str] = set()
+    by_occ = {o["occurrence_id"]: o for o in occurrences if isinstance(o.get("occurrence_id"), str)}
+    seen_occ: set[str] = set()
+    if len(evidencias) != len(occurrences):
+        errors.append(
+            f"Evidências ({len(evidencias)}) divergem de ocorrências ({len(occurrences)})"
+        )
+
+    for idx, ev in enumerate(evidencias):
+        keys = set(ev.keys())
+        extra = keys - EXPECTED_EVIDENCIA_KEYS - OPTIONAL_EVIDENCIA_KEYS
+        absent = EXPECTED_EVIDENCIA_KEYS - keys
+        if extra:
+            unexpected.update(extra)
+        if absent:
+            missing.update(absent)
+
+        evidence_id = ev.get("evidence_id")
+        occ_id = ev.get("occurrence_id")
+        if (
+            not isinstance(evidence_id, str)
+            or not evidence_id
+            or evidence_id in evidence_ids
+            or not isinstance(occ_id, str)
+            or occ_id in seen_occ
+        ):
+            errors.append(f"Evidência {idx}: ID ausente ou duplicado")
+            continue
+        occ = by_occ.get(occ_id)
+        text_stripped = str(ev.get("text") or "").strip()
+        if (
+            occ is None
+            or ev.get("text") != occ.get("raw_text")
+            or ev.get("medicine_id") != occ.get("medicine_id")
+            or ev.get("source") != occ.get("source")
+            or ev.get("review_status") != "approved"
+            or not text_stripped
+            or re.fullmatch(r"\d+\.?", text_stripped)
+        ):
+            errors.append(f"Evidência {idx}: divergente da ocorrência {occ_id!r}")
+            continue
+        evidence_ids.add(evidence_id)
+        seen_occ.add(occ_id)
+        valid_count += 1
+
+    return SchemaDriftReport(
+        total_records=len(evidencias),
         valid_records=valid_count,
         unexpected_fields=sorted(unexpected),
         missing_fields=sorted(missing),
@@ -1129,6 +1262,12 @@ def classificar_apresentacao_consolidada(
     )
 
 
+def _normalizar_nome_dcb_ocr(nome: str) -> str:
+    """Corrige resíduos de quebra hifenizada de OCR (ex.: 'anti- -hepatite' -> 'anti-hepatite')."""
+    limpo = re.sub(r"-\s+-", "-", nome.strip().rstrip("*").strip().lower())
+    return re.sub(r"\s+", " ", limpo)
+
+
 def consolidar_catalogo_medicamentos(
     occurrences: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -1146,7 +1285,7 @@ def consolidar_catalogo_medicamentos(
         # Os insumos F01 ficam na evidência de presença, fora do roteiro de medicamentos.
         if occ["item_type"] == "supply" and occ["source"]["source_id"] != "F04":
             continue
-        dcb_raw = str(occ["active_ingredient"]).strip().rstrip("*").strip().lower()
+        dcb_raw = _normalizar_nome_dcb_ocr(str(occ["active_ingredient"]))
         conc_raw = normalizar_concentracao(str(occ.get("strength") or ""))
         form_raw = str(occ.get("form") or "").strip().lower()
         if form_raw in {"", "-"}:
@@ -1158,9 +1297,10 @@ def consolidar_catalogo_medicamentos(
             remover_acentos(form_raw),
             remover_acentos(str(occ["release_characteristic"] or "")),
         )
+        key = _CANONICAL_GROUP_KEY_ALIASES.get(key, key)
         grupos.setdefault(key, []).append(occ)
 
-    # Indexa os 24 itens prioritários para evitar duplicatas exatas
+    # Indexa os itens prioritários que possuem correspondência real (zero itens occ == 0)
     chaves_prioritarias: set[tuple[str, str, str, str]] = set()
     catalogo_final: list[dict[str, Any]] = []
     for p_item in PRIORITY_24_ITEMS:
@@ -1170,17 +1310,19 @@ def consolidar_catalogo_medicamentos(
             remover_acentos(p_item["pharmaceutical_form"]),
             "",
         )
+        correspondencias = grupos.get(p_key)
+        if not correspondencias:
+            continue
         chaves_prioritarias.add(p_key)
         prioritario = dict(p_item)
-        if correspondencias := grupos.get(p_key):
-            prioritario["occurrence_ids"] = [row["occurrence_id"] for row in correspondencias]
-            prioritario["df_channels"] = sorted(
-                {
-                    row["channel"]
-                    for row in correspondencias
-                    if row["source"]["source_id"] == "F03" and row["channel"]
-                }
-            )
+        prioritario["occurrence_ids"] = [row["occurrence_id"] for row in correspondencias]
+        prioritario["df_channels"] = sorted(
+            {
+                row["channel"]
+                for row in correspondencias
+                if row["source"]["source_id"] == "F03" and row["channel"]
+            }
+        )
         catalogo_final.append(prioritario)
 
     contador = 1
@@ -1189,7 +1331,7 @@ def consolidar_catalogo_medicamentos(
             continue
         occs = grupos[key]
         primeiro = occs[0]
-        dcb_name = str(primeiro["active_ingredient"]).strip().rstrip("*").strip().lower()
+        dcb_name = _normalizar_nome_dcb_ocr(str(primeiro["active_ingredient"]))
         conc = normalizar_concentracao(str(primeiro.get("strength") or ""))
         form = str(primeiro.get("form") or "").strip().lower()
         if not form or form == "-":
@@ -1262,6 +1404,9 @@ def consolidar_catalogo_medicamentos(
         )
         contador += 1
 
+    if any(not item.get("occurrence_ids") for item in catalogo_final):
+        raise ValueError("Catálogo consolidado contém item sem ocorrência comprovada (occ == 0)")
+
     return catalogo_final
 
 
@@ -1290,193 +1435,61 @@ def consolidar_normative_chunks(
     return consolidados
 
 
-def regenerar_unified_pdf_chunks(
-    raiz: Path,
-    catalogo_consolidado: list[dict[str, Any]],
-    normative_chunks: list[dict[str, Any]],
+def gerar_evidence_chunks_v2(
+    evidencias: list[dict[str, Any]],
+    release_version: str,
 ) -> list[dict[str, Any]]:
-    """Regenera unified_pdf_chunks.json 100% alinhado à base consolidada sem cortes de palavras."""
-    total_apresentacoes = len(catalogo_consolidado)
-    total_pfpb = sum(1 for m in catalogo_consolidado if m["available_pfpb"])
-    total_ceaf = sum(
-        1 for m in catalogo_consolidado if m["dispensation_route"] == "ALTO_CUSTO_CEAF"
-    )
-    total_ubs = sum(
-        1 for m in catalogo_consolidado if m["dispensation_route"] == "UBS_ATENCAO_PRIMARIA"
-    )
-
-    cabecalho_catalogo = (
-        "MINISTÉRIO DA SAÚDE & SECRETARIA DE SAÚDE DO DISTRITO FEDERAL (SES-DF) — "
-        "CATÁLOGO CANÔNICO CONSOLIDADO DE MEDICAMENTOS DO SUS (F01 RENAME 2024 + "
-        "F03 REME-DF 2026 + F04 FARMÁCIA POPULAR 2026). "
-        f"Total de Apresentações Padronizadas e Auditadas: {total_apresentacoes} apresentações "
-        f"({total_pfpb} Farmácia Popular, {total_ubs} Atenção Primária/Secundária DF, "
-        f"{total_ceaf} Componente Especializado CEAF). "
-    )
-
-    # 1. Chunks do Catálogo Canônico Consolidado (por registro inteiro, sem cortar palavras)
-    linhas_prioritarias: list[str] = []
-    for m in catalogo_consolidado[:60]:
-        pfpb_str = "SIM (100%)" if m["available_pfpb"] else "NÃO"
-        lme_str = "SIM" if m["requires_lme"] else "NÃO"
-        linhas_prioritarias.append(
-            f"{m['dcb_name']} {m['concentration']} ({m['pharmaceutical_form']}) | "
-            f"Componente: {m['rename_component']} | Rota: {m['dispensation_route']} | "
-            f"PFPB Gratuito: {pfpb_str} | Exige LME: {lme_str} | "
-            f"Validade Receita: {m['prescription_validity_days']} dias."
-        )
-
-    chunks_catalogo: list[dict[str, Any]] = []
-    bloco_tamanho = 10
-    for idx in range(0, len(linhas_prioritarias), bloco_tamanho):
-        fatia = linhas_prioritarias[idx : idx + bloco_tamanho]
-        seg_idx = idx // bloco_tamanho
-        prefixo = (
-            cabecalho_catalogo if seg_idx == 0 else "CATÁLOGO CONSOLIDADO SUS-DF (Continuação): "
-        )
-        conteudo = prefixo + " ".join(fatia)
-        chunks_catalogo.append(
+    """Portação da receita one-evidence-v2 de Engenharia de Dados (2.114 evidências literais)."""
+    chunks: list[dict[str, Any]] = []
+    for ev in evidencias:
+        form = ev["form"] if ev["form"] != "-" else "não informada"
+        strength = ev["strength"] if ev["strength"] != "-" else "não informada"
+        parts = [
+            f"Tipo: {'insumo' if ev['item_type'] == 'supply' else 'medicamento'}",
+            f"Princípio ativo ou item: {ev['active_ingredient']}",
+            f"Concentração ou apresentação: {strength}",
+            f"Forma: {form}",
+        ]
+        if ev.get("release_characteristic"):
+            parts.append(f"Liberação: {ev['release_characteristic']}")
+        if ev["source"]["source_id"] == "F03":
+            parts.append(f"Descrição na REME-DF: {ev['description_cell']}")
+        if ev["source"]["source_id"] == "F04":
+            parts.append(f"Indicação no elenco: {ev['indication']}")
+        parts.append(f"Consta na lista {ev['source']['source_id']} ({ev['source']['version']}).")
+        src = ev["source"]
+        loc_parts = [f"p. {src['page']}"]
+        if ev.get("source_row_number") is not None:
+            loc_parts.append(f"item {ev['source_row_number']}")
+        elif ev.get("line_start") is not None:
+            ls = ev["line_start"]
+            le = ev["line_end"]
+            loc_parts.append(f"linhas {ls}-{le}" if le and le != ls else f"linha {ls}")
+        else:
+            loc_parts.append(ev["occurrence_id"])
+        parts.append(f"Proveniência: {src['source_id']} ({', '.join(loc_parts)}).")
+        chunks.append(
             {
-                "chunk_id": f"CATALOGO_CANONICO_MEDICAMENTOS_SUS_p001_c{seg_idx:02d}",
-                "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
-                "category": "catalogo_canonico_sus",
-                "page_number": 1,
-                "segment_index": seg_idx,
-                "char_count": len(conteudo),
-                "content": conteudo,
-                "review_status": "approved",
-                "sha256": hashlib.sha256(conteudo.encode("utf-8")).hexdigest(),
-                "metadata": {
-                    "source_pdf": "CATALOGO_CANONICO_MEDICAMENTOS_SUS.pdf",
-                    "category": "catalogo_canonico_sus",
-                    "page_number": 1,
-                    "document_stem": "CATALOGO_CANONICO_MEDICAMENTOS_SUS",
-                    "total_consolidated_medications": total_apresentacoes,
-                },
+                "chunk_id": "chunk-" + str(ev["evidence_id"]).removeprefix("evidence-"),
+                "evidence_id": ev["evidence_id"],
+                "occurrence_id": ev["occurrence_id"],
+                "medicine_id": ev.get("medicine_id"),
+                "supply_id": ev.get("supply_id"),
+                "item_type": ev["item_type"],
+                "source": ev["source"],
+                "release_version": release_version,
+                "text": "\n".join(parts),
+                "literal_text": ev["text"],
             }
         )
 
-    # 2. Chunks Normativos Consolidados (F01, F03, F04, SISREG, HUB e C01-C14)
-    chunks_normativos_pdf: list[dict[str, Any]] = []
-    for seg_idx, nchk in enumerate(normative_chunks):
-        src_id = str(nchk["source_id"])
-        cat = (
-            "complementares_curados"
-            if str(nchk["chunk_id"]).startswith("CHK-COMP-")
-            else "normativo_consolidado_sus_df"
-        )
-        conteudo_norm = f"{nchk['document_title']} — {nchk['section']}: {nchk['text']}"
-        chunks_normativos_pdf.append(
-            {
-                "chunk_id": str(nchk["chunk_id"]),
-                "source_pdf": f"{src_id}.pdf",
-                "category": cat,
-                "page_number": int(nchk["page_number"]),
-                "segment_index": seg_idx,
-                "char_count": len(conteudo_norm),
-                "content": conteudo_norm,
-                "review_status": "approved",
-                "sha256": hashlib.sha256(conteudo_norm.encode("utf-8")).hexdigest(),
-                "metadata": {
-                    "source_pdf": f"{src_id}.pdf",
-                    "category": cat,
-                    "page_number": int(nchk["page_number"]),
-                    "document_stem": src_id,
-                    "route_category": str(nchk["route_category"]),
-                },
-            }
-        )
-
-    # 3. Chunks de Geolocalização das Farmácias e UBS do DF (alinhados por unidade completa)
-    caminho_geo = raiz / "data" / "processed" / "df_pharmacies_geolocated.json"
-    dados_geo = json.loads(caminho_geo.read_text(encoding="utf-8"))
-    farmacias = list(dados_geo.get("pharmacies") or [])
-    chunks_geo: list[dict[str, Any]] = []
-    bloco_geo = 10
-    for idx in range(0, len(farmacias), bloco_geo):
-        fatia_f = farmacias[idx : idx + bloco_geo]
-        seg_idx = idx // bloco_geo
-        page_num = (seg_idx // 5) + 1
-        linhas_f: list[str] = []
-        for f_item in fatia_f:
-            lat = f_item.get("latitude")
-            lng = f_item.get("longitude")
-            coord = (
-                f"{lat:.4f}, {lng:.4f}"
-                if isinstance(lat, float) and isinstance(lng, float)
-                else "Não georreferenciado"
-            )
-            linhas_f.append(
-                f"{f_item.get('name')} ({f_item.get('pharmacy_type')}) | "
-                f"Região: {f_item.get('neighborhood_or_ra')} | "
-                f"Endereço: {f_item.get('address')} | GPS: {coord}."
-            )
-        conteudo_geo = (
-            "GUIA OFICIAL DE ESTABELECIMENTOS FARMACÊUTICOS E UBS DO DF (SES-DF / InfoSaúde): "
-            + " ".join(linhas_f)
-        )
-        chunks_geo.append(
-            {
-                "chunk_id": f"GUIA_FARMACIAS_UBS_GEO_DF_p{page_num:03d}_c{seg_idx:02d}",
-                "source_pdf": "GUIA_FARMACIAS_UBS_GEO_DF.pdf",
-                "category": "geolocalizacao_farmacias_ubs",
-                "page_number": page_num,
-                "segment_index": seg_idx,
-                "char_count": len(conteudo_geo),
-                "content": conteudo_geo,
-                "review_status": "approved",
-                "sha256": hashlib.sha256(conteudo_geo.encode("utf-8")).hexdigest(),
-                "metadata": {
-                    "source_pdf": "GUIA_FARMACIAS_UBS_GEO_DF.pdf",
-                    "category": "geolocalizacao_farmacias_ubs",
-                    "page_number": page_num,
-                    "document_stem": "GUIA_FARMACIAS_UBS_GEO_DF",
-                },
-            }
-        )
-
-    # 4. Chunks de Estoque das Farmácias de Alto Custo (CEAF InfoSaúde DF, alinhados por item)
-    caminho_ceaf = raiz / "data" / "processed" / "ceaf_live_stock.json"
-    dados_ceaf = json.loads(caminho_ceaf.read_text(encoding="utf-8"))
-    itens_ceaf = list(dados_ceaf.get("items") or [])
-    chunks_ceaf: list[dict[str, Any]] = []
-    bloco_ceaf = 12
-    for idx in range(0, min(len(itens_ceaf), 240), bloco_ceaf):
-        fatia_c = itens_ceaf[idx : idx + bloco_ceaf]
-        seg_idx = idx // bloco_ceaf
-        page_num = (seg_idx // 4) + 1
-        linhas_c: list[str] = []
-        for c_item in fatia_c:
-            linhas_c.append(
-                f"Cód. {c_item.get('code')} {c_item.get('medication')} | "
-                f"Unidade CEAF: {c_item.get('unit')} | "
-                f"Status: {c_item.get('status')}."
-            )
-        conteudo_ceaf = (
-            "RELATÓRIO DE ESTOQUE DAS FARMÁCIAS DE ALTO CUSTO (CEAF SES-DF / InfoSaúde): "
-            + " ".join(linhas_c)
-        )
-        chunks_ceaf.append(
-            {
-                "chunk_id": f"RELATORIO_ESTOQUE_CEAF_INFOSAUDE_p{page_num:03d}_c{seg_idx:02d}",
-                "source_pdf": "RELATORIO_ESTOQUE_CEAF_INFOSAUDE.pdf",
-                "category": "estoque_ceaf_tempo_real",
-                "page_number": page_num,
-                "segment_index": seg_idx,
-                "char_count": len(conteudo_ceaf),
-                "content": conteudo_ceaf,
-                "review_status": "approved",
-                "sha256": hashlib.sha256(conteudo_ceaf.encode("utf-8")).hexdigest(),
-                "metadata": {
-                    "source_pdf": "RELATORIO_ESTOQUE_CEAF_INFOSAUDE.pdf",
-                    "category": "estoque_ceaf_tempo_real",
-                    "page_number": page_num,
-                    "document_stem": "RELATORIO_ESTOQUE_CEAF_INFOSAUDE",
-                },
-            }
-        )
-
-    return chunks_catalogo + chunks_normativos_pdf + chunks_geo + chunks_ceaf
+    if (
+        len({c["chunk_id"] for c in chunks}) != len(chunks)
+        or len({c["text"] for c in chunks}) != len(chunks)
+        or any(not str(c["text"]).strip() or not str(c["literal_text"]).strip() for c in chunks)
+    ):
+        raise ValueError("evidence_chunks_v2 contém textos ou chunk_ids vazios/duplicados")
+    return chunks
 
 
 def ler_bytes_lf(caminho: Path) -> bytes:
@@ -1488,37 +1501,45 @@ def atualizar_manifesto(
     caminho_manifesto: Path,
     caminho_meds: Path,
     caminho_norm_chunks: Path,
-    caminho_pdf_chunks: Path,
+    caminho_evidence_chunks: Path,
     caminho_staging_occ: Path,
+    caminho_staging_ev: Path,
     total_meds: int,
     total_norm_chunks: int,
-    total_pdf_chunks: int,
+    total_evidence_chunks: int,
     total_occurrences: int,
     origem: dict[str, Any],
 ) -> dict[str, Any]:
     """Atualiza data/manifests/manifest.json com linhagem criptográfica SHA-256."""
     meds_sha = hashlib.sha256(ler_bytes_lf(caminho_meds)).hexdigest()
     norm_sha = hashlib.sha256(ler_bytes_lf(caminho_norm_chunks)).hexdigest()
-    pdf_sha = hashlib.sha256(ler_bytes_lf(caminho_pdf_chunks)).hexdigest()
+    ev_chunks_sha = hashlib.sha256(ler_bytes_lf(caminho_evidence_chunks)).hexdigest()
     occ_sha = hashlib.sha256(ler_bytes_lf(caminho_staging_occ)).hexdigest()
-    combined = hashlib.sha256(f"{meds_sha}:{norm_sha}:{pdf_sha}:{occ_sha}".encode()).hexdigest()
+    ev_staging_sha = hashlib.sha256(ler_bytes_lf(caminho_staging_ev)).hexdigest()
+    combined = hashlib.sha256(
+        f"{meds_sha}:{norm_sha}:{ev_chunks_sha}:{occ_sha}:{ev_staging_sha}".encode()
+    ).hexdigest()
 
     manifest: dict[str, Any] = {
-        "manifest_version": "2026.3.1",
+        "manifest_version": "2026.4.0",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "engineering_source": origem["release_version"],
         "engineering_source_commit": origem["commit"],
         "engineering_source_manifest_sha256": origem["release_manifest_sha256"],
         "canonical_medications_sha256": meds_sha,
         "normative_chunks_sha256": norm_sha,
-        "unified_pdf_chunks_sha256": pdf_sha,
+        "evidence_chunks_v2_sha256": ev_chunks_sha,
+        "evidence_chunks_v2_recipe": CHUNK_RECIPE_V2,
+        "evidence_chunks_v2_recipe_sha256": hashlib.sha256(CHUNK_RECIPE_V2.encode()).hexdigest(),
         "curated_occurrences_sha256": occ_sha,
+        "curated_evidencias_sha256": ev_staging_sha,
         "combined_sha256": combined,
         "record_counts": {
             "canonical_medications": total_meds,
             "normative_chunks": total_norm_chunks,
-            "unified_pdf_chunks": total_pdf_chunks,
+            "evidence_chunks_v2": total_evidence_chunks,
             "curated_occurrences_f01_f03_f04": total_occurrences,
+            "curated_evidencias_f01_f03_f04": total_occurrences,
         },
     }
     caminho_manifesto.write_text(
@@ -1530,25 +1551,36 @@ def atualizar_manifesto(
 
 
 def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
-    """Executa o pipeline completo de consolidação de dados e reconciliação de chunks."""
-    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v5.jsonl"
-    caminho_origem = raiz / "data" / "manifests" / "corpus_v5_source.json"
+    """Executa o pipeline completo de consolidação v9 e geração de evidence_chunks_v2."""
+    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v9.jsonl"
+    caminho_ev = raiz / "data" / "staging" / "curated_evidencias_v9.jsonl"
+    caminho_origem = raiz / "data" / "manifests" / "corpus_v9_source.json"
     caminho_meds = raiz / "data" / "processed" / "medicamentos_sus_canonical.json"
-    caminho_meds_full = raiz / "data" / "processed" / "medicamentos_sus_canonical_full.json"
     caminho_norm = raiz / "data" / "processed" / "normative_chunks.json"
-    caminho_pdf_chunks = raiz / "data" / "processed" / "unified_pdf_chunks.json"
+    caminho_evidence_chunks = raiz / "data" / "processed" / "evidence_chunks_v2.json"
     caminho_manifest = raiz / "data" / "manifests" / "manifest.json"
 
     origem = json.loads(caminho_origem.read_text(encoding="utf-8"))
-    dados = ler_bytes_lf(caminho_occ)
-    if hashlib.sha256(dados).hexdigest() != origem["staging_sha256"]:
-        raise ValueError("Staging v5 diverge do SHA-256 registrado")
-    occurrences = [json.loads(line) for line in dados.splitlines() if line.strip()]
+    dados_occ = ler_bytes_lf(caminho_occ)
+    dados_ev = ler_bytes_lf(caminho_ev)
+    expected_hashes = origem["staging_files_sha256"]
+    if hashlib.sha256(dados_occ).hexdigest() != expected_hashes["curated_occurrences_v9.jsonl"]:
+        raise ValueError("Staging occurrences v9 diverge do SHA-256 registrado")
+    if hashlib.sha256(dados_ev).hexdigest() != expected_hashes["curated_evidencias_v9.jsonl"]:
+        raise ValueError("Staging evidencias v9 diverge do SHA-256 registrado")
+
+    occurrences = [json.loads(line) for line in dados_occ.splitlines() if line.strip()]
+    evidencias = [json.loads(line) for line in dados_ev.splitlines() if line.strip()]
+    ev_drift = validate_evidencia_drift(evidencias, occurrences)
+    if not ev_drift.is_valid:
+        raise ValueError(
+            f"Drift de evidências v9: ausentes={ev_drift.missing_fields}, "
+            f"extras={ev_drift.unexpected_fields}, erros={ev_drift.errors[:5]}"
+        )
 
     catalogo = consolidar_catalogo_medicamentos(occurrences)
     meds_json = json.dumps(catalogo, ensure_ascii=False, indent=2) + "\n"
     caminho_meds.write_text(meds_json, encoding="utf-8", newline="\n")
-    caminho_meds_full.write_text(meds_json, encoding="utf-8", newline="\n")
 
     norm_chunks = consolidar_normative_chunks(caminho_norm)
     caminho_norm.write_text(
@@ -1557,9 +1589,9 @@ def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
         newline="\n",
     )
 
-    pdf_chunks = regenerar_unified_pdf_chunks(raiz, catalogo, norm_chunks)
-    caminho_pdf_chunks.write_text(
-        json.dumps(pdf_chunks, ensure_ascii=False, indent=2) + "\n",
+    evidence_chunks = gerar_evidence_chunks_v2(evidencias, str(origem["release_version"]))
+    caminho_evidence_chunks.write_text(
+        json.dumps(evidence_chunks, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -1568,11 +1600,12 @@ def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
         caminho_manifesto=caminho_manifest,
         caminho_meds=caminho_meds,
         caminho_norm_chunks=caminho_norm,
-        caminho_pdf_chunks=caminho_pdf_chunks,
+        caminho_evidence_chunks=caminho_evidence_chunks,
         caminho_staging_occ=caminho_occ,
+        caminho_staging_ev=caminho_ev,
         total_meds=len(catalogo),
         total_norm_chunks=len(norm_chunks),
-        total_pdf_chunks=len(pdf_chunks),
+        total_evidence_chunks=len(evidence_chunks),
         total_occurrences=len(occurrences),
         origem=origem,
     )

@@ -102,3 +102,20 @@ def test_log_json_carrega_a_decisao_anti_injection() -> None:
     assert linha["seguranca_canal"] == "pdf"
     assert linha["seguranca_bloqueado"] is True
     assert linha["seguranca_motivos"] == ["IGNORAR_INSTRUCOES"]
+
+
+def test_log_json_carrega_decisao_saida() -> None:
+    registro = logging.makeLogRecord(
+        {
+            "name": "app.seguranca",
+            "levelname": "INFO",
+            "msg": "decisao_saida_llm",
+            "seguranca_saida_aprovada": False,
+            "seguranca_saida_motivos": ["PII_CPF"],
+        }
+    )
+
+    linha = json.loads(FormatadorJson().format(registro))
+
+    assert linha["seguranca_saida_aprovada"] is False
+    assert linha["seguranca_saida_motivos"] == ["PII_CPF"]
