@@ -229,7 +229,7 @@ if __name__ == "__main__":
     itens = extrair_rename_completa(pdf)
     print(f"Total de itens extraídos: {len(itens)}")
 
-    destino = raiz / "data" / "processed" / "medicamentos_sus_canonical_full.json"
+    destino = raiz / "data" / "processed" / "medicamentos_sus_rename_raw.json"
     with open(destino, "w", encoding="utf-8") as f:
         json.dump(itens, f, ensure_ascii=False, indent=2)
     print(f"Salvo em: {destino}")

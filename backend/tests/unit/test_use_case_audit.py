@@ -45,9 +45,10 @@ def test_audit_prescricao_persona_dona_helena() -> None:
     metformina = card.itens_auditados[1]
     assert metformina.via_retirada == CoverageRoute.FARMACIA_POPULAR
 
-    # Dapagliflozina -> Farmácia Popular
+    # Dapagliflozina -> Farmácia Popular com orientação alternativa CEAF (36801 / LME)
     dapa = card.itens_auditados[2]
     assert dapa.via_retirada == CoverageRoute.FARMACIA_POPULAR
+    assert any("36801" in doc or "LME" in doc for doc in dapa.o_que_levar)
 
 
 def test_audit_prescricao_persona_lucas_alto_custo() -> None:

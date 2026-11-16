@@ -55,6 +55,7 @@ def source_hashes(root: Path) -> dict[str, str]:
         root / "evals/uv.lock",
         root / "data/processed/medicamentos_sus_canonical.json",
         root / "data/processed/normative_chunks.json",
+        root / "data/processed/evidence_chunks_v2.json",
     ]
     return {
         p.relative_to(root).as_posix(): hashlib.sha256(

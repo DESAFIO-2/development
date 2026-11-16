@@ -41,6 +41,25 @@ def test_tabular_matcher_dapagliflozina_farmacia_popular() -> None:
     _, med = matches[0]
     assert "dapagliflozina" in med.dcb_name
     assert med.dispensation_route == "FARMACIA_POPULAR"
+    assert med.available_reme_df is True
+    assert "36801" in med.notes
+
+
+def test_tabular_matcher_equivalencia_milhar_e_sacubitril_escopada() -> None:
+    repo = LocalCanonicalMedicationRepository()
+    matcher = TabularDCBMatcher(repo.listar_todos())
+
+    assert matcher.normalizar_concentracao("5.000 UI/0,25 mL") == "5000ui/0.25ml"
+    assert matcher.normalizar_concentracao("0,125 mg") == "0.125mg"
+
+    heparina = matcher.casar("heparina sódica", concentracao="5000 UI/0,25 mL")
+    assert len(heparina) == 1
+    assert heparina[0][1].concentration == "5.000 UI/0,25 mL"
+
+    sacubitril = matcher.casar("sacubitril valsartana 97/103 mg", concentracao="97/103 mg")
+    assert len(sacubitril) == 1
+    assert sacubitril[0][1].concentration == "200 mg"
+    assert sacubitril[0][1].dispensation_route == "ALTO_CUSTO_CEAF"
 
 
 def test_hybrid_retriever_recupera_norma_e_abstem_fora_de_elenco() -> None:
