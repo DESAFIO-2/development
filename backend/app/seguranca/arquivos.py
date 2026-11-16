@@ -92,10 +92,15 @@ def _inspecionar_open_action_estrutural(reader: PdfReader) -> tuple[bool, bool]:
     if not isinstance(root, DictionaryObject) or "/OpenAction" not in root:
         return False, False
     acao = _resolver(root["/OpenAction"])
-    # Destinos de navegação/zoom ([page /Fit] ou [page /XYZ ...]) são legítimos em PDFs clínicos.
+    # Destinos de navegação/zoom ([page_ref /Fit] ou /XYZ) são legítimos em PDFs clínicos.
     if isinstance(acao, ArrayObject):
         for item in acao:
-            if isinstance(_resolver(item), DictionaryObject):
+            resolvido = _resolver(item)
+            if isinstance(resolvido, DictionaryObject) and (
+                str(_resolver(resolvido.get("/Type", ""))) != "/Page"
+                or "/S" in resolvido
+                or "/Next" in resolvido
+            ):
                 return True, True
         return True, False
     if isinstance(acao, DictionaryObject):
@@ -160,8 +165,8 @@ def validar_pdf(conteudo: bytes) -> ResultadoArquivo:
     try:
         reader = PdfReader(io.BytesIO(conteudo), strict=False)
     except (PdfReadError, Exception):
-        if "ObjStm" in nomes:
-            motivos_set.add("PDF_OBJSTM_INVALIDO")
+        if exige_parser:
+            motivos_set.add("PDF_ESTRUTURA_INVALIDA")
     else:
         if reader.is_encrypted:
             motivos_set.add("PDF_ENCRYPT")

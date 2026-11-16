@@ -32,7 +32,7 @@ jobs:
       - name: Validar datasets de avaliação
         run: uv run --project backend python evals/runners/validar_datasets.py
       - name: Benchmark determinístico v1
-        run: make benchmark
+        run: make benchmark DATASET=evals/datasets/golden_set_v1.jsonl
       - name: Benchmark consolidado v2 (Corpus v5)
         run: make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
       - name: Smoke sintético do protocolo Semana 3 (não mede LLM)

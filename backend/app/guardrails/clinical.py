@@ -117,9 +117,14 @@ class ClinicalGuardrail:
             r"|problema|pode|posso|devo|hoje)\b"
         ),
         re.compile(
-            r"\b(?:duas?\s+vezes|2\s*x|em\s+dobro|dobro|metade|esqueci)\b(?:\W+\w+){0,7}?\W+"
+            r"\b(?:duas?\s+vezes|2\s*x|em\s+dobro|dobro|esqueci)\b(?:\W+\w+){0,7}?\W+"
             r"\b(?:tomo|tomar|comprimido|dose|remedio|faz\s+mal|problema|perigo\w*|hoje)\b"
         ),
+        re.compile(
+            r"\b(?:tomo|tomar|tomei|posso|devo|faz\s+mal|problema|perigo\w*)\b"
+            r"(?:\W+\w+){0,4}?\W+\bmetade\b"
+        ),
+        re.compile(r"\bmetade\b(?:\W+\w+){0,5}?\W+\b(?:faz\s+mal|problema|perigo\w*|posso|devo)\b"),
     )
 
     # 3. Diagnóstico / interpretação de exames ou sintomas
@@ -154,7 +159,7 @@ class ClinicalGuardrail:
         re.compile(
             r"\b(?:posso|pode|devo|consigo|quero)\b(?:\W+\w+){0,3}?\W+"
             r"\b(?:trocar|substituir|mudar)\b(?:\W+\w+){0,6}?\W+\b(?:pelo|pela|por)\b"
-            r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario)\b)"
+            r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante|documento|conta)\b)"
         ),
         re.compile(
             rf"\b(?:{_SUBST_TERAPEUTICO}|exame)\b(?:\W+\w+){{0,6}}?\W+"
@@ -207,6 +212,24 @@ class ClinicalGuardrail:
         "avc",
     )
 
+    _MSG_EMERGENCIA = (
+        "ALERTA DE EMERGÊNCIA: Diante de sintomas graves como dor no peito, "
+        "falta de ar ou picos pressóricos, procure imediatamente uma UPA 24h, "
+        "ligue para o SAMU (192) ou dirija-se ao pronto-socorro. "
+        "O SUS Cidadão atua estritamente na navegação administrativa de onde "
+        "retirar medicamentos gratuitos já prescritos e não realiza "
+        "atendimento médico emergencial."
+    )
+    _MSG_ATO_MEDICO = (
+        "Aviso Importante (Preservação do Ato Médico — Lei nº 12.842/2013): "
+        "O SUS Cidadão atua exclusivamente na orientação logística e "
+        "administrativa de acesso aos serviços públicos. Não indicamos "
+        "diagnósticos, não alteramos doses e não prescrevemos nem "
+        "substituímos medicamentos. Por favor, consulte seu médico ou a "
+        "equipe de Saúde da Família da sua UBS antes de alterar seu "
+        "tratamento."
+    )
+
     def _clausula_e_administrativa(self, clausula: str) -> bool:
         return any(p.search(clausula) for p in self._ADMINISTRATIVO_PERMITIDO)
 
@@ -214,7 +237,14 @@ class ClinicalGuardrail:
         """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
         check_injecao = inspecionar_entrada(pergunta, Canal.TEXTO)
         norm = _normalizar(pergunta)
-        tem_emergencia = any(flag in norm for flag in self._EMERGENCY_FLAGS)
+        if any(flag in norm for flag in self._EMERGENCY_FLAGS):
+            return ClinicalCheckDTO(
+                bloqueado=True,
+                motivo="EMERGENCIA_MEDICA",
+                alerta_emergencia=True,
+                mensagem_acolhedora=self._MSG_EMERGENCIA,
+            )
+
         clausulas = _clausulas(norm) or [norm]
 
         todas_as_regras = (
@@ -230,37 +260,18 @@ class ClinicalGuardrail:
                 continue
             for motivo, patterns in todas_as_regras:
                 if any(pattern.search(clausula) for pattern in patterns):
-                    if tem_emergencia:
-                        msg = (
-                            "ALERTA DE EMERGÊNCIA: Diante de sintomas graves como dor no peito, "
-                            "falta de ar ou picos pressóricos, procure imediatamente uma UPA 24h, "
-                            "ligue para o SAMU (192) ou dirija-se ao pronto-socorro. "
-                            "O SUS Cidadão atua estritamente na navegação administrativa de onde "
-                            "retirar medicamentos gratuitos já prescritos e não realiza "
-                            "atendimento médico emergencial."
-                        )
-                    else:
-                        msg = (
-                            "Aviso Importante (Preservação do Ato Médico — Lei nº 12.842/2013): "
-                            "O SUS Cidadão atua exclusivamente na orientação logística e "
-                            "administrativa de acesso aos serviços públicos. Não indicamos "
-                            "diagnósticos, não alteramos doses e não prescrevemos nem "
-                            "substituímos medicamentos. Por favor, consulte seu médico ou a "
-                            "equipe de Saúde da Família da sua UBS antes de alterar seu "
-                            "tratamento."
-                        )
                     return ClinicalCheckDTO(
                         bloqueado=True,
                         motivo=motivo,
-                        alerta_emergencia=tem_emergencia,
-                        mensagem_acolhedora=msg,
+                        alerta_emergencia=False,
+                        mensagem_acolhedora=self._MSG_ATO_MEDICO,
                     )
 
         if check_injecao.bloqueado:
             return ClinicalCheckDTO(
                 bloqueado=True,
                 motivo="PROMPT_INJECTION",
-                alerta_emergencia=tem_emergencia,
+                alerta_emergencia=False,
                 mensagem_acolhedora=(
                     "Aviso de Segurança (Preservação do Ato Médico — Lei nº 12.842/2013): "
                     "A solicitação contém instruções incompatíveis com o escopo de navegação "

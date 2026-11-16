@@ -108,9 +108,30 @@ def test_pdf_com_arquivo_embutido_recusado() -> None:
 
 
 def test_pdf_open_action_destino_legitimo_so_gera_alerta() -> None:
-    resultado = validar_pdf(PDF_SIMPLES + b"/OpenAction [3 0 R /Fit]")
+    import io
+
+    from pypdf import PdfWriter
+    from pypdf.generic import ArrayObject, NameObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=200, height=200)
+    assert page.indirect_reference is not None
+    writer._root_object[NameObject("/OpenAction")] = ArrayObject(
+        [page.indirect_reference, NameObject("/Fit")]
+    )
+    buf = io.BytesIO()
+    writer.write(buf)
+
+    resultado = validar_pdf(buf.getvalue())
     assert resultado.aceito
     assert resultado.alertas == ("PDF_OPENACTION",)
+
+
+def test_pdf_malformado_com_open_action_sem_objstm_recusado() -> None:
+    malformado = b"%PDF-1.4\n1 0 obj << /Type /Catalog /OpenAction 5 0 R >> endobj\n%%EOF"
+    resultado = validar_pdf(malformado)
+    assert not resultado.aceito
+    assert "PDF_ESTRUTURA_INVALIDA" in resultado.motivos
 
 
 def test_pdf_open_action_com_acao_executavel_recusado() -> None:

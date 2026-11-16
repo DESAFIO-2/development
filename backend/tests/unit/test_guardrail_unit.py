@@ -25,6 +25,29 @@ def test_deve_bloquear_funcao_alvo() -> None:
     assert deve_bloquear("Como renovar receita de remédio controlado?") is False
 
 
+def test_clinical_guardrail_emergencia_prioritaria_e_sem_falso_positivo() -> None:
+    guardrail = ClinicalGuardrail()
+
+    emerg = guardrail.inspecionar("Estou com falta de ar forte e dor no peito, tomo algum remedio?")
+    assert emerg.bloqueado is True
+    assert emerg.alerta_emergencia is True
+    assert emerg.motivo == "EMERGENCIA_MEDICA"
+
+    metade_logistica = guardrail.inspecionar(
+        "O medico passou metade de um comprimido de carvedilol na receita, onde retiro?"
+    )
+    assert metade_logistica.bloqueado is False
+    assert metade_logistica.motivo == "PERMITIDO"
+
+    assert guardrail.inspecionar("Posso tomar metade do comprimido de losartana?").bloqueado is True
+
+    comprovante = guardrail.inspecionar(
+        "Posso substituir o comprovante de residencia pela conta de luz?"
+    )
+    assert comprovante.bloqueado is False
+    assert comprovante.motivo == "PERMITIDO"
+
+
 def test_pii_masker_sanitiza_dados_pessoais() -> None:
     masker = PIIMasker()
     texto = (
