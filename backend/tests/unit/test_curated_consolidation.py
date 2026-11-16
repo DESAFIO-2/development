@@ -142,6 +142,24 @@ def test_catalogo_consolidado_possui_cobertura_multifonte() -> None:
     assert len(clari_500) == 1
     assert len(clari_500[0]["occurrence_ids"]) == 4
 
+    # Imunoglobulina anti-hepatite b sem resíduo "- -" e 1.000 UI == 1000 UI -> HOSPITALAR
+    assert all("- -" not in item["dcb_name"] for item in catalogo_bruto)
+    hep_1000 = [
+        item
+        for item in catalogo_bruto
+        if item["dcb_name"] == "imunoglobulina humana anti-hepatite b"
+        and chave_normalizada_concentracao(item["concentration"]) == "1000ui"
+    ]
+    assert len(hep_1000) == 1
+    assert len(hep_1000[0]["occurrence_ids"]) == 2
+    assert hep_1000[0]["dispensation_route"] == "HOSPITALAR"
+    assert (
+        matcher.casar("imunoglobulina humana anti-hepatite b 1000 UI", concentracao="1000 UI")[0][1]
+        == matcher.casar("imunoglobulina humana anti-hepatite b 1.000 UI", concentracao="1.000 UI")[
+            0
+        ][1]
+    )
+
 
 def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
     caminho_meds = RAIZ_REPO / "data" / "processed" / "medicamentos_sus_canonical.json"

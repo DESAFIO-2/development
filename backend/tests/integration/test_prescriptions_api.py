@@ -285,3 +285,21 @@ def test_api_lifespan_aquece_container_com_matcher_unico() -> None:
         services = local_client.app.state.services  # type: ignore[attr-defined]
         assert services.audit_use_case.tabular_matcher is services.hybrid_retriever.tabular
         assert local_client.get("/health").status_code == 200
+
+
+def test_api_unifica_imunoglobulina_anti_hepatite_b_milhar_para_hospitalar() -> None:
+    response = client.post(
+        "/api/v1/prescriptions/audit",
+        json={
+            "itens": [
+                {"nome_digitado": "imunoglobulina humana anti-hepatite b 1000 UI"},
+                {"nome_digitado": "imunoglobulina humana anti-hepatite b 1.000 UI"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    a, b = response.json()["itens"]
+    assert a["via_retirada"] == "HOSPITALAR"
+    assert b["via_retirada"] == "HOSPITALAR"
+    assert a["principio_ativo_dcb"] == "IMUNOGLOBULINA HUMANA ANTI-HEPATITE B"
+    assert b["principio_ativo_dcb"] == "IMUNOGLOBULINA HUMANA ANTI-HEPATITE B"

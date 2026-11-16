@@ -34,8 +34,8 @@ No commit `8d76f923354a4707810be38e238a8a3ea035554e` de `data-engineering`:
 ### Adaptado no consumidor (`development`)
 - `backend/app/ingestion/consolidate_curated_corpus.py`:
   - Atualização do contrato de schema drift para `v9` (`validate_occurrence_drift` e `validate_evidencia_drift` validando vínculo 1:1 ocorrência↔evidência, `review_status == "approved"` e ausência de linhas vazias/excluídas).
-  - Remoção de separadores de milhar brasileiros em `chave_normalizada_concentracao` (`5.000 UI/0,25 mL` ↔ `5000 UI/0,25 mL`, `1.000 UI` ↔ `1000 UI`, `4.000 UI` ↔ `4000 UI`, `1.000 mg` ↔ `1000 mg`), preservando decimais.
-  - Remoção integral dos 5 registros sintéticos `occ == 0` (`MED-ATENOLOL-25MG`, `MED-SALBUTAMOL-100MCG`, `MED-DAPAGLIFLOZINA-10MG` antigo, `MED-SACUBITRIL-VALSARTANA-97-103MG`, `MED-FORMOTEROL-BUDESONIDA-12-400MCG` antigo); todos os `1.776` itens em `data/processed/medicamentos_sus_canonical.json` agora possuem `len(occurrence_ids) >= 1`.
+  - Remoção de separadores de milhar brasileiros em `chave_normalizada_concentracao` (`5.000 UI/0,25 mL` ↔ `5000 UI/0,25 mL`, `1.000 UI` ↔ `1000 UI`, `4.000 UI` ↔ `4000 UI`, `1.000 mg` ↔ `1000 mg`), preservando decimais, além da normalização do resíduo OCR `anti- -hepatite b` → `anti-hepatite b` (`imunoglobulina humana anti-hepatite b`, unificando `1.000 UI` F01 e `1000 UI` F03 em `HOSPITALAR`).
+  - Remoção integral dos 5 registros sintéticos `occ == 0` (`MED-ATENOLOL-25MG`, `MED-SALBUTAMOL-100MCG`, `MED-DAPAGLIFLOZINA-10MG` antigo, `MED-SACUBITRIL-VALSARTANA-97-103MG`, `MED-FORMOTEROL-BUDESONIDA-12-400MCG` antigo); todos os `1.775` itens em `data/processed/medicamentos_sus_canonical.json` agora possuem `len(occurrence_ids) >= 1`.
   - Unificação canônica de `dapagliflozina 10 mg` (`F01 + F03 + F04`, `3` ocorrências) mantendo `dispensation_route: "FARMACIA_POPULAR"`, `available_reme_df: true` e orientação explícita em `notes` / `required_documents` para a rota alternativa via CEAF/Alto Custo com LME (`Cód. SES-DF 36801`), e de `sulfato de salbutamol 100 mcg/dose` (`F01 + F03 + F04`, `3` ocorrências).
   - Geração de `data/processed/evidence_chunks_v2.json` (`2.114` chunks únicos `one-evidence-v2`) e remoção dos arquivos obsoletos `data/staging/curated_occurrences_v5.jsonl`, `data/manifests/corpus_v5_source.json`, `data/processed/unified_pdf_chunks.json` e `data/processed/medicamentos_sus_canonical_full.json`.
   - **Nota de escopo Pré-Semana 4:** nenhum repositório/consumidor em `backend/app/` foi criado agora para `evidence_chunks_v2.json` a fim de evitar código morto; a ligação ao pipeline RAG/agentes ocorrerá na Semana 4.
@@ -54,7 +54,7 @@ No commit `8d76f923354a4707810be38e238a8a3ea035554e` de `data-engineering`:
 ## 4. Validação no Consumidor
 
 Checagens executadas na branch `feat/pre-semana4-corpus-v9`:
-- `backend/app/ingestion/consolidate_curated_corpus.py`: `1.776` itens canônicos (`0` com `occ == 0`), `20` chunks normativos, `2.114` `evidence_chunks_v2` únicos.
+- `backend/app/ingestion/consolidate_curated_corpus.py`: `1.775` itens canônicos (`0` com `occ == 0`), `20` chunks normativos, `2.114` `evidence_chunks_v2` únicos.
 - `evals/runners/ragas_runner.py` (`golden_set_v1.jsonl` e `golden_set_v2_consolidado.jsonl`), `evals/runners/comparar_semana3.py --synthetic-smoke`, `evals/runners/suite_seguranca.py --synthetic-smoke --fail-on-api-elim`, `uv run pytest`, `uv run ruff`, `uv run mypy`, `pip-audit` e `bandit`.
 
 ## 5. Reversão

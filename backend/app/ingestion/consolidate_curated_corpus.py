@@ -1262,6 +1262,12 @@ def classificar_apresentacao_consolidada(
     )
 
 
+def _normalizar_nome_dcb_ocr(nome: str) -> str:
+    """Corrige resíduos de quebra hifenizada de OCR (ex.: 'anti- -hepatite' -> 'anti-hepatite')."""
+    limpo = re.sub(r"-\s+-", "-", nome.strip().rstrip("*").strip().lower())
+    return re.sub(r"\s+", " ", limpo)
+
+
 def consolidar_catalogo_medicamentos(
     occurrences: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -1279,7 +1285,7 @@ def consolidar_catalogo_medicamentos(
         # Os insumos F01 ficam na evidência de presença, fora do roteiro de medicamentos.
         if occ["item_type"] == "supply" and occ["source"]["source_id"] != "F04":
             continue
-        dcb_raw = str(occ["active_ingredient"]).strip().rstrip("*").strip().lower()
+        dcb_raw = _normalizar_nome_dcb_ocr(str(occ["active_ingredient"]))
         conc_raw = normalizar_concentracao(str(occ.get("strength") or ""))
         form_raw = str(occ.get("form") or "").strip().lower()
         if form_raw in {"", "-"}:
@@ -1325,7 +1331,7 @@ def consolidar_catalogo_medicamentos(
             continue
         occs = grupos[key]
         primeiro = occs[0]
-        dcb_name = str(primeiro["active_ingredient"]).strip().rstrip("*").strip().lower()
+        dcb_name = _normalizar_nome_dcb_ocr(str(primeiro["active_ingredient"]))
         conc = normalizar_concentracao(str(primeiro.get("strength") or ""))
         form = str(primeiro.get("form") or "").strip().lower()
         if not form or form == "-":
