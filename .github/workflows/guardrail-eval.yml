@@ -6,6 +6,7 @@ on:
     paths:
       - "evals/**"
       - "backend/app/guardrails/**"
+      - "backend/app/seguranca/**"
       - ".github/workflows/guardrail-eval.yml"
 
 jobs:

@@ -50,8 +50,8 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Decisão sobre cliente mobile & carteira digital** | Semana 1 | ✅ Documentada | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) |
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` (Recall: 100%, Falso Bloqueio: 0%) |
-| **Ingestão Tabular RENAME / PFPB** | Semana 2 | ✅ Concluído | Catálogo Canônico RENAME Integral (992 apresentações / 575 DCBs), Estoque CEAF (857 itens), Farmácias DF (228 pontos) |
-| **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB, BM25 e TF-IDF com RRF. Catálogo consolidado v5 com 1.787 registros. |
+| **Ingestão Tabular RENAME / PFPB / REME-DF** | Semanas 2–3 | ✅ Concluído | Consolidação rastreável com proveniência (`data/staging/` e `data/processed/`) |
+| **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB tabular, BM25 e TF-IDF com RRF (sem ChromaDB em runtime). |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
 | **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
@@ -78,34 +78,32 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 ## Estrutura do Repositório (Clean Architecture & LLMOps Monorepo)
 
 ```text
-challenge2/
+development/
 ├── .github/
-│   ├── workflows/backend-ci.yml # CI automatizado (Ruff, Mypy, Pytest, Docker)
+│   ├── workflows/               # CI automatizado (backend-ci, guardrail-eval, rag-evaluation, security)
 │   └── CODEOWNERS               # Matriz de responsabilidade de revisão por componente
 ├── backend/                     # Aplicação e Serviços de IA (FastAPI + Clean Architecture)
 │   ├── app/
-│   │   ├── main.py              # Entrypoint da API FastAPI
-│   │   ├── core/                # Configurações globais e logs estruturados
-│   │   ├── api/                 # Rotas HTTP (/health, /audit-prescription)
-│   │   ├── domain/              # Modelos e regras de negócio puras (Prescription, Guidance)
-│   │   ├── application/         # Casos de uso e portas abstratas (Clean Architecture)
-│   │   │   ├── use_cases/       # AuditPrescription, SearchMedication, ClassifyRoute
-│   │   │   ├── ports/           # Interfaces para repositórios e provedores
-│   │   │   └── services/        # Orquestração do fluxo de auditoria
-│   │   ├── infrastructure/      # Adaptadores concretos (ChromaDB, Embeddings, LLM)
-│   │   ├── ingestion/           # Pipelines de ETL e normalização DCB (Engenharia de Dados)
-│   │   ├── retrieval/           # Hybrid Retriever: Busca Tabular (DCB) + Vetorial (Portarias)
-│   │   └── guardrails/          # Mascaramento PII (LGPD) e bloqueio clínico (Preservação do Ato Médico)
-│   ├── tests/                   # Testes automatizados (test_health, unitários e integração)
+│   │   ├── main.py              # Entrypoint da API FastAPI + lifespan
+│   │   ├── container.py         # Composição de serviços da API
+│   │   ├── core/                # Configurações, logs JSON e telemetria OpenTelemetry
+│   │   ├── api/                 # Rotas HTTP (/health, /api/v1/prescriptions/audit, /autocomplete)
+│   │   ├── domain/              # Modelos e regras de negócio puras (Prescription, Guidance, Medication)
+│   │   ├── application/         # Casos de uso (AuditPrescription) e portas abstratas (GuardrailPort, GeneratorPort, etc.)
+│   │   ├── infrastructure/      # Adaptadores concretos (repositórios JSON e clientes REST LLM)
+│   │   ├── ingestion/           # Pipelines de consolidação de corpus e normalização DCB
+│   │   ├── retrieval/           # Hybrid Retriever: Busca Tabular (DCB) + Lexical (BM25 + TF-IDF RRF)
+│   │   ├── guardrails/          # Mascaramento PII (LGPD) e bloqueio clínico (Preservação do Ato Médico)
+│   │   └── seguranca/           # Esteira anti-injection, portão de arquivos e validação de saída
+│   ├── tests/                   # Testes automatizados (unitários, integração e segurança)
 │   ├── Dockerfile               # Containerização com usuário não-root e healthcheck
 │   ├── pyproject.toml           # Dependências gerenciadas via uv
 │   └── uv.lock
 ├── data/                        # Dados e Governança de Linhagem
-│   ├── manifests/               # Linhagem, datas de publicação e hashes (RENAME, PFPB, REME-DF, SISREG)
+│   ├── manifests/               # Linhagem, datas de publicação e hashes SHA-256
 │   ├── raw/                     # Arquivos públicos originais baixados
-│   ├── staging/                 # Dados intermediários de transformação
-│   ├── processed/               # Tabelas canônicas limpas (medicamentos_sus_canonical)
-│   └── vectorstore/             # Índices ChromaDB locais (ignorado no Git)
+│   ├── staging/                 # Ocorrências curadas intermediárias
+│   └── processed/               # Catálogo canônico, chunks normativos e evidências literais
 ├── docs/                        # Documentação Técnica e Decisões
 │   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002, 0003 e 0004)
 │   ├── architecture/            # Diagramas C4, Matriz de Métricas e Especificação RAG

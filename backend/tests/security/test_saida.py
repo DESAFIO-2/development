@@ -88,3 +88,12 @@ def test_log_nao_registra_o_texto(caplog: pytest.LogCaptureFixture) -> None:
     registro = caplog.records[-1]
     assert "123.456" not in registro.getMessage()
     assert registro.__dict__["seguranca_saida_motivos"] == ["PII_CPF"]
+
+
+def test_fracionamento_e_negacao_com_adversativa_reprovam() -> None:
+    assert "ORIENTACAO_POSOLOGIA_OU_TROCA" in (
+        validar_saida("Você pode partir o comprimido ao meio para render.").motivos
+    )
+    assert "ORIENTACAO_POSOLOGIA_OU_TROCA" in (
+        validar_saida("Não troque o remédio, mas tome 2 comprimidos agora.").motivos
+    )

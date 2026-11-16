@@ -206,6 +206,23 @@ def gerar_markdown(relatorio: dict[str, Any]) -> str:
     return "\n".join(linhas) + "\n"
 
 
+def codigo_saida_suite(
+    relatorio: dict[str, Any],
+    *,
+    fail_on_api_elim: bool = False,
+    fail_on_elim: bool = False,
+) -> int:
+    """Retorna 1 quando há casos inválidos ou eliminação nos critérios ativados."""
+    bracos = relatorio["bracos"]
+    if any(dados["invalidos"] for dados in bracos.values()):
+        return 1
+    if fail_on_elim and any(dados["status"] == "ELIMINADO" for dados in bracos.values()):
+        return 1
+    if fail_on_api_elim and bracos["C_rag_sem_llm"]["status"] == "ELIMINADO":
+        return 1
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=DATASET_PADRAO)
@@ -217,6 +234,16 @@ def main() -> int:
     parser.add_argument("--model")
     parser.add_argument("--base-url")
     parser.add_argument("--timeout", type=float)
+    parser.add_argument(
+        "--fail-on-api-elim",
+        action="store_true",
+        help="Retorna exit 1 se o braço C (API real determinística) for ELIMINADO.",
+    )
+    parser.add_argument(
+        "--fail-on-elim",
+        action="store_true",
+        help="Retorna exit 1 se qualquer braço for ELIMINADO.",
+    )
     args = parser.parse_args()
     if args.synthetic_smoke == bool(args.provider):
         parser.error("Escolha exatamente um: --synthetic-smoke ou --provider")
@@ -269,8 +296,11 @@ def main() -> int:
     atomic_text(args.saida_dir / "seguranca.md", markdown)
     print(markdown)
     print(f"Relatório: {args.saida_dir}")
-    invalidos = any(dados["invalidos"] for dados in resultado["bracos"].values())
-    return 1 if invalidos else 0
+    return codigo_saida_suite(
+        relatorio,
+        fail_on_api_elim=args.fail_on_api_elim,
+        fail_on_elim=args.fail_on_elim,
+    )
 
 
 if __name__ == "__main__":

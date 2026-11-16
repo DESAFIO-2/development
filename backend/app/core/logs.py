@@ -21,11 +21,13 @@ CAMPOS_EXTRAS = (
     "status",
     "duracao_ms",
     "operacao",
-    # Decisões da camada anti-injection (app.seguranca). Nunca o texto do cidadão.
+    # Decisões da camada anti-injection e saída (app.seguranca). Nunca o texto do cidadão.
     "seguranca_canal",
     "seguranca_bloqueado",
     "seguranca_motivos",
     "seguranca_versao_regras",
+    "seguranca_saida_aprovada",
+    "seguranca_saida_motivos",
 )
 
 

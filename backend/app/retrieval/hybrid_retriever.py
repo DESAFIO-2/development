@@ -61,10 +61,11 @@ class HybridRetriever(RetrieverPort):
         medications: list[CanonicalMedicationItem],
         chunks: list[NormativeChunkDTO],
         rrf_k: int = 60,
+        tabular_matcher: TabularDCBMatcher | None = None,
     ) -> None:
         self.medications = medications
         self.chunks = {c.chunk_id: c for c in chunks}
-        self.tabular = TabularDCBMatcher(medications)
+        self.tabular = tabular_matcher or TabularDCBMatcher(medications)
         self.tfidf = TFIDFRetriever(chunks)
         self.bm25 = BM25Retriever(chunks)
         self.rrf_k = rrf_k

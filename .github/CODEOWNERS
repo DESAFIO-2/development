@@ -14,10 +14,8 @@
 /backend/app/ingestion/ @jhsribeiro @samucabsb
 /data/ @jhsribeiro @oficialmarlonmd
 
-# Retrieval, Vectorstores & Embeddings (Data Science)
+# Retrieval (Data Science)
 /backend/app/retrieval/ @oficialmarlonmd @samucabsb
-/backend/app/infrastructure/vectorstores/ @oficialmarlonmd @samucabsb
-/backend/app/infrastructure/embeddings/ @oficialmarlonmd @samucabsb
 
 # MLOps, CI/CD, Observability & Evaluations
 /evals/ @Amistice @oficialmarlonmd @samucabsb

@@ -1,4 +1,4 @@
-DATASET ?= evals/datasets/golden_set_v1.jsonl
+DATASET ?= evals/datasets/golden_set_v2_consolidado.jsonl
 MODEL ?= qwen2.5:14b
 EMBED_MODEL ?= bge-m3
 COLETA_DIR ?=
@@ -53,7 +53,7 @@ test:
 	cd backend && uv run pytest
 
 run-api:
-	cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	cd backend && uv run python -c "import os, pathlib, uvicorn; p = pathlib.Path('.env'); [os.environ.setdefault(k.strip(), v.strip()) for line in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if line.strip() and not line.lstrip().startswith('#') and '=' in line for k, v in [line.split('=', 1)]]; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, reload=True)"
 
 run-ui:
 	@echo "Interface React Native planejada. Consulte docs/adr/0002_mobile_first_react_native_client.md"
@@ -104,7 +104,7 @@ semana3-run-blindado:
 	uv run --project backend python evals/runners/semana3_local.py --variante blindado --run-dir "$(RUN_DIR_BLINDADO)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
 
 seguranca-smoke:
-	uv run --project backend python evals/runners/suite_seguranca.py --synthetic-smoke --saida-dir evals/reports/seguranca_smoke
+	uv run --project backend python evals/runners/suite_seguranca.py --synthetic-smoke --fail-on-api-elim --saida-dir evals/reports/seguranca_smoke
 
 seguranca-run:
 	uv run --project backend python evals/runners/suite_seguranca.py --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR)"
@@ -116,8 +116,4 @@ docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .
 
 clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name ".ruff_cache" -exec rm -rf {} +
-	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	uv run --project backend python -c "import pathlib, shutil; root = pathlib.Path('.'); [shutil.rmtree(p, ignore_errors=True) for name in ('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache') for p in root.rglob(name) if '.venv' not in p.parts]; [p.unlink(missing_ok=True) for p in root.rglob('*.pyc') if '.venv' not in p.parts]"

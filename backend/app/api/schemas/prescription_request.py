@@ -36,6 +36,11 @@ class MedicationItemDTO(BaseModel):
         max_length=500,
         examples=["1x ao dia pela manhã"],
     )
+    quantidade_prescrita: str | None = Field(
+        default=None,
+        max_length=200,
+        examples=["60 comprimidos"],
+    )
 
 
 class PrescriptionAuditRequestDTO(BaseModel):
@@ -59,6 +64,13 @@ class PrescriptionAuditRequestDTO(BaseModel):
         max_length=150,
         description="Região Administrativa (RA) ou cidade do cidadão no DF",
         examples=["Ceilândia"],
+    )
+    tipo_prescritor: str = Field(
+        default="SUS",
+        min_length=1,
+        max_length=50,
+        description="Origem da receita ('SUS' ou 'Particular/Convenio')",
+        examples=["SUS"],
     )
     pergunta_adicional: str | None = Field(
         default=None,

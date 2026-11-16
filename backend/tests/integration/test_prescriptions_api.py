@@ -245,3 +245,11 @@ def test_api_valida_composicao_completa_sem_somar_doses() -> None:
     assert a["via_retirada"] == "FARMACIA_ALTO_CUSTO"
     assert b["via_retirada"] == "UBS_REME_DF"
     assert c["via_retirada"] == "NAO_PADRONIZADO"
+    assert c["principio_ativo_dcb"] == "NAO_IDENTIFICADO"
+
+
+def test_api_lifespan_aquece_container_com_matcher_unico() -> None:
+    with TestClient(app) as local_client:
+        services = local_client.app.state.services  # type: ignore[attr-defined]
+        assert services.audit_use_case.tabular_matcher is services.hybrid_retriever.tabular
+        assert local_client.get("/health").status_code == 200

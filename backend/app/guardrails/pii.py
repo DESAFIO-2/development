@@ -1,22 +1,45 @@
 """Mascaramento de Dados Pessoais Sensíveis de Saúde (LGPD Art. 11).
 
-Sanitiza CPF, Cartão Nacional de Saúde (CNS), telefone, e-mail e identificação
-do paciente antes de qualquer etapa de recuperação ou processamento por IA generativa.
+Sanitiza CPF, Cartão Nacional de Saúde (CNS), RG, CRM, CID-10, CEP, endereço,
+telefone, e-mail e identificação do paciente antes de qualquer etapa de
+recuperação ou processamento por IA generativa.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import unicodedata
 
+from app.application.ports import PIIMaskingDTO
 
-@dataclass(frozen=True)
-class PIIMaskingResult:
-    """Resultado auditável da desidentificação LGPD."""
+PIIMaskingResult = PIIMaskingDTO
 
-    texto_sanitizado: str
-    tipos_detectados: list[str]
-    total_substituicoes: int
+_TERMOS_NAO_PESSOA: frozenset[str] = frozenset(
+    {
+        "distrito federal",
+        "farmacia popular",
+        "alto custo",
+        "atencao primaria",
+        "sistema unico",
+        "hospital dia",
+        "asa sul",
+        "asa norte",
+        "taguatinga sul",
+        "taguatinga norte",
+        "ceilandia norte",
+        "santa maria",
+        "lago sul",
+        "lago norte",
+        "nucleo bandeirante",
+        "riacho fundo",
+        "sao sebastiao",
+        "jardim botanico",
+        "vicente pires",
+        "sol nascente",
+        "aguas claras",
+        "sus cidadao",
+    }
+)
 
 
 class PIIMasker:
@@ -24,13 +47,36 @@ class PIIMasker:
 
     _CPF_PATTERN = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
     _CNS_PATTERN = re.compile(r"\b[12789]\d{2}[\s.]?\d{4}[\s.]?\d{4}[\s.]?\d{4}\b")
+    _RG_PATTERN = re.compile(r"(?i)\bRG[:\s#-]*\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dX])?\b")
+    _CRM_PATTERN = re.compile(r"(?i)\bCRM(?:[-/\s]*[A-Z]{2})?[:\s#-]*\d{4,7}\b")
+    _CID10_PATTERN = re.compile(r"(?i)\bCID(?:-?10)?[:\s#-]*[A-TV-Z]\d{2}(?:\.\d{1,2})?\b")
+    _CEP_PATTERN = re.compile(r"(?i)(?:\bCEP[:\s#-]*)?\b\d{2}\.?\d{3}-\d{3}\b")
+    _ADDRESS_PATTERN = re.compile(
+        r"(?i)\b(?:endere[cç]o\s*:\s*[^\n;]{4,80}"
+        r"|(?:quadra|qnm|qnn|qno|qnj|qnl|qs|csb|cnb|sqs|sqn|shis|shin|cln|cls"
+        r"|rua|avenida|av\.?)\s+[A-Za-zÀ-Ú0-9][^\n,;]{2,45})"
+    )
     _PHONE_PATTERN = re.compile(r"(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b")
     _EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     _PATIENT_NAME_PATTERN = re.compile(
-        r"(?i)\b(paciente|nome\s+do\s+paciente|titular)\s*:\s*([A-ZÀ-Úa-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú]+){1,4})"
+        r"(?i)\b(paciente|nome\s+do\s+paciente|titular)\s*:\s*"
+        r"([A-ZÀ-Úa-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú]+){1,4})"
+    )
+    _FREE_NAME_PATTERN = re.compile(
+        r"\b(?P<prefixo>(?i:meu nome [eé]|me chamo|chamo-me|para [oa]|dona|sr\.?|sra\.?)\s+)"
+        r"(?P<nome>[A-ZÀ-Ú][a-zà-ú]{1,20}"
+        r"(?:\s+(?:da|de|do|dos|das|[A-ZÀ-Ú][a-zà-ú]{1,20})){1,3})\b"
     )
 
-    def mascarar(self, texto: str) -> PIIMaskingResult:
+    def _substituir_nome_livre(self, match: re.Match[str], cont: list[int]) -> str:
+        nome = match.group("nome")
+        nome_ascii = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
+        if nome_ascii in _TERMOS_NAO_PESSOA:
+            return match.group(0)
+        cont[0] += 1
+        return f"{match.group('prefixo')}[PACIENTE_DESIDENTIFICADO_LGPD]"
+
+    def mascarar(self, texto: str) -> PIIMaskingDTO:
         """Sanitiza PII no texto informado."""
         sanitizado = texto
         tipos_detectados: list[str] = []
@@ -43,27 +89,34 @@ class PIIMasker:
             total += count
             tipos_detectados.append("PATIENT_NAME")
 
-        if self._CNS_PATTERN.search(sanitizado):
-            sanitizado, count = self._CNS_PATTERN.subn("[CNS_MASCARADO_LGPD]", sanitizado)
-            total += count
-            tipos_detectados.append("CNS_CARTAO_SUS")
+        livres = [0]
+        candidato = self._FREE_NAME_PATTERN.sub(
+            lambda m: self._substituir_nome_livre(m, livres), sanitizado
+        )
+        if livres[0] > 0:
+            sanitizado = candidato
+            total += livres[0]
+            if "PATIENT_NAME" not in tipos_detectados:
+                tipos_detectados.append("PATIENT_NAME")
 
-        if self._CPF_PATTERN.search(sanitizado):
-            sanitizado, count = self._CPF_PATTERN.subn("[CPF_MASCARADO_LGPD]", sanitizado)
-            total += count
-            tipos_detectados.append("CPF")
+        padroes: tuple[tuple[re.Pattern[str], str, str], ...] = (
+            (self._CNS_PATTERN, "[CNS_MASCARADO_LGPD]", "CNS_CARTAO_SUS"),
+            (self._CPF_PATTERN, "[CPF_MASCARADO_LGPD]", "CPF"),
+            (self._RG_PATTERN, "[RG_MASCARADO_LGPD]", "RG"),
+            (self._CRM_PATTERN, "[CRM_MASCARADO_LGPD]", "CRM"),
+            (self._CID10_PATTERN, "[CID_MASCARADO_LGPD]", "CID10"),
+            (self._CEP_PATTERN, "[CEP_MASCARADO_LGPD]", "CEP"),
+            (self._ADDRESS_PATTERN, "[ENDERECO_MASCARADO_LGPD]", "ADDRESS"),
+            (self._EMAIL_PATTERN, "[EMAIL_MASCARADO_LGPD]", "EMAIL"),
+            (self._PHONE_PATTERN, "[TELEFONE_MASCARADO_LGPD]", "PHONE"),
+        )
+        for regex, placeholder, tipo in padroes:
+            if regex.search(sanitizado):
+                sanitizado, count = regex.subn(placeholder, sanitizado)
+                total += count
+                tipos_detectados.append(tipo)
 
-        if self._EMAIL_PATTERN.search(sanitizado):
-            sanitizado, count = self._EMAIL_PATTERN.subn("[EMAIL_MASCARADO_LGPD]", sanitizado)
-            total += count
-            tipos_detectados.append("EMAIL")
-
-        if self._PHONE_PATTERN.search(sanitizado):
-            sanitizado, count = self._PHONE_PATTERN.subn("[TELEFONE_MASCARADO_LGPD]", sanitizado)
-            total += count
-            tipos_detectados.append("PHONE")
-
-        return PIIMaskingResult(
+        return PIIMaskingDTO(
             texto_sanitizado=sanitizado,
             tipos_detectados=tipos_detectados,
             total_substituicoes=total,

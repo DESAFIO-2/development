@@ -107,10 +107,42 @@ def test_pdf_com_arquivo_embutido_recusado() -> None:
     assert "PDF_EMBEDDEDFILE" in validar_pdf(PDF_SIMPLES + b"/EmbeddedFile").motivos
 
 
-def test_pdf_open_action_so_gera_alerta() -> None:
-    resultado = validar_pdf(PDF_SIMPLES + b"/OpenAction")
+def test_pdf_open_action_destino_legitimo_so_gera_alerta() -> None:
+    resultado = validar_pdf(PDF_SIMPLES + b"/OpenAction [3 0 R /Fit]")
     assert resultado.aceito
     assert resultado.alertas == ("PDF_OPENACTION",)
+
+
+def test_pdf_open_action_com_acao_executavel_recusado() -> None:
+    resultado = validar_pdf(PDF_SIMPLES + b"/OpenAction << /S /Launch /F (cmd.exe) >>")
+    assert not resultado.aceito
+    assert "PDF_OPENACTION_ACAO" in resultado.motivos
+
+
+@pytest.mark.parametrize(("marcador", "motivo"), [(b"/AA", "PDF_AA"), (b"/Encrypt", "PDF_ENCRYPT")])
+def test_pdf_aa_e_encrypt_recusados(marcador: bytes, motivo: str) -> None:
+    resultado = validar_pdf(PDF_SIMPLES + marcador)
+    assert not resultado.aceito
+    assert motivo in resultado.motivos
+
+
+def test_pdf_com_objstm_comprimido_e_inspecionado() -> None:
+    import io
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(11):
+        writer.add_blank_page(width=200, height=200)
+    writer.compress_identical_objects()
+    buf = io.BytesIO()
+    writer.write(buf)
+    raw = buf.getvalue()
+    if b"/ObjStm" not in raw:
+        raw = raw.replace(b"%%EOF", b"/ObjStm\n%%EOF")
+    resultado = validar_pdf(raw)
+    assert not resultado.aceito
+    assert "PDF_PAGINAS_DEMAIS" in resultado.motivos
 
 
 def test_pdf_grande_demais_recusado() -> None:

@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 from app.application.ports import (
     AuditPrescriptionUseCasePort,
+    GuardrailPort,
     MedicationRepositoryPort,
     RetrieverPort,
 )
@@ -13,10 +14,14 @@ from app.core.telemetry import trace_operation
 from app.domain.guidance import CitizenGuidanceCard, ItemRoteiroCidadao
 from app.domain.medication import CoverageRoute
 from app.domain.prescription import PrescriptionAuditRequest
-from app.guardrails.clinical import ClinicalGuardrail
-from app.guardrails.pii import PIIMasker
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.retrieval.text_normalizer import normalizar_texto_pt
+
+
+def _default_guardrail() -> GuardrailPort:
+    from app.guardrails.adapter import LocalGuardrailAdapter
+
+    return LocalGuardrailAdapter()
 
 
 class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
@@ -26,17 +31,16 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         self,
         medication_repo: MedicationRepositoryPort,
         retriever: RetrieverPort,
-        guardrail: ClinicalGuardrail | None = None,
-        pii_masker: PIIMasker | None = None,
+        guardrail: GuardrailPort | None = None,
+        tabular_matcher: TabularDCBMatcher | None = None,
     ) -> None:
         self.medication_repo = medication_repo
         self.retriever = retriever
-        self.guardrail = guardrail or ClinicalGuardrail()
-        self.pii_masker = pii_masker or PIIMasker()
-        self.tabular_matcher = TabularDCBMatcher(medication_repo.listar_todos())
+        self.guardrail = guardrail or _default_guardrail()
+        self.tabular_matcher = tabular_matcher or TabularDCBMatcher(medication_repo.listar_todos())
 
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
-        # 1. Guardrail Clínico e de Ato Médico
+        # 1. Guardrail Clínico, Anti-Injeção e Desidentificação LGPD
         campos = [
             value
             for item in request.itens
@@ -51,13 +55,15 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             if value
         ] + [request.pergunta_adicional or "", request.regiao_administrativa]
 
-        regiao = self.pii_masker.mascarar(request.regiao_administrativa).texto_sanitizado
+        regiao = self.guardrail.desidentificar_dados_pessoais(
+            request.regiao_administrativa
+        ).texto_sanitizado
         with trace_operation("guardrail"):
             bloqueios = [
                 check
                 for campo in campos
                 if campo
-                if (check := self.guardrail.inspecionar(campo)).bloqueado
+                if (check := self.guardrail.verificar_ato_medico(campo)).bloqueado
             ]
         if bloqueios:
             check_clinico = next(
@@ -77,9 +83,13 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
         # 3. Auditoria Farmacêutica para cada item da receita
         for item in request.itens:
-            nome = self.pii_masker.mascarar(item.nome_digitado).texto_sanitizado
-            dcb = self.pii_masker.mascarar(item.principio_ativo_dcb or "").texto_sanitizado
-            forma = self.pii_masker.mascarar(item.forma_farmaceutica or "").texto_sanitizado
+            nome = self.guardrail.desidentificar_dados_pessoais(item.nome_digitado).texto_sanitizado
+            dcb = self.guardrail.desidentificar_dados_pessoais(
+                item.principio_ativo_dcb or ""
+            ).texto_sanitizado
+            forma = self.guardrail.desidentificar_dados_pessoais(
+                item.forma_farmaceutica or ""
+            ).texto_sanitizado
             doses = self.tabular_matcher.doses_no_texto(nome)
             dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
             # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
@@ -259,7 +269,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                             medicamento_ou_exame=nome,
                             principio_ativo_dcb=hit.matched_dcb.upper()
                             if hit.matched_dcb
-                            else nome.upper(),
+                            else "NAO_IDENTIFICADO",
                             via_retirada=via,
                             local_sugerido=local,
                             o_que_levar=docs,
@@ -274,7 +284,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                     itens_roteiro.append(
                         ItemRoteiroCidadao(
                             medicamento_ou_exame=nome,
-                            principio_ativo_dcb=nome.upper(),
+                            principio_ativo_dcb="NAO_IDENTIFICADO",
                             via_retirada=CoverageRoute.NAO_PADRONIZADO,
                             local_sugerido=(
                                 "Apresentação ou cobertura não confirmada no catálogo consultado."

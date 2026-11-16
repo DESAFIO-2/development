@@ -1,3 +1,5 @@
+from app.application.ports import GuardrailPort
+from app.guardrails import LocalGuardrailAdapter
 from app.guardrails.clinical import ClinicalGuardrail, deve_bloquear
 from app.guardrails.pii import PIIMasker, mascarar_pii
 
@@ -42,3 +44,31 @@ def test_pii_masker_sanitiza_dados_pessoais() -> None:
 def test_mascarar_pii_atalho() -> None:
     limpo = mascarar_pii("Meu CPF é 000.111.222-33")
     assert "000.111.222-33" not in limpo
+
+
+def test_pii_masker_cobre_rg_crm_cid_cep_endereco_e_nome_livre() -> None:
+    masker = PIIMasker()
+    texto = (
+        "Me chamo João Carlos Silva, RG 12.345.678-9, CRM-DF 12345, CID-10 I10, "
+        "CEP 72215-000, Quadra QNM 18 Conjunto A Casa 4, moro em Taguatinga Sul "
+        "e busco Losartana 50mg na Farmácia Popular."
+    )
+    res = masker.mascarar(texto)
+    for sensivel in ("João Carlos Silva", "12.345.678-9", "12345", "I10", "72215-000", "QNM 18"):
+        assert sensivel not in res.texto_sanitizado
+    assert "Taguatinga Sul" in res.texto_sanitizado
+    assert "Losartana 50mg" in res.texto_sanitizado
+    assert "Farmácia Popular" in res.texto_sanitizado
+    assert {"PATIENT_NAME", "RG", "CRM", "CID10", "CEP", "ADDRESS"}.issubset(
+        set(res.tipos_detectados)
+    )
+
+
+def test_local_guardrail_adapter_implementa_guardrail_port() -> None:
+    adapter = LocalGuardrailAdapter()
+    assert isinstance(adapter, GuardrailPort)
+    assert adapter.verificar_ato_medico("Dá pra partir o comprimido de metformina?").bloqueado
+    assert (
+        "123.456.789-00"
+        not in adapter.desidentificar_dados_pessoais("CPF 123.456.789-00").texto_sanitizado
+    )
