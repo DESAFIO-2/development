@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.application.ports import GuardrailPort
+from app.application.ports import EvidenceRepositoryPort, GuardrailPort
 from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
 from app.guardrails.adapter import LocalGuardrailAdapter
 from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
+)
+from app.infrastructure.persistence.repositories.evidence_chunk_repository import (
+    LocalEvidenceChunkRepository,
 )
 from app.infrastructure.persistence.repositories.normative_chunk_repository import (
     LocalNormativeChunkRepository,
@@ -21,6 +24,7 @@ from app.retrieval.tabular_matcher import TabularDCBMatcher
 class ServiceContainer:
     medication_repo: LocalCanonicalMedicationRepository
     chunk_repo: LocalNormativeChunkRepository
+    evidence_chunk_repo: EvidenceRepositoryPort
     tabular_matcher: TabularDCBMatcher
     hybrid_retriever: HybridRetriever
     guardrail: GuardrailPort
@@ -34,7 +38,12 @@ def build_services() -> ServiceContainer:
     """Instancia repositórios, matcher único e caso de uso principal."""
     medication_repo = LocalCanonicalMedicationRepository()
     chunk_repo = LocalNormativeChunkRepository()
+    evidence_chunk_repo = LocalEvidenceChunkRepository()
     medications = medication_repo.listar_todos()
+    # Falha fechado se o catálogo anunciar ocorrências sem evidência no pacote.
+    evidence_chunk_repo.buscar_por_occurrence_ids(
+        tuple(oid for med in medications for oid in med.occurrence_ids)
+    )
     chunks = chunk_repo.listar_todos()
     tabular_matcher = TabularDCBMatcher(medications)
     hybrid_retriever = HybridRetriever(
@@ -52,6 +61,7 @@ def build_services() -> ServiceContainer:
     return ServiceContainer(
         medication_repo=medication_repo,
         chunk_repo=chunk_repo,
+        evidence_chunk_repo=evidence_chunk_repo,
         tabular_matcher=tabular_matcher,
         hybrid_retriever=hybrid_retriever,
         guardrail=guardrail,

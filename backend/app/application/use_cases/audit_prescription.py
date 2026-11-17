@@ -53,7 +53,11 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 item.quantidade_prescrita,
             )
             if value
-        ] + [request.pergunta_adicional or "", request.regiao_administrativa]
+        ] + [
+            request.pergunta_adicional or "",
+            request.regiao_administrativa,
+            request.tipo_prescritor,
+        ]
 
         regiao = self.guardrail.desidentificar_dados_pessoais(
             request.regiao_administrativa
@@ -90,19 +94,23 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             forma = self.guardrail.desidentificar_dados_pessoais(
                 item.forma_farmaceutica or ""
             ).texto_sanitizado
-            doses = self.tabular_matcher.doses_no_texto(nome)
+            associacao_invalida = False
+            try:
+                doses = self.tabular_matcher.doses_no_texto(nome)
+            except ValueError:
+                doses = set()
+                associacao_invalida = True
             dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
+            consulta = dcb or nome
             # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
             dose_ambigua = (
-                self.tabular_matcher.tem_numero_nao_interpretado(nome)
+                associacao_invalida
+                or self.tabular_matcher.tem_numero_nao_interpretado(nome)
                 or len(doses) > 1
-                or bool(
-                    item.concentracao
-                    and doses
-                    and doses != {self.tabular_matcher.normalizar_concentracao(item.concentracao)}
+                or not self.tabular_matcher.doses_compativeis(
+                    consulta, doses, item.concentracao or ""
                 )
             )
-            consulta = dcb or nome
             with trace_operation("retrieval"):
                 matches = (
                     self.tabular_matcher.casar(

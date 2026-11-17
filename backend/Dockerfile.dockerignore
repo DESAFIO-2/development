@@ -9,3 +9,4 @@ backend/app/**/__pycache__/
 !data/processed/
 !data/processed/medicamentos_sus_canonical.json
 !data/processed/normative_chunks.json
+!data/processed/evidence_chunks_v2.json

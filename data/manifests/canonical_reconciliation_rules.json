@@ -1,0 +1,240 @@
+{
+  "base_sha": "57859c81370befdf70b87ede4006b106db3d1449",
+  "source_sha": "8d76f923354a4707810be38e238a8a3ea035554e",
+  "scope": "Reconciliação documental técnica; não constitui equivalência terapêutica nem nova aprovação humana. Liberações distintas permanecem separadas.",
+  "rules": [
+    {
+      "from": [
+        "dapagliflozina propanodiol",
+        "10mg",
+        "comprimido",
+        ""
+      ],
+      "to": [
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        ""
+      ],
+      "origin": "existing_in_base",
+      "source_occurrence_ids": [
+        "occ-cf7c0fb64aa05da967beb4b1"
+      ],
+      "target_occurrence_ids": []
+    },
+    {
+      "from": [
+        "dapagliflozina",
+        "10mg",
+        "comprimido revestido",
+        ""
+      ],
+      "to": [
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        ""
+      ],
+      "origin": "existing_in_base",
+      "source_occurrence_ids": [
+        "occ-f319326282be13a64f9c47eb"
+      ],
+      "target_occurrence_ids": []
+    },
+    {
+      "from": [
+        "dapagliflozina",
+        "10mg",
+        "forma nao informada",
+        ""
+      ],
+      "to": [
+        "dapagliflozina",
+        "10mg",
+        "comprimido",
+        ""
+      ],
+      "origin": "existing_in_base",
+      "source_occurrence_ids": [
+        "occ-7f063f17f3885eb3cdc24d3f"
+      ],
+      "target_occurrence_ids": []
+    },
+    {
+      "from": [
+        "sulfato de salbutamol",
+        "100mcg",
+        "forma nao informada",
+        ""
+      ],
+      "to": [
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        ""
+      ],
+      "origin": "existing_in_base",
+      "source_occurrence_ids": [
+        "occ-e139cbd09a39d7da5be06493"
+      ],
+      "target_occurrence_ids": [
+        "occ-b1109d42e13aa35180ad29e1"
+      ]
+    },
+    {
+      "from": [
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "spray ou aerossol para inalacao oral",
+        ""
+      ],
+      "to": [
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-b0f807a52a2fdbfaeb4e13c8"
+      ],
+      "target_occurrence_ids": [
+        "occ-b1109d42e13aa35180ad29e1"
+      ]
+    },
+    {
+      "from": [
+        "salbutamol (sulfato)",
+        "100mcg/dose",
+        "spray ou aerossol para inalacao oral",
+        ""
+      ],
+      "to": [
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        ""
+      ],
+      "origin": "existing_in_base",
+      "source_occurrence_ids": [],
+      "target_occurrence_ids": [
+        "occ-b1109d42e13aa35180ad29e1"
+      ]
+    },
+    {
+      "from": [
+        "losartana potassica",
+        "50mg",
+        "comprimido revestido",
+        ""
+      ],
+      "to": [
+        "losartana potassica",
+        "50mg",
+        "comprimido",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-9ffe007f2f6718593e2d718a"
+      ],
+      "target_occurrence_ids": [
+        "occ-7d91371619743f04eb186259"
+      ]
+    },
+    {
+      "from": [
+        "insulina humana regular",
+        "100ui/ml",
+        "forma nao informada",
+        ""
+      ],
+      "to": [
+        "insulina humana regular",
+        "100ui/ml",
+        "solucao injetavel",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-8ddfd9df9529d696a2612e89"
+      ],
+      "target_occurrence_ids": [
+        "occ-8fc0c499ca4c91cbf3875c24",
+        "occ-3d3cb95b8795261e44f6f559",
+        "occ-c77bb855ea383ba51ace09c6",
+        "occ-c63167a2a2dd82242a046e55"
+      ]
+    },
+    {
+      "from": [
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "spray nasal",
+        ""
+      ],
+      "to": [
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "suspensao para inalacao nasal",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-51932c9f765b4621c3f85553"
+      ],
+      "target_occurrence_ids": [
+        "occ-afa8e292206cbda6ca6af555"
+      ]
+    },
+    {
+      "from": [
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "solucao aerossol oral",
+        ""
+      ],
+      "to": [
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "solucao aerossol",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-812dec0ab31c1798a5739af4"
+      ],
+      "target_occurrence_ids": [
+        "occ-584e4b73ad8bd1afd8a1b73e"
+      ]
+    },
+    {
+      "from": [
+        "dipropionato de beclometasona",
+        "250mcg/dose",
+        "solucao aerossol oral",
+        ""
+      ],
+      "to": [
+        "dipropionato de beclometasona",
+        "250mcg/dose",
+        "solucao aerossol",
+        ""
+      ],
+      "origin": "adapted_in_this_branch",
+      "source_occurrence_ids": [
+        "occ-35f36e4f44b27158aaabe926"
+      ],
+      "target_occurrence_ids": [
+        "occ-df81aba75bf5e59b30049f79"
+      ]
+    }
+  ],
+  "deferred": [
+    "insulina humana -> insulina humana NPH",
+    "beclometasona 50/250 mcg sem forma -> mcg/dose aerossol",
+    "beclometasona 50 mcg/dose sem forma -> nasal",
+    "budesonida 32 mcg/dose -> 32 mcg"
+  ],
+  "domain_review": "Revisão do squad requerida antes do merge, conforme CONTRIBUTING."
+}
