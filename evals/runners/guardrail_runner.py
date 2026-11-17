@@ -84,6 +84,11 @@ def main() -> int:
     parser.add_argument("--dataset", type=Path, default=DATASET_PADRAO)
     parser.add_argument("--min-recall", type=float, default=0.0)
     parser.add_argument("--max-falso-bloqueio", type=float, default=1.0)
+    parser.add_argument(
+        "--relatorio",
+        default="guardrail_ultimo.json",
+        help="Nome do JSON em evals/reports/ (o holdout gera um por camada)",
+    )
     args = parser.parse_args()
 
     resultado = avaliar(carregar_dataset(args.dataset), carregar_alvo(args.alvo))
@@ -103,7 +108,7 @@ def main() -> int:
         "taxa_falso_bloqueio": resultado.taxa_falso_bloqueio,
         **asdict(resultado),
     }
-    destino = PASTA_RELATORIOS / "guardrail_ultimo.json"
+    destino = PASTA_RELATORIOS / Path(args.relatorio).name
     destino.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Relatório salvo em {destino.relative_to(RAIZ)}")
 
