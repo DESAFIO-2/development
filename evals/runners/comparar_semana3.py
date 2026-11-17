@@ -29,7 +29,7 @@ from app.application.ports import (
     RetrieverPort,
 )
 from app.infrastructure.llm import build_generator
-from app.infrastructure.llm.generator import PROMPT_VERSION, SYSTEM_PROMPT
+from app.infrastructure.llm.generator import PROMPT_VERSION, PROMPTS
 from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
 )
@@ -276,7 +276,10 @@ def executar_experimento_comparativo(
     gerador: GeneratorPort | None = None,
     retriever: RetrieverPort | None = None,
     top_k: int = 3,
+    prompt_version: str = PROMPT_VERSION,
 ) -> dict[str, Any]:
+    if prompt_version not in PROMPTS:
+        raise ValueError(f"Versão de prompt desconhecida: {prompt_version}")
     if top_k < 1:
         raise ValueError("top_k deve ser positivo")
     meds = RAIZ / "data/processed/medicamentos_sus_canonical.json"
@@ -372,8 +375,8 @@ def executar_experimento_comparativo(
         "sucesso_criterios_rag": False,
         "status_entregavel": "PENDENTE_AVALIACAO_RAGAS_E_REVISAO_FACTUAL",
         "protocolo": {
-            "prompt_version": PROMPT_VERSION,
-            "system_prompt": SYSTEM_PROMPT,
+            "prompt_version": prompt_version,
+            "system_prompt": PROMPTS[prompt_version],
             "temperature": 0.0,
             "max_output_tokens": 450,
             "ollama_num_ctx": 8192,
@@ -454,6 +457,12 @@ def main() -> int:
         default="padrao",
         help="blindado: mesmo protocolo + esteira de entrada e validação de saída (braço D)",
     )
+    parser.add_argument(
+        "--prompt-version",
+        choices=tuple(PROMPTS),
+        default=PROMPT_VERSION,
+        help="semana3-v3: o modelo cita só o ID e o código completa título e página",
+    )
     args = parser.parse_args()
     if args.synthetic_smoke and args.provider:
         parser.error("Escolha simulação ou provedor real, nunca ambos")
@@ -467,8 +476,11 @@ def main() -> int:
             model_name=args.model,
             base_url=args.base_url,
             timeout_seconds=args.timeout,
+            prompt_version=args.prompt_version,
         )
     prefixo = "smoke_sintetico_semana3" if args.synthetic_smoke else "coleta_real_semana3"
+    if args.prompt_version != PROMPT_VERSION:
+        prefixo = f"{prefixo}_{args.prompt_version.replace('-', '_')}"
     if args.variante == "blindado":
         from evals.runners.variantes import GeradorBlindado
 
@@ -495,6 +507,9 @@ def main() -> int:
         # Só entra no manifesto quando não é o padrão: o manifesto do braço padrão
         # fica com as mesmas chaves de antes.
         identity["variante"] = args.variante
+    if args.prompt_version != PROMPT_VERSION:
+        # Mesmo cuidado: coleta v2 continua com o manifesto de antes.
+        identity["prompt_version"] = args.prompt_version
     if identity["provider"] == "ollama_local":
         from evals.runners.local_preflight import ollama_identity
 
@@ -508,7 +523,9 @@ def main() -> int:
         return 1 if read_json(destino / "resultado.json")["pares_invalidos"] else 0
     print(f"Coleta/checkpoints: {destino}", flush=True)
     relatorio = executar_experimento_comparativo(
-        dataset_snapshot, gerador=CheckpointGenerator(gerador, destino / "geracoes")
+        dataset_snapshot,
+        gerador=CheckpointGenerator(gerador, destino / "geracoes"),
+        prompt_version=args.prompt_version,
     )
     relatorio["dataset"] = args.dataset.name
     relatorio["manifesto_experimento"] = identity
@@ -528,7 +545,7 @@ def main() -> int:
         params={
             "tipo_execucao": relatorio["tipo_execucao"],
             "dataset": relatorio["dataset"],
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": args.prompt_version,
             "top_k": relatorio["top_k"],
         },
         metrics={

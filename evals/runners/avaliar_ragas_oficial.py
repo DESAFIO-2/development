@@ -25,6 +25,8 @@ for _cam in (RAIZ, RAIZ / "backend"):
 from evals.runners.artifacts import atomic_json, digest, read_json
 from evals.runners.factual_audit import consolidar_auditoria_factual
 
+PROTOCOLOS_JUIZ = ("original", "ptbr_sem_citacao")
+
 
 def avaliar_limiares(metricas: dict[str, float | None]) -> dict[str, dict[str, Any]]:
     """Metas RAGAS do ADR 0003; métricas ausentes nunca são aprovadas."""
@@ -107,6 +109,7 @@ class OfficialRagasCollectionsEvaluator:
         provider_label: str = "ollama_openai_compat",
         metric_cache: Path | None = None,
         timeout: float = 180.0,
+        prompts_ptbr: bool = False,
     ) -> None:
         os.environ["RAGAS_DO_NOT_TRACK"] = "true"
         self.evaluator_provider = provider_label
@@ -175,6 +178,10 @@ class OfficialRagasCollectionsEvaluator:
         )
         self._context_recall = ragas_collections.ContextRecall(llm=llm)
         self._context_precision = ragas_collections.ContextPrecision(llm=llm)
+        if prompts_ptbr:
+            importlib.import_module("evals.metrics.prompts_ptbr").aplicar_prompts_ptbr(
+                self._faithfulness, self._answer_relevancy
+            )
 
     async def _score(self, name: str, metric: Any, **kwargs: Any) -> Any:
         from types import SimpleNamespace
@@ -283,8 +290,23 @@ def avaliar_coleta_ragas(
     *,
     avaliador: RagasEvaluatorPort,
     auditoria_factual: dict[str, Any] | None = None,
+    protocolo_juiz: str = "original",
 ) -> dict[str, Any]:
-    """Executa avaliação RAGAS oficial sobre coleta real completa sem regenerar respostas."""
+    """Executa avaliação RAGAS oficial sobre coleta real completa sem regenerar respostas.
+
+    `protocolo_juiz="ptbr_sem_citacao"` (ragas_v2) tira os marcadores de citação das
+    respostas antes do Faithfulness e do Answer Relevancy: a citação é medida à parte,
+    por regra (`citacao_metadados_valida`). Os textos da coleta não são alterados.
+    """
+    if protocolo_juiz not in PROTOCOLOS_JUIZ:
+        raise ValueError(f"Protocolo de juiz desconhecido: {protocolo_juiz}")
+    if protocolo_juiz == "ptbr_sem_citacao":
+        from app.seguranca.citacoes import remover_citacoes as preparar_resposta
+    else:
+
+        def preparar_resposta(texto: str) -> str:
+            return texto
+
     if coleta.get("tipo_execucao") != "COLETA_REAL":
         raise ValueError(
             "Certificação RAGAS exige tipo_execucao == 'COLETA_REAL'; "
@@ -354,8 +376,8 @@ def avaliar_coleta_ragas(
             escores = avaliador.avaliar_par_positivo(
                 pergunta=copia["com_rag"]["pergunta"],
                 referencia=copia["com_rag"]["referencia"],
-                resposta_sem_rag=copia["sem_rag"]["geracao"]["text"],
-                resposta_com_rag=copia["com_rag"]["geracao"]["text"],
+                resposta_sem_rag=preparar_resposta(copia["sem_rag"]["geracao"]["text"]),
+                resposta_com_rag=preparar_resposta(copia["com_rag"]["geracao"]["text"]),
                 contextos_com_rag=contextos,
             )
             copia["ragas"] = {
@@ -475,6 +497,7 @@ def avaliar_coleta_ragas(
                 "evaluator_provider": avaliador.evaluator_provider,
                 "evaluator_model": avaliador.evaluator_model,
                 "embedding_model": avaliador.embedding_model,
+                "protocolo_juiz": protocolo_juiz,
                 "sem_rag": ragas_sem_rag,
                 "com_rag": ragas_com_rag,
             },
