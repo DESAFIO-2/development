@@ -21,6 +21,14 @@ def main() -> int:
     parser.add_argument("--base-url", default="http://localhost:11434")
     parser.add_argument("--pilot", action="store_true")
     parser.add_argument("--variante", choices=("padrao", "blindado"), default="padrao")
+    parser.add_argument("--prompt-version", choices=("semana3-v2", "semana3-v3"))
+    parser.add_argument(
+        "--juiz",
+        choices=("original", "ptbr_sem_citacao"),
+        default="original",
+        help="ptbr_sem_citacao: prompts do juiz em português e citações fora do texto julgado",
+    )
+    parser.add_argument("--evaluation-name", default="ragas_v1")
     args = parser.parse_args()
     directory = args.run_dir.resolve()
     started = time.perf_counter()
@@ -48,6 +56,8 @@ def main() -> int:
         collect += ["--limit", "2"]
     if args.variante != "padrao":
         collect += ["--variante", args.variante]
+    if args.prompt_version:
+        collect += ["--prompt-version", args.prompt_version]
     result = subprocess.run(collect, cwd=ROOT, check=False)
     if result.returncode:
         return result.returncode
@@ -66,6 +76,10 @@ def main() -> int:
         args.embedding_model,
         "--base-url",
         args.base_url.rstrip("/") + "/v1",
+        "--evaluation-name",
+        args.evaluation_name,
+        "--juiz",
+        args.juiz,
     ]
     result = subprocess.run(evaluate, cwd=ROOT, check=False)
     if result.returncode not in (0, 2, 3):

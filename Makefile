@@ -9,6 +9,12 @@ RUN_DIR_BLINDADO ?= evals/reports/coleta_blindada
 SEG_DIR ?= evals/reports/seguranca_variantes
 COLETA_PADRAO ?= $(RUN_DIR)
 QUATRO_DIR ?= evals/reports/quatro_bracos
+RUN_DIR_V3 ?= evals/reports/coleta_v3
+RUN_DIR_BLINDADO_V3 ?= evals/reports/coleta_blindada_v3
+SEG_DIR_V2 ?= evals/reports/seguranca_variantes_v2
+REGRA_CLINICA ?= v1_bloqueio
+QUATRO_DIR_V3 ?= evals/reports/quatro_bracos_v3
+HOLDOUT ?= evals/datasets/holdout_guardrail_v1.jsonl
 
 .PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
@@ -33,6 +39,12 @@ help:
 	@echo "  make seguranca-smoke       - Suíte de segurança dos 4 braços com fixture sintética (não mede LLM)"
 	@echo "  make seguranca-run         - Suíte de segurança dos 4 braços com o modelo local (LOCAL_MODEL)"
 	@echo "  make semana3-quatro-bracos - Tabela única dos 4 braços e braço escolhido (COLETA_PADRAO=...)"
+	@echo "  make ragas-v2-reavaliar    - Reavalia uma coleta com juiz pt-BR sem citações (COLETA_DIR=...)"
+	@echo "  make semana3-run-v3        - Coleta nova com citação por ID (semana3-v3) + juiz ragas_v2"
+	@echo "  make semana3-run-blindado-v3 - Braço D com prompt semana3-v3 + juiz ragas_v2"
+	@echo "  make seguranca-run-v2      - Suíte v2 (injeção indireta) com o modelo local (REGRA_CLINICA=...)"
+	@echo "  make semana3-quatro-bracos-v3 - Tabela dos 4 braços da rodada v3"
+	@echo "  make guardrail-holdout     - Camada 1, camada 2 (Llama Guard 3) e as duas no holdout"
 	@echo "  make docker-build  - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
@@ -107,10 +119,34 @@ seguranca-smoke:
 	uv run --project backend python evals/runners/suite_seguranca.py --synthetic-smoke --fail-on-api-elim --saida-dir evals/reports/seguranca_smoke
 
 seguranca-run:
-	uv run --project backend python evals/runners/suite_seguranca.py --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR)"
+	uv run --project backend python evals/runners/suite_seguranca.py --dataset evals/datasets/seguranca_variantes_v1.jsonl --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR)"
 
 semana3-quatro-bracos:
 	uv run --project backend python evals/runners/consolidar_quatro_bracos.py --coleta-padrao "$(COLETA_PADRAO)" --coleta-blindada "$(RUN_DIR_BLINDADO)" --seguranca "$(SEG_DIR)/seguranca.json" --saida-dir "$(QUATRO_DIR)"
+
+.PHONY: ragas-v2-reavaliar semana3-run-v3 semana3-run-blindado-v3 seguranca-run-v2 semana3-quatro-bracos-v3 guardrail-holdout
+
+ragas-v2-reavaliar:
+	@test -n "$(COLETA_DIR)" || (echo "Informe COLETA_DIR=<pasta da coleta>"; exit 1)
+	uv run --project evals python evals/runners/avaliar_ragas_oficial.py --coleta-dir "$(COLETA_DIR)" --evaluator-model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --evaluation-name ragas_v2 --juiz ptbr_sem_citacao
+
+semana3-run-v3:
+	uv run --project backend python evals/runners/semana3_local.py --prompt-version semana3-v3 --juiz ptbr_sem_citacao --evaluation-name ragas_v2 --run-dir "$(RUN_DIR_V3)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
+
+semana3-run-blindado-v3:
+	uv run --project backend python evals/runners/semana3_local.py --variante blindado --prompt-version semana3-v3 --juiz ptbr_sem_citacao --evaluation-name ragas_v2 --run-dir "$(RUN_DIR_BLINDADO_V3)" --model "$(LOCAL_MODEL)" --embedding-model "$(EMBED_MODEL)" --dataset evals/datasets/golden_set_v2_consolidado.jsonl
+
+seguranca-run-v2:
+	uv run --project backend python evals/runners/suite_seguranca.py --dataset evals/datasets/seguranca_variantes_v2.jsonl --regra-clinica "$(REGRA_CLINICA)" --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR_V2)"
+
+semana3-quatro-bracos-v3:
+	uv run --project backend python evals/runners/consolidar_quatro_bracos.py --coleta-padrao "$(RUN_DIR_V3)" --coleta-blindada "$(RUN_DIR_BLINDADO_V3)" --seguranca "$(SEG_DIR_V2)/seguranca.json" --saida-dir "$(QUATRO_DIR_V3)"
+
+guardrail-holdout:
+	@test -f "$(HOLDOUT)" || (echo "Holdout ausente: $(HOLDOUT). Siga evals/configs/protocolo_holdout_guardrail.md"; exit 1)
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.clinical:deve_bloquear --relatorio holdout_camada1.json
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear --relatorio holdout_camada2.json
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear_combinado --relatorio holdout_combinado.json
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .

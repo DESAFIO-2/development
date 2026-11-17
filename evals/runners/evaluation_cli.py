@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import time
 from collections.abc import Callable
 from dataclasses import asdict
@@ -20,6 +21,7 @@ from evals.runners.artifacts import (
     source_hashes,
 )
 from evals.runners.avaliar_ragas_oficial import (
+    PROTOCOLOS_JUIZ,
     RAIZ,
     EscoresCasoRagas,
     OfficialRagasCollectionsEvaluator,
@@ -116,6 +118,12 @@ def main() -> int:
     parser.add_argument(
         "--evaluation-name", default="ragas_v1", help="Novo nome cria reavaliação independente"
     )
+    parser.add_argument(
+        "--juiz",
+        choices=PROTOCOLOS_JUIZ,
+        default="original",
+        help="ptbr_sem_citacao: prompts do juiz em português e citações fora do texto julgado",
+    )
     args = parser.parse_args()
     if not args.evaluation_name or any(
         c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
@@ -137,11 +145,19 @@ def main() -> int:
         "max_tokens": 2048,
         "source_sha256": source_hashes(RAIZ),
     }
+    if args.juiz != "original":
+        # Só entra quando não é o original: manifestos ragas_v1 continuam válidos.
+        identity["protocolo_juiz"] = args.juiz
+        identity["prompts_ptbr_sha256"] = importlib.import_module(
+            "evals.metrics.prompts_ptbr"
+        ).sha256_prompts_ptbr()
     if args.consolidate_only:
         saved = read_json(directory / "manifesto.json")
         if saved["coleta_sha256"] != digest(coleta):
             raise ValueError("Coleta alterada após avaliação")
         identity = saved
+        if saved.get("protocolo_juiz", "original") != args.juiz:
+            raise ValueError("Consolidação com protocolo de juiz diferente do avaliado")
     else:
         identity["ollama"] = ollama_identity(
             args.base_url, [args.evaluator_model, args.embedding_model]
@@ -161,12 +177,15 @@ def main() -> int:
             base_url=args.base_url,
             metric_cache=directory / "metricas",
             timeout=args.timeout,
+            prompts_ptbr=args.juiz == "ptbr_sem_citacao",
         ),
         cache_only=args.consolidate_only,
         retry_failed=args.retry_failed,
     )
     try:
-        relatorio = avaliar_coleta_ragas(coleta, avaliador=avaliador, auditoria_factual=auditoria)
+        relatorio = avaliar_coleta_ragas(
+            coleta, avaliador=avaliador, auditoria_factual=auditoria, protocolo_juiz=args.juiz
+        )
     finally:
         avaliador.close()
     relatorio["manifesto_avaliacao"] = identity

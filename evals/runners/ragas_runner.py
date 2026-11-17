@@ -13,7 +13,9 @@ import contextlib
 import io
 import json
 import math
+import statistics
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -106,9 +108,22 @@ class BenchmarkMetrics:
     acuracia_abstencao: float
     sucesso_geral: bool
     falhas: dict[str, list[str]]
+    # Braço C: AuditPrescriptionUseCase.executar em processo (busca + template, sem HTTP).
+    n_positivos: int = 0
+    latencia_mediana_ms_api: float | None = None
+    latencia_p95_ms_api: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def resumo_latencia(latencias_ms: list[float]) -> tuple[float | None, float | None]:
+    """Mediana e p95 (posto mais próximo: só valores observados, sem interpolar)."""
+    if not latencias_ms:
+        return None, None
+    ordenadas = sorted(latencias_ms)
+    posto = math.ceil(0.95 * len(ordenadas))
+    return round(statistics.median(ordenadas), 3), round(ordenadas[posto - 1], 3)
 
 
 def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetrics:
@@ -136,19 +151,21 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
     casos_positivos = 0
     casos_clinicos = 0
     casos_abstencao = 0
+    latencias_positivos_ms: list[float] = []
 
     for caso in casos:
         query = caso["query"]
         chunks_relevantes = set(caso.get("relevant_chunk_ids", []))
-        audit_res = use_case.executar(
-            PrescriptionAuditRequest(
-                itens=[
-                    MedicationItemInput.model_validate(item)
-                    for item in caso.get("audit_items", [{"nome_digitado": query}])
-                ],
-                pergunta_adicional=query,
-            )
+        pedido = PrescriptionAuditRequest(
+            itens=[
+                MedicationItemInput.model_validate(item)
+                for item in caso.get("audit_items", [{"nome_digitado": query}])
+            ],
+            pergunta_adicional=query,
         )
+        inicio = time.perf_counter()
+        audit_res = use_case.executar(pedido)
+        latencia_ms = (time.perf_counter() - inicio) * 1000
         erros = []
 
         if caso.get("is_clinical_block", False):
@@ -172,6 +189,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
             continue
 
         casos_positivos += 1
+        latencias_positivos_ms.append(latencia_ms)
         if not chunks_relevantes:
             raise ValueError(f"{caso['id']}: caso positivo sem chunks relevantes")
 
@@ -205,6 +223,7 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
     abstention_acc = abstencoes_corretas / casos_abstencao if casos_abstencao else 1.0
 
     sucesso = not falhas
+    mediana_ms, p95_ms = resumo_latencia(latencias_positivos_ms)
 
     return BenchmarkMetrics(
         total_casos=len(casos),
@@ -221,6 +240,9 @@ def executar_benchmark(caminho_dataset: Path = DATASET_GOLDEN) -> BenchmarkMetri
         acuracia_abstencao=round(abstention_acc, 4),
         sucesso_geral=sucesso,
         falhas=falhas,
+        n_positivos=casos_positivos,
+        latencia_mediana_ms_api=mediana_ms,
+        latencia_p95_ms_api=p95_ms,
     )
 
 
@@ -268,6 +290,14 @@ def main() -> int:
             "acuracia_roteamento": metricas.acuracia_roteamento,
             "taxa_bloqueio_clinico": metricas.taxa_bloqueio_clinico,
             "acuracia_abstencao": metricas.acuracia_abstencao,
+            **{
+                nome: valor
+                for nome, valor in (
+                    ("latencia_mediana_ms_api", metricas.latencia_mediana_ms_api),
+                    ("latencia_p95_ms_api", metricas.latencia_p95_ms_api),
+                )
+                if valor is not None
+            },
         },
         dataset_path=caminho_dataset,
     )
@@ -286,6 +316,10 @@ def main() -> int:
     print(f"Acurácia de Roteamento:      {metricas.acuracia_roteamento:.2%}")
     print(f"Taxa Bloqueio Clínico:       {metricas.taxa_bloqueio_clinico:.2%}")
     print(f"Acurácia de Abstenção:       {metricas.acuracia_abstencao:.2%}")
+    print(
+        f"Latência da API (positivos): mediana {metricas.latencia_mediana_ms_api} ms, "
+        f"p95 {metricas.latencia_p95_ms_api} ms (n={metricas.n_positivos}; em processo, sem HTTP)"
+    )
     print(f"MLflow Run ID:               {run_record.run_id}")
     print(f"Manifest Lineage SHA-256:    {run_record.tags.get('combined_sha256', '')[:16]}...")
 

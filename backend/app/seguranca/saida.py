@@ -23,6 +23,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 
 from app.guardrails.pii import PIIMasker
+from app.seguranca.citacoes import ids_citados
 from app.seguranca.texto import limpar
 
 logger = logging.getLogger("app.seguranca")
@@ -58,36 +59,46 @@ class ResultadoSaida:
     motivos: tuple[str, ...]
 
 
-def _forma_para_regras(texto: str) -> str:
+def forma_para_regras(texto: str) -> str:
     """Minúscula e sem acento, mas mantendo dígitos (o "8" de "8 em 8 horas")."""
     base = limpar(texto).lower()
     return unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode()
 
 
-def _orienta_posologia(texto: str) -> bool:
-    forma = _forma_para_regras(texto)
-    for achado in _POSOLOGIA.finditer(forma):
-        prefixo = forma[: achado.start()]
-        ultimo_corte = 0
-        for fronteira in _FRONTEIRA_CLAUSULA.finditer(prefixo):
-            ultimo_corte = fronteira.end()
-        clausula_anterior = prefixo[ultimo_corte:]
-        if not _NEGACAO.search(clausula_anterior):
-            return True
-    return False
+def negado_na_clausula(forma: str, inicio: int) -> bool:
+    """Há negação na mesma oração, antes de `inicio`? `forma` já normalizada."""
+    prefixo = forma[:inicio]
+    ultimo_corte = 0
+    for fronteira in _FRONTEIRA_CLAUSULA.finditer(prefixo):
+        ultimo_corte = fronteira.end()
+    return bool(_NEGACAO.search(prefixo[ultimo_corte:]))
+
+
+def orienta_posologia(texto: str) -> bool:
+    """O texto orienta dose, fracionamento, compartilhamento ou troca (fora de negação)?"""
+    forma = forma_para_regras(texto)
+    return any(
+        not negado_na_clausula(forma, achado.start()) for achado in _POSOLOGIA.finditer(forma)
+    )
 
 
 def citacoes_fora_do_contexto(texto: str, ids_contexto: Collection[str]) -> list[str]:
-    """IDs citados como documento que não vieram da busca."""
+    """IDs citados que não vieram da busca.
+
+    Confere o formato completo (`Fonte: ID | título`) e o curto do protocolo v3
+    (`[CHK-ID]`): um ID curto que escapasse da expansão também é citação.
+    """
     permitidos = set(ids_contexto)
-    citados = (m.group(1).strip() for m in _CITACAO_DOCUMENTO.finditer(limpar(texto)))
+    normalizado = limpar(texto)
+    citados = [m.group(1).strip() for m in _CITACAO_DOCUMENTO.finditer(normalizado)]
+    citados.extend(ids_citados(normalizado))
     return [chunk_id for chunk_id in citados if chunk_id not in permitidos]
 
 
 def validar_saida(texto: str, ids_contexto: Collection[str] = ()) -> ResultadoSaida:
     """Decide se a resposta gerada pode ser mostrada ao cidadão."""
     motivos = [f"PII_{tipo}" for tipo in _PII.mascarar(texto).tipos_detectados]
-    if _orienta_posologia(texto):
+    if orienta_posologia(texto):
         motivos.append("ORIENTACAO_POSOLOGIA_OU_TROCA")
     if citacoes_fora_do_contexto(texto, ids_contexto):
         motivos.append("CITACAO_FORA_DO_CONTEXTO")

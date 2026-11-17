@@ -142,11 +142,19 @@ def montar_bracos(
     else:
         if benchmark.get("dataset") != padrao["dataset"]:
             raise ValueError("Benchmark do braço C foi rodado em outro dataset")
+        mediana_ms = benchmark.get("latencia_mediana_ms_api")
         bracos["C"] = {
-            **_nao_avaliado("sem RAGAS e sem latência medida (API determinística)"),
+            **_nao_avaliado(
+                "sem RAGAS por construção (não gera texto livre); latência em processo, "
+                "sem HTTP, não comparável 1:1 com a geração no Ollama"
+                if mediana_ms is not None
+                else "sem RAGAS e sem latência medida (benchmark antigo)"
+            ),
             "acerto_rota": benchmark["acuracia_roteamento"],
-            "n_rota": None,
+            "n_rota": benchmark.get("n_positivos") or None,
             "metodo_rota": "rota_estruturada_da_api",
+            "latencia_mediana_s": None if mediana_ms is None else round(mediana_ms / 1000, 4),
+            "latencia_p95_ms_api": benchmark.get("latencia_p95_ms_api"),
         }
     if blindada is None:
         bracos["D"] = _nao_avaliado("coleta blindada ainda não rodada")
@@ -192,6 +200,8 @@ def escolher(bracos: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 
 def _formatar(valor: float | None, sufixo: str = "") -> str:
+    if valor is not None and 0 < valor < 0.01:
+        return f"{valor * 1000:.1f} ms"
     return "não medido" if valor is None else f"{valor:.2f}{sufixo}"
 
 
