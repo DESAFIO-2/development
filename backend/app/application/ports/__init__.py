@@ -68,6 +68,7 @@ class CanonicalMedicationItem:
     source_page: int = 1
     notes: str = ""
     df_channels: tuple[str, ...] = ()
+    occurrence_ids: tuple[str, ...] = ()
     item_type: str = "medicine"
 
     @classmethod
@@ -89,6 +90,7 @@ class CanonicalMedicationItem:
             source_page=int(data.get("source_page", 1)),
             notes=str(data.get("notes", "")),
             df_channels=tuple(str(channel) for channel in data.get("df_channels", [])),
+            occurrence_ids=tuple(str(oid) for oid in data.get("occurrence_ids", [])),
             item_type=str(data.get("item_type", "medicine")),
         )
 
@@ -166,6 +168,70 @@ class GenerationResultDTO:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class EvidenceChunkDTO:
+    """Representação de um chunk literal de evidência aprovada 1:1 (one-evidence-v2)."""
+
+    chunk_id: str
+    evidence_id: str
+    occurrence_id: str
+    medicine_id: str | None
+    supply_id: str | None
+    item_type: str
+    source_id: str
+    source_version: str
+    source_url: str
+    page_number: int
+    source_sha256: str
+    release_version: str
+    text: str
+    literal_text: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EvidenceChunkDTO:
+        src = data["source"]
+        text = str(data["text"]).strip()
+        literal_text = str(data["literal_text"]).strip()
+        if not text or not literal_text:
+            raise ValueError(f"Chunk de evidência vazio: {data.get('chunk_id')!r}")
+        return cls(
+            chunk_id=str(data["chunk_id"]),
+            evidence_id=str(data["evidence_id"]),
+            occurrence_id=str(data["occurrence_id"]),
+            medicine_id=str(data["medicine_id"]) if data.get("medicine_id") else None,
+            supply_id=str(data["supply_id"]) if data.get("supply_id") else None,
+            item_type=str(data["item_type"]),
+            source_id=str(src["source_id"]),
+            source_version=str(src["version"]),
+            source_url=str(src["url"]),
+            page_number=int(src["page"]),
+            source_sha256=str(src["sha256"]),
+            release_version=str(data["release_version"]),
+            text=text,
+            literal_text=literal_text,
+        )
+
+
+class EvidenceRepositoryPort(ABC):
+    """Presença documental; vínculo com catálogo exclusivamente por occurrence_ids."""
+
+    @abstractmethod
+    def listar_todos(self) -> list[EvidenceChunkDTO]: ...
+
+    @abstractmethod
+    def buscar_por_chunk_id(self, chunk_id: str) -> EvidenceChunkDTO | None: ...
+
+    @abstractmethod
+    def buscar_por_occurrence_ids(
+        self, occurrence_ids: list[str] | tuple[str, ...]
+    ) -> list[EvidenceChunkDTO]:
+        """Retorna todas as evidências solicitadas; falha se algum vínculo não existir."""
+        ...
+
+
 class GeneratorPort(ABC):
     """Porta abstrata para geração textual pareada (LLM sem recuperação × LLM com RAG)."""
 
@@ -200,4 +266,6 @@ __all__ = [
     "AuditPrescriptionUseCasePort",
     "GenerationResultDTO",
     "GeneratorPort",
+    "EvidenceChunkDTO",
+    "EvidenceRepositoryPort",
 ]

@@ -54,6 +54,17 @@ class ClinicalGuardrail:
     # Remover apenas o gatilho ambíguo, nunca seu objeto ou verbos clínicos vizinhos.
     # Validade de receita e preparo de exame não precisam de exceção às regras clínicas.
     _ADMINISTRATIVO_PERMITIDO: tuple[re.Pattern[str], ...] = (
+        # Remove somente a intenção administrativa local, sem liberar a cláusula inteira.
+        re.compile(
+            r"\bcomo\s+(?:eu\s+)?(?:usar|uso|aplicar|aplico)\b"
+            r"(?=\s+(?:(?:o|a|um|uma|meu|minha)\s+)?"
+            r"(?:farmacia\s+popular|sus|procuracao|aplicativo|app|sistema|cartao|receita|sisreg)\b)"
+        ),
+        re.compile(
+            r"\b(?:onde|como|a\s+quem)\s+(?:(?:eu|posso|devo)\s+)*"
+            r"(?:notifico|notificar|relato|relatar|comunico|comunicar)\s+"
+            r"(?:(?:uma?|as?|os?)\s+)?(?:reac(?:ao|oes)\s+adversa\w*|efeito\w*\s+colatera\w*)\b"
+        ),
         re.compile(r"\b(?:que horas?|horario)(?: de| para)?(?= (?:eu )?(?:tomo|tomar)\b)"),
         re.compile(
             r"\besqueci(?=(?: a| as| o| os| minha| minhas| meu| meus){0,2} "
@@ -82,6 +93,18 @@ class ClinicalGuardrail:
             r"\b(?:qual|que)\b(?:\W+\w+){0,2}?\W+"
             r"\b(?:antibiotic\w*|anti-?inflamatori\w*|analgesic\w*|antidepressiv\w*|calmant\w*)\b"
         ),
+        # Segurança na gestação / lactação e interações medicamentosas
+        re.compile(
+            r"\b(?:gravida\w*|gestante\w*|na\s+gravidez|na\s+gestacao"
+            r"|amamentando|na\s+amamentacao|lactante\w*)\b(?:\W+\w+){0,6}?\W+"
+            r"\b(?:pode\w*|posso|seguro|tomar|usar|fazer\s+uso)\b"
+        ),
+        re.compile(
+            r"\b(?:pode\w*|posso|seguro|tomar|usar)\b(?:\W+\w+){0,6}?\W+"
+            r"\b(?:gravida\w*|gestante\w*|na\s+gravidez|na\s+gestacao"
+            r"|amamentando|na\s+amamentacao|lactante\w*)\b"
+        ),
+        re.compile(r"\b(?:interac(?:ao|oes)\s+medicamentosa\w*|interage\w*\s+com)\b"),
     )
 
     # 2. Dosagem, fracionamento, compensação de esquecimento ou interrupção
@@ -93,6 +116,19 @@ class ClinicalGuardrail:
             r"|repetir|repito|parar|paro|suspender|suspendo|interromper)\b"
             rf"(?:\W+\w+){{0,6}}?\W+\b(?:{_SUBST_TERAPEUTICO}|ao meio|no meio|metade|tratamento)\b"
         ),
+        # Suspensão/interrupção por conta própria ou antes de coleta/exame (mesmo nomeando fármaco)
+        re.compile(
+            r"\b(?:posso|devo|preciso|pode)\b(?:\W+\w+){0,3}?\W+"
+            r"\b(?:parar|suspender|interromper|cortar)\b(?:\W+\w+){0,10}?\W+"
+            r"\b(?:por\s+conta\s+propria|antes\s+d[oa]\s+(?:coleta|exame)"
+            r"|exame\s+de\s+sangue|em\s+jejum)\b"
+        ),
+        # Posologia / modo de usar ou tomar (exceto uso administrativo de sistema/app/cartão)
+        re.compile(
+            r"\b(?:qual(?:\s+e)?|quais|como\s+(?:e|funciona)|me\s+(?:diga|fale|explique))\b"
+            r"(?:\W+\w+){0,3}?\W+\bposologia\b"
+        ),
+        re.compile(r"\bcomo\s+(?:eu\s+)?(?:usar|uso|tomar|tomo|aplicar|aplico)\b"),
         # Pergunta de quantidade ou cálculo individualizado por peso/idade
         re.compile(
             r"\b(?:quantos?|qual(?:\s+e)?|que)\b(?:\W+\w+){0,4}?\W+"
@@ -144,6 +180,7 @@ class ClinicalGuardrail:
             rf"\b(?:{_SINTOMA_OU_QUEIXA})\b(?:\W+\w+){{0,6}}?\W+"
             r"\b(?:e\s+(?:grave|alergia|dengue|covid|infarto|avc)|pode\s+ser\s+\w+)\b"
         ),
+        re.compile(r"\b(?:efeito\w*\s+colatera\w*|reac(?:ao|oes)\s+adversa\w*|contraindicac\w*)\b"),
     )
 
     # 4. Troca terapêutica, compartilhamento entre pessoas ou substituição por suplemento
@@ -160,8 +197,9 @@ class ClinicalGuardrail:
         ),
         re.compile(
             rf"\b(?:{_SUBST_TERAPEUTICO}|exame)\b(?:\W+\w+){{0,6}}?\W+"
-            r"\b(?:substitui\w*|troca\w*|no\s+lugar|em\s+vez)\b"
+            r"\b(?:substitui\w*|troca\w*|equivalente\w*|no\s+lugar|em\s+vez)\b"
         ),
+        re.compile(r"\b(?:e|sao)\s+equivalente\w*\s+(?:a|ao|as|aos)\b"),
         # Compartilhamento de medicamento de terceiro / faixa etária diferente
         re.compile(
             rf"\b(?:{_FAMILIAR_TERCEIRO})\b(?:\W+\w+){{0,7}}?\W+"

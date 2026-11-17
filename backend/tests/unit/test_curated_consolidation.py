@@ -12,6 +12,9 @@ from observability.mlflow_tracker import MLflowExperimentTracker
 from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
 )
+from app.infrastructure.persistence.repositories.evidence_chunk_repository import (
+    LocalEvidenceChunkRepository,
+)
 from app.infrastructure.persistence.repositories.normative_chunk_repository import (
     LocalNormativeChunkRepository,
 )
@@ -104,7 +107,11 @@ def test_catalogo_consolidado_possui_cobertura_multifonte() -> None:
 
     repo = LocalCanonicalMedicationRepository()
     itens = repo.listar_todos()
-    assert len(itens) >= 1750
+    assert len(itens) == 1708
+    assert sum(len(item["occurrence_ids"]) for item in catalogo_bruto) == 2087
+    assert (
+        sum(1 for item in catalogo_bruto if item["dispensation_route"] == "FARMACIA_POPULAR") == 42
+    )
 
     matcher = TabularDCBMatcher(itens)
     abacavir_hits = matcher.casar("abacavir 300 mg comprimido")
@@ -159,6 +166,46 @@ def test_catalogo_consolidado_possui_cobertura_multifonte() -> None:
             0
         ][1]
     )
+
+    # Reconciliação F04 x F01/F03 e inversão de sal (metformina 850 mg, captopril 25 mg, etc.)
+    for consulta, conc in (
+        ("captopril", "25 mg"),
+        ("sinvastatina", "10 mg"),
+        ("sinvastatina", "40 mg"),
+        ("cloridrato de propranolol", "40 mg"),
+        ("espironolactona", "25 mg"),
+        ("furosemida", "40 mg"),
+        ("noretisterona", "0,35 mg"),
+        ("cloridrato de metformina", "850 mg"),
+        ("insulina humana regular", "100 UI/mL"),
+    ):
+        hits = matcher.casar(consulta, concentracao=conc, deduplicar=False)
+        assert len(hits) >= 1, f"Sem match para {consulta} {conc}"
+        assert hits[0][1].dispensation_route == "FARMACIA_POPULAR", (
+            f"Rota incorreta para {consulta} {conc}: {hits[0][1].dispensation_route}"
+        )
+
+    metf_850 = matcher.casar("cloridrato de metformina", concentracao="850 mg")[0][1]
+    assert len(metf_850.occurrence_ids) == 3
+    assert metf_850.available_reme_df is True
+
+
+def test_evidence_chunk_repository_e_ceaf_live_stock() -> None:
+    ev_repo = LocalEvidenceChunkRepository()
+    todos = ev_repo.listar_todos()
+    assert len(todos) == 2114
+    primeiro = todos[0]
+    assert ev_repo.buscar_por_chunk_id(primeiro.chunk_id) == primeiro
+    assert ev_repo.buscar_por_occurrence_ids([primeiro.occurrence_id]) == [primeiro]
+    if primeiro.medicine_id:
+        assert primeiro in ev_repo.buscar_por_medicine_id(primeiro.medicine_id)
+
+    ceaf_stock = json.loads(
+        (RAIZ_REPO / "data" / "processed" / "ceaf_live_stock.json").read_text(encoding="utf-8")
+    )
+    assert ceaf_stock["total_records"] == 857
+    assert len(ceaf_stock["items"]) == 857
+    assert set(ceaf_stock["stock_by_unit"].keys()) == {"Asa Sul", "Ceilândia", "Gama"}
 
 
 def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
@@ -243,3 +290,51 @@ def test_mlflow_experiment_tracker_registra_linhagem(tmp_path: Path) -> None:
     assert len(rec.tags["evidence_chunks_v2_sha256"]) == 64
     assert rec.tags["evidence_chunks_v2_count"] == "2114"
     assert len(rec.tags["combined_sha256"]) == 64
+
+
+def test_evidencias_rejeitam_duplicatas_e_vinculos_ausentes(tmp_path: Path) -> None:
+    import pytest
+
+    from app.application.ports import EvidenceRepositoryPort
+
+    repo = LocalEvidenceChunkRepository()
+    assert isinstance(repo, EvidenceRepositoryPort)
+    assert repo.listar_todos()[0].source_url.startswith("https://")
+    with pytest.raises(ValueError, match="sem evidência"):
+        repo.buscar_por_occurrence_ids([repo.listar_todos()[0].occurrence_id, "inexistente"])
+    raw = json.loads((RAIZ_REPO / "data/processed/evidence_chunks_v2.json").read_text())
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps([raw[0], raw[0]]))
+    with pytest.raises(ValueError, match="duplicado"):
+        LocalEvidenceChunkRepository(path)
+
+
+def test_reconciliacao_preserva_ocorrencias_e_nao_inventa_identidade() -> None:
+    raw = json.loads((RAIZ_REPO / "data/processed/medicamentos_sus_canonical.json").read_text())
+    occurrences = [
+        json.loads(line)
+        for line in (RAIZ_REPO / "data/staging/curated_occurrences_v9.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    expected = {
+        o["occurrence_id"]
+        for o in occurrences
+        if o["item_type"] != "supply" or o["source"]["source_id"] == "F04"
+    }
+    counts = Counter(oid for med in raw for oid in med["occurrence_ids"])
+    assert set(counts) == expected
+    assert all(count == 1 for count in counts.values())
+    by_occurrence = {oid: med for med in raw for oid in med["occurrence_ids"]}
+    for occ in occurrences:
+        if occ["source"]["source_id"] != "F04":
+            continue
+        if occ["active_ingredient"] == "insulina humana":
+            assert by_occurrence[occ["occurrence_id"]]["dcb_name"] == "insulina humana"
+        if occ["active_ingredient"] == "dipropionato de beclometasona" and occ["strength"] in {
+            "50mcg",
+            "250mcg",
+        }:
+            med = by_occurrence[occ["occurrence_id"]]
+            assert "/dose" not in med["concentration"]
+            assert med["pharmaceutical_form"] == "forma não informada"

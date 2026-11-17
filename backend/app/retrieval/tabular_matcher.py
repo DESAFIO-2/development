@@ -40,7 +40,11 @@ class TabularDCBMatcher:
         r"(?:\s*/\s*(?:\d+(?:[.,]\d+)*\s*)?(?:ml|g|dose)\b)?"
     )
     _DOSE = re.compile(_DOSE_PART + r"(?:\s*\+\s*" + _DOSE_PART + r")*", re.IGNORECASE)
-
+    _INTERLEAVED_DOSE = re.compile(rf"{_DOSE_PART}\s*\+\s*[a-zA-ZÀ-ÿ]", re.IGNORECASE)
+    _PACKAGE_SUFFIX_RE = re.compile(
+        r"\((?:sistemadeaplicacao|apresentacoes?de|frasco|ampola|caneta|seringa|dispositivo"
+        r"|tubo|bisnaga|bolsa|\d+(?:\.\d+)?%)[^)]*\)$"
+    )
     _EQUIVALENCIAS_CONCENTRACAO_SCOPED: dict[str, tuple[frozenset[str], ...]] = {
         "sacubitril valsartana sodica hidratada": (
             frozenset({"97mg+103mg", "200mg"}),
@@ -67,15 +71,93 @@ class TabularDCBMatcher:
         return valor
 
     @classmethod
+    def normalizar_concentracao_nucleo(cls, concentracao: str) -> str:
+        """Extrai o núcleo da concentração sem sufixo documental de embalagem ou percentual."""
+        norm = cls.normalizar_concentracao(concentracao)
+        sem_sufixo = cls._PACKAGE_SUFFIX_RE.sub("", norm)
+        # Trata notação "(5mg+50mg)/ml" -> "5mg+50mg/ml"
+        sem_sufixo = re.sub(r"^\(([^()]+)\)(/ml|/dose|/g)$", r"\1\2", sem_sufixo)
+        return sem_sufixo
+
+    @classmethod
     def _doses_equivalentes(cls, norm_dcb: str, dose_consulta: str, dose_catalogo: str) -> bool:
         if not dose_consulta or dose_consulta == dose_catalogo:
             return True
         pares = cls._EQUIVALENCIAS_CONCENTRACAO_SCOPED.get(norm_dcb, ())
-        return any(dose_consulta in par and dose_catalogo in par for par in pares)
+        if any(dose_consulta in par and dose_catalogo in par for par in pares):
+            return True
+        nucleo_consulta = cls.normalizar_concentracao_nucleo(dose_consulta)
+        nucleo_catalogo = cls.normalizar_concentracao_nucleo(dose_catalogo)
+        if nucleo_consulta and nucleo_consulta == nucleo_catalogo:
+            # Omitir detalhe é permitido; contradizer detalhe explícito não é.
+            sufixo_consulta = cls._PACKAGE_SUFFIX_RE.search(dose_consulta)
+            sufixo_catalogo = cls._PACKAGE_SUFFIX_RE.search(dose_catalogo)
+            return sufixo_consulta is None or (
+                sufixo_catalogo is not None and sufixo_consulta.group() == sufixo_catalogo.group()
+            )
+        return False
+
+    def doses_compativeis(self, consulta: str, doses_texto: set[str], concentracao: str) -> bool:
+        """Confirma ambas as grafias contra a mesma apresentação do catálogo."""
+        if not concentracao or not doses_texto:
+            return True
+        if len(doses_texto) > 1:
+            return False
+        dose_unica = next(iter(doses_texto))
+        dose_item = self.normalizar_concentracao(concentracao)
+        if dose_unica == dose_item:
+            return True
+        return any(
+            self._doses_equivalentes(
+                normalizar_texto_pt(med.dcb_name),
+                dose_unica,
+                self.normalizar_concentracao(med.concentration),
+            )
+            for _, med in self.casar(consulta, concentracao=concentracao, deduplicar=False)
+        )
 
     @classmethod
-    def doses_no_texto(cls, texto: str) -> set[str]:
-        return {cls.normalizar_concentracao(dose) for dose in cls._DOSE.findall(texto)}
+    def _nome_componente(cls, nome: str) -> tuple[str, ...]:
+        return tuple(
+            t
+            for t in normalizar_texto_pt(nome).split()
+            if t not in cls._IGNORED_SALTS and t not in {"de", "do", "da"}
+        )
+
+    def _associacoes_intercaladas(self, texto: str) -> list[CanonicalMedicationItem]:
+        """Confirma cada par ingrediente/dose, inclusive quando a ordem é invertida."""
+        pares: dict[tuple[str, ...], str] = {}
+        for trecho in texto.strip().rstrip("?.!").split("+"):
+            match = re.fullmatch(rf"\s*([a-zA-ZÀ-ÿ -]+?)\s+({self._DOSE_PART})\s*", trecho)
+            if not match:
+                return []
+            nome, dose = match.groups()
+            chave = self._nome_componente(nome)
+            if not chave or chave in pares:
+                return []
+            pares[chave] = self.normalizar_concentracao(dose)
+        encontrados = []
+        for med in self.medications:
+            nomes = med.dcb_name.split("+")
+            doses = self.normalizar_concentracao(med.concentration).split("+")
+            if len(nomes) != len(doses) or len(nomes) != len(pares):
+                continue
+            documentados = {
+                self._nome_componente(nome): dose for nome, dose in zip(nomes, doses, strict=True)
+            }
+            if documentados == pares:
+                encontrados.append(med)
+        return encontrados
+
+    def doses_no_texto(self, texto: str) -> set[str]:
+        """Extrai doses; associação intercalada não confirmada exige abstenção."""
+        if self._INTERLEAVED_DOSE.search(texto):
+            candidatos = self._associacoes_intercaladas(texto)
+            doses = {self.normalizar_concentracao(m.concentration) for m in candidatos}
+            if len(doses) != 1:
+                raise ValueError("Associação intercalada não confirmada no catálogo")
+            return doses
+        return {self.normalizar_concentracao(dose) for dose in self._DOSE.findall(texto)}
 
     @classmethod
     def tem_numero_nao_interpretado(cls, texto: str) -> bool:
@@ -107,7 +189,12 @@ class TabularDCBMatcher:
         dose = self.normalizar_concentracao(concentracao)
         forma_norm = normalizar_texto_pt(forma)
 
-        for med in self.medications:
+        candidatos = (
+            self._associacoes_intercaladas(consulta)
+            if self._INTERLEAVED_DOSE.search(consulta)
+            else self.medications
+        )
+        for med in candidatos:
             norm_dcb = normalizar_texto_pt(med.dcb_name)
             if not self._doses_equivalentes(
                 norm_dcb, dose, self.normalizar_concentracao(med.concentration)
@@ -149,6 +236,39 @@ class TabularDCBMatcher:
                 unicos.append((score, med))
 
         return unicos
+
+    def sugerir_correcao_ortografica(self, consulta: str) -> tuple[str, str] | None:
+        """Sugere correção única a distância de edição/transposição 1 sem selecionar o item."""
+        if self.casar(consulta):
+            return None
+        norm_query = normalizar_texto_pt(consulta)
+        nomes_unicos: dict[str, str] = {
+            normalizar_texto_pt(m.dcb_name): m.dcb_name
+            for m in self.medications
+            if re.fullmatch(r"[a-z]{6,}", normalizar_texto_pt(m.dcb_name))
+        }
+        sugestoes: set[tuple[str, str]] = set()
+        for token in re.findall(r"\b[a-z]{6,}\b", norm_query):
+            for norm_nome, nome_original in nomes_unicos.items():
+                if abs(len(token) - len(norm_nome)) > 1:
+                    continue
+                if len(token) == len(norm_nome):
+                    diffs = [
+                        i for i, (a, b) in enumerate(zip(token, norm_nome, strict=True)) if a != b
+                    ]
+                    proximo = len(diffs) == 1 or (
+                        len(diffs) == 2
+                        and diffs[1] == diffs[0] + 1
+                        and token[diffs[0]] == norm_nome[diffs[1]]
+                        and token[diffs[1]] == norm_nome[diffs[0]]
+                    )
+                else:
+                    menor, maior = sorted((token, norm_nome), key=len)
+                    proximo = any(maior[:i] + maior[i + 1 :] == menor for i in range(len(maior)))
+                if proximo:
+                    corrigida = re.sub(rf"\b{re.escape(token)}\b", norm_nome, norm_query)
+                    sugestoes.add((nome_original, corrigida))
+        return next(iter(sugestoes)) if len(sugestoes) == 1 else None
 
 
 __all__ = ["CanonicalMedicationItem", "TabularDCBMatcher"]

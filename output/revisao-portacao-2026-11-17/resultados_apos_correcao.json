@@ -1,0 +1,77 @@
+[
+  {
+    "input": {
+      "nome_digitado": "clavulanato de potássio 500 mg + amoxicilina 125 mg"
+    },
+    "expected": "NAO_PADRONIZADO",
+    "actual": "NAO_PADRONIZADO",
+    "ok": true
+  },
+  {
+    "input": {
+      "nome_digitado": "maleato de timolol",
+      "concentracao": "5 mg/mL (99%)"
+    },
+    "expected": "NAO_PADRONIZADO",
+    "actual": "NAO_PADRONIZADO",
+    "ok": true
+  },
+  {
+    "input": {
+      "nome_digitado": "acetato de desmopressina",
+      "concentracao": "0,1 mg/mL (frasco 999 mL)"
+    },
+    "expected": "NAO_PADRONIZADO",
+    "actual": "NAO_PADRONIZADO",
+    "ok": true
+  },
+  {
+    "input": {
+      "nome_digitado": "dipropionato de beclometasona 50 mcg"
+    },
+    "expected": "FARMACIA_POPULAR",
+    "actual": "FARMACIA_POPULAR",
+    "ok": true
+  },
+  {
+    "input": {
+      "nome_digitado": "dipropionato de beclometasona 250 mcg"
+    },
+    "expected": "FARMACIA_POPULAR",
+    "actual": "FARMACIA_POPULAR",
+    "ok": true
+  },
+  {
+    "input": {
+      "nome_digitado": "sacubitril valsartana 97/103 mg",
+      "concentracao": "200 mg"
+    },
+    "expected": "FARMACIA_ALTO_CUSTO",
+    "actual": "FARMACIA_ALTO_CUSTO",
+    "ok": true
+  },
+  {
+    "input": "Como usar a Farmácia Popular?",
+    "expected_blocked": false,
+    "actual_blocked": false,
+    "ok": true
+  },
+  {
+    "input": "Como usar o SUS?",
+    "expected_blocked": false,
+    "actual_blocked": false,
+    "ok": true
+  },
+  {
+    "input": "Como usar uma procuração para retirar medicamentos?",
+    "expected_blocked": false,
+    "actual_blocked": false,
+    "ok": true
+  },
+  {
+    "input": "Onde notifico uma reação adversa?",
+    "expected_blocked": false,
+    "actual_blocked": false,
+    "ok": true
+  }
+]

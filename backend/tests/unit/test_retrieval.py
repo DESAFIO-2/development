@@ -77,3 +77,44 @@ def test_hybrid_retriever_recupera_norma_e_abstem_fora_de_elenco() -> None:
         "semaglutida estética ozempic para emagrecer", top_k=3, min_score=0.18
     )
     assert len(hits_neg) == 0
+
+
+def test_tabular_matcher_nucleo_concentracao_intercalada_e_sugestao() -> None:
+    repo = LocalCanonicalMedicationRepository()
+    matcher = TabularDCBMatcher(repo.listar_todos())
+
+    # Concentração com percentual documental entre parênteses ("5 mg/mL (0,5%)")
+    timolol = matcher.casar("maleato de timolol", concentracao="5 mg/mL")
+    assert len(timolol) >= 1
+    assert "5 mg/mL" in timolol[0][1].concentration
+
+    # Concentração com dispositivo/frasco ("0,1 mg/mL (frasco 2,5 mL)")
+    desmo = matcher.casar("acetato de desmopressina", concentracao="0,1 mg/mL")
+    assert len(desmo) >= 1
+
+    # Associação em dose fixa intercalada no texto
+    doses_interc = matcher.doses_no_texto("amoxicilina 500 mg + clavulanato de potássio 125 mg")
+    assert doses_interc == {"500mg+125mg"}
+
+    # Sugestão ortográfica para erro de 1 caractere sem selecionar silenciosamente
+    assert matcher.casar("ibuprofneo 600 mg") == []
+    sugestao = matcher.sugerir_correcao_ortografica("ibuprofneo 600 mg")
+    assert sugestao is not None
+    assert sugestao[0] == "ibuprofeno"
+    assert "ibuprofeno" in sugestao[1]
+
+
+def test_associacao_tres_componentes_preserva_pares_e_ordem() -> None:
+    from dataclasses import replace
+
+    import pytest
+
+    base = LocalCanonicalMedicationRepository().listar_todos()[0]
+    # Fixture de protocolo, não apresentação real nem evidência científica.
+    med = replace(base, dcb_name="alfa + beta + gama", concentration="1 mg + 2 mg + 3 mg")
+    matcher = TabularDCBMatcher([med])
+    assert matcher.doses_no_texto("gama 3 mg + alfa 1 mg + beta 2 mg") == {"1mg+2mg+3mg"}
+    for text in ("alfa 2 mg + beta 1 mg + gama 3 mg", "alfa 1 mg + beta 2 mg"):
+        with pytest.raises(ValueError, match="não confirmada"):
+            matcher.doses_no_texto(text)
+        assert not matcher.casar(text)

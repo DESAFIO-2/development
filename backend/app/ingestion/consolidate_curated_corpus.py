@@ -109,10 +109,46 @@ _CANONICAL_GROUP_KEY_ALIASES: dict[tuple[str, str, str, str], tuple[str, str, st
         "suspensao aerossol",
         "",
     ),
+    ("sulfato de salbutamol", "100mcg/dose", "spray ou aerossol para inalacao oral", ""): (
+        "sulfato de salbutamol",
+        "100mcg/dose",
+        "suspensao aerossol",
+        "",
+    ),
     ("salbutamol (sulfato)", "100mcg/dose", "spray ou aerossol para inalacao oral", ""): (
         "sulfato de salbutamol",
         "100mcg/dose",
         "suspensao aerossol",
+        "",
+    ),
+    ("losartana potassica", "50mg", "comprimido revestido", ""): (
+        "losartana potassica",
+        "50mg",
+        "comprimido",
+        "",
+    ),
+    ("insulina humana regular", "100ui/ml", "forma nao informada", ""): (
+        "insulina humana regular",
+        "100ui/ml",
+        "solucao injetavel",
+        "",
+    ),
+    ("dipropionato de beclometasona", "50mcg/dose", "spray nasal", ""): (
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "suspensao para inalacao nasal",
+        "",
+    ),
+    ("dipropionato de beclometasona", "50mcg/dose", "solucao aerossol oral", ""): (
+        "dipropionato de beclometasona",
+        "50mcg/dose",
+        "solucao aerossol",
+        "",
+    ),
+    ("dipropionato de beclometasona", "250mcg/dose", "solucao aerossol oral", ""): (
+        "dipropionato de beclometasona",
+        "250mcg/dose",
+        "solucao aerossol",
         "",
     ),
 }
@@ -401,7 +437,7 @@ PRIORITY_24_ITEMS: list[dict[str, Any]] = [
         "medication_id": "MED-SALBUTAMOL-100MCG",
         "dcb_name": "sulfato de salbutamol",
         "concentration": "100 mcg/dose",
-        "pharmaceutical_form": "aerossol oral",
+        "pharmaceutical_form": "suspensão aerossol",
         "rename_component": "Básico",
         "available_pfpb": True,
         "pfpb_free": True,
@@ -1262,10 +1298,50 @@ def classificar_apresentacao_consolidada(
     )
 
 
+_SALT_PAREN_RE = re.compile(
+    r"^(.+?)\s*\("
+    r"(cloridrato|maleato|besilato|sulfato|succinato|acetato|brometo|dipropionato"
+    r"|valerato|enantato|fumarato|fosfato|citrato|mesilato|tartarato|hemitartarato"
+    r"|nitrato|cloreto|decanoato|propionato|furoato|xinafoato|undecilato|tosilato"
+    r"|etexilato|etanolato|esilato|isotionato|hidrobrometo|embonato|trifenatato)"
+    r"\)$"
+)
+_SALT_ADJ_PAREN_RE = re.compile(
+    r"^(.+?)\s*\((sodico|sodica|potassica|potassico|calcica|calcico)\)$"
+)
+
+
 def _normalizar_nome_dcb_ocr(nome: str) -> str:
     """Corrige resíduos de quebra hifenizada de OCR (ex.: 'anti- -hepatite' -> 'anti-hepatite')."""
     limpo = re.sub(r"-\s+-", "-", nome.strip().rstrip("*").strip().lower())
     return re.sub(r"\s+", " ", limpo)
+
+
+def _inverter_sal_parentetico_parte(parte: str) -> str:
+    """Converte notação F03 'substância (sal)' para chave sem acento 'sal de substância'."""
+    norm = remover_acentos(parte.strip())
+    m_sal = _SALT_PAREN_RE.fullmatch(norm)
+    if m_sal:
+        base, sal = m_sal.groups()
+        return f"{sal} de {base.strip()}"
+    m_adj = _SALT_ADJ_PAREN_RE.fullmatch(norm)
+    if m_adj:
+        base, adj = m_adj.groups()
+        return f"{base.strip()} {adj}"
+    return norm
+
+
+def _normalizar_dcb_canonico(nome: str, dcbs_f01_f04: dict[str, str]) -> str:
+    """Reconcilia inversão de sal de F03 ('metformina (cloridrato)') quando há DCB F01/F04."""
+    limpo = _normalizar_nome_dcb_ocr(nome)
+    norm = remover_acentos(limpo)
+    if norm in dcbs_f01_f04:
+        return dcbs_f01_f04[norm]
+    if "(" in limpo:
+        invertido = " + ".join(_inverter_sal_parentetico_parte(p) for p in limpo.split("+"))
+        if invertido in dcbs_f01_f04:
+            return dcbs_f01_f04[invertido]
+    return limpo
 
 
 def consolidar_catalogo_medicamentos(
@@ -1279,13 +1355,19 @@ def consolidar_catalogo_medicamentos(
             f"erros={drift.errors[:5]}"
         )
 
+    dcbs_f01_f04: dict[str, str] = {}
+    for occ in occurrences:
+        if occ["source"]["source_id"] in {"F01", "F04"}:
+            dcb_limpo = _normalizar_nome_dcb_ocr(str(occ["active_ingredient"]))
+            dcbs_f01_f04.setdefault(remover_acentos(dcb_limpo), dcb_limpo)
+
     # Mantém apresentações de liberação distinta em grupos separados.
     grupos: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
     for occ in occurrences:
         # Os insumos F01 ficam na evidência de presença, fora do roteiro de medicamentos.
         if occ["item_type"] == "supply" and occ["source"]["source_id"] != "F04":
             continue
-        dcb_raw = _normalizar_nome_dcb_ocr(str(occ["active_ingredient"]))
+        dcb_raw = _normalizar_dcb_canonico(str(occ["active_ingredient"]), dcbs_f01_f04)
         conc_raw = normalizar_concentracao(str(occ.get("strength") or ""))
         form_raw = str(occ.get("form") or "").strip().lower()
         if form_raw in {"", "-"}:
@@ -1299,6 +1381,18 @@ def consolidar_catalogo_medicamentos(
         )
         key = _CANONICAL_GROUP_KEY_ALIASES.get(key, key)
         grupos.setdefault(key, []).append(occ)
+
+    # Reconcilia ocorrências F04 com "forma nao informada" quando existe uma única
+    # forma farmacêutica concreta em F01/F03 para o mesmo (dcb, concentração, liberação).
+    concretas_por_dcr: dict[tuple[str, str, str], list[tuple[str, str, str, str]]] = {}
+    for k in list(grupos.keys()):
+        if k[2] != "forma nao informada":
+            concretas_por_dcr.setdefault((k[0], k[1], k[3]), []).append(k)
+    for k in list(grupos.keys()):
+        if k[2] == "forma nao informada":
+            candidatas = concretas_por_dcr.get((k[0], k[1], k[3]), [])
+            if len(candidatas) == 1:
+                grupos[candidatas[0]].extend(grupos.pop(k))
 
     # Indexa os itens prioritários que possuem correspondência real (zero itens occ == 0)
     chaves_prioritarias: set[tuple[str, str, str, str]] = set()
@@ -1330,8 +1424,11 @@ def consolidar_catalogo_medicamentos(
         if key in chaves_prioritarias:
             continue
         occs = grupos[key]
-        primeiro = occs[0]
-        dcb_name = _normalizar_nome_dcb_ocr(str(primeiro["active_ingredient"]))
+        primeiro = next(
+            (o for o in occs if o["source"]["source_id"] == "F01"),
+            next((o for o in occs if o["source"]["source_id"] == "F03"), occs[0]),
+        )
+        dcb_name = _normalizar_dcb_canonico(str(primeiro["active_ingredient"]), dcbs_f01_f04)
         conc = normalizar_concentracao(str(primeiro.get("strength") or ""))
         form = str(primeiro.get("form") or "").strip().lower()
         if not form or form == "-":

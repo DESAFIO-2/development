@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/DESAFIO-2/Data-Science.git",
+  "commit": "d1f8fe1bf43b7c45e88d6b6907166845d0281601",
+  "source_path": "data/gold/ceaf_live_stock.json",
+  "destination_path": "data/processed/ceaf_live_stock.json",
+  "sha256": "20c9c563f46c98284ada1eb23793274e7ccc8c4f6d5f7f0320c8d9def8521371",
+  "records": 857,
+  "distinct_product_codes": 290,
+  "distinct_descriptions": 294,
+  "record_dates": {
+    "05/11/2026 13:45:15": 666,
+    "2026-11-16 00:00:00-03": 2,
+    "16/11/2026 15:32:44": 189
+  },
+  "scope": "Snapshot público importado sem alteração; não confirma disponibilidade atual. Sem consumidor ativo."
+}

@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from app.application.ports import RetrievalHitDTO
+from app.application.ports import EvidenceChunkDTO, RetrievalHitDTO
 
 
 def calcular_sha256(texto: str) -> str:
@@ -47,4 +47,4 @@ class NormativeChunkDTO:
         )
 
 
-__all__ = ["NormativeChunkDTO", "RetrievalHitDTO", "calcular_sha256"]
+__all__ = ["EvidenceChunkDTO", "NormativeChunkDTO", "RetrievalHitDTO", "calcular_sha256"]

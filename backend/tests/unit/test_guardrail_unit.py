@@ -173,3 +173,54 @@ def test_local_guardrail_adapter_implementa_guardrail_port() -> None:
         "123.456.789-00"
         not in adapter.desidentificar_dados_pessoais("CPF 123.456.789-00").texto_sanitizado
     )
+
+
+@pytest.mark.parametrize(
+    "pergunta",
+    [
+        "Qual a posologia da metformina 500 mg?",
+        "Posso tomar dipirona junto com losartana?",
+        "Como usar metformina 500 mg?",
+        "Como tomar sinvastatina?",
+        "Metformina causa efeito colateral?",
+        "Quais os efeitos colaterais da losartana?",
+        "Qual a reação adversa mais comum?",
+        "Quais as contraindicações do ibuprofeno?",
+        "Grávida pode usar metformina?",
+        "É seguro na gravidez ou gestação?",
+        "Gestante pode tomar amoxicilina?",
+        "Quem está amamentando pode tomar dipirona?",
+        "Existe interação medicamentosa entre metformina e álcool?",
+        "Varfarina interage com omeprazol?",
+        "Losartana é equivalente a valsartana?",
+        "Qual o medicamento equivalente da metformina?",
+        (
+            "Vou fazer exame amanhã, posso suspender a metformina e o marevan "
+            "por conta própria antes da coleta?"
+        ),
+        "Posso parar de tomar meu remédio de pressão antes do exame?",
+        "Devo interromper a insulina antes do exame de sangue em jejum?",
+    ],
+)
+def test_clinical_guardrail_bloqueia_casos_portados_de_ds(pergunta: str) -> None:
+    res = ClinicalGuardrail().inspecionar(pergunta)
+    assert res.bloqueado is True
+    assert res.motivo in {"PRESCRICAO", "DOSAGEM", "DIAGNOSTICO", "TROCA_TERAPEUTICA"}
+
+
+@pytest.mark.parametrize(
+    "pergunta",
+    [
+        "Como usar o SUS e como tomar metformina?",
+        "Como usar uma procuração e posso dobrar a dose do remédio?",
+        "Onde notifico uma reação adversa e quais os efeitos colaterais da losartana?",
+        "Onde notifico uma reação adversa e posso suspender o remédio?",
+    ],
+)
+def test_excecao_administrativa_nao_apaga_pedido_clinico(pergunta: str) -> None:
+    assert ClinicalGuardrail().inspecionar(pergunta).bloqueado
+
+
+def test_excecao_administrativa_preserva_emergencia() -> None:
+    result = ClinicalGuardrail().inspecionar("Como usar o SUS? Estou com dor no peito agora")
+    assert result.motivo == "EMERGENCIA_MEDICA"
