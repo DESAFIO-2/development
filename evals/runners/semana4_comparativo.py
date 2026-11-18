@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import platform
 import statistics
 import sys
@@ -30,7 +31,14 @@ from app.application.ports import GenerationResultDTO, GeneratorPort, RetrievalH
 from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
 from app.container import ServiceContainer, build_services
 from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS, OllamaRESTGeneratorAdapter
-from evals.runners.artifacts import atomic_json, atomic_text, digest, read_json
+from evals.runners.artifacts import (
+    atomic_json,
+    atomic_text,
+    bind_manifest,
+    digest,
+    read_json,
+    source_hashes,
+)
 from evals.runners.local_preflight import ollama_identity
 
 DEFAULT_MODELS = ("qwen2.5:7b", "qwen2.5:14b")
@@ -78,8 +86,25 @@ class SyntheticSmokeGenerator(GeneratorPort):
         )
 
 
-def _checkpoint_path(run_dir: Path, model: str, case_id: str) -> Path:
-    key = digest({"model": model, "case_id": case_id, "prompt_version": PROMPT_VERSION_AGENTS})
+def _checkpoint_path(
+    run_dir: Path,
+    model: str,
+    case_id: str,
+    payload: dict[str, Any],
+    *,
+    synthetic_smoke: bool,
+    model_digest: str,
+) -> Path:
+    key = digest(
+        {
+            "model": model,
+            "model_digest": model_digest,
+            "case_id": case_id,
+            "payload": payload,
+            "synthetic_smoke": synthetic_smoke,
+            "prompt_version": PROMPT_VERSION_AGENTS,
+        }
+    )
     return run_dir / "checkpoints" / f"{model.replace(':', '_')}_{case_id}_{key[:10]}.json"
 
 
@@ -168,9 +193,7 @@ def _summarize_model(model: str, items: list[dict[str, Any]]) -> dict[str, Any]:
     mediana_wall = round(statistics.median(latencies), 2) if latencies else None
     sorted_lat = sorted(latencies)
     p95_wall = (
-        round(sorted_lat[min(len(sorted_lat) - 1, int(0.95 * (len(sorted_lat) - 1)))], 2)
-        if sorted_lat
-        else None
+        round(sorted_lat[max(0, math.ceil(0.95 * len(sorted_lat)) - 1)], 2) if sorted_lat else None
     )
     return {
         "model": model,
@@ -222,10 +245,27 @@ def run_comparison(
         if synthetic_smoke
         else ollama_identity(base_url, models)
     )
+    bind_manifest(
+        run_dir,
+        {
+            "synthetic_smoke": synthetic_smoke,
+            "prompt_version": PROMPT_VERSION_AGENTS,
+            "base_url": base_url,
+            "models": list(models),
+            "cases": [[case_id, payload] for case_id, payload in scenarios],
+            "ollama_identity": identity,
+            "source_sha256": source_hashes(RAIZ),
+        },
+    )
     resolved_services = services or build_services()
     per_model: dict[str, list[dict[str, Any]]] = {}
 
     for model in models:
+        model_digest = (
+            "synthetic_smoke"
+            if synthetic_smoke
+            else str(identity.get("models", {}).get(model, {}).get("digest", ""))
+        )
         generator: GeneratorPort = (
             SyntheticSmokeGenerator(model)
             if synthetic_smoke
@@ -239,7 +279,14 @@ def run_comparison(
         orchestrator = _build_orchestrator(resolved_services, generator)
         entries: list[dict[str, Any]] = []
         for case_id, payload in scenarios:
-            ckpt = _checkpoint_path(run_dir, model, case_id)
+            ckpt = _checkpoint_path(
+                run_dir,
+                model,
+                case_id,
+                payload,
+                synthetic_smoke=synthetic_smoke,
+                model_digest=model_digest,
+            )
             cached = read_json(ckpt) if ckpt.exists() else None
             if cached is not None:
                 entries.append(cached)

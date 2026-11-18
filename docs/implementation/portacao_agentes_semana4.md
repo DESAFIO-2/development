@@ -78,7 +78,7 @@ para acomodar essa invocação fora do procedimento.
 
 | Verificação | Resultado |
 | --- | --- |
-| `uv run pytest -q` em backend | 410 passed (inclui contrato multiagente, isolamento, correções P1/P2, autocomplete DCB numérica e comparativo Semana 4) |
+| `uv run pytest -q` em backend | 421 passed (inclui contrato multiagente, isolamento, correções P1/P2, endurecimentos pós-PR, autocomplete DCB numérica e comparativo Semana 4) |
 | Ruff check + format check, escopo de CI | Sem erros; 129 arquivos verificados |
 | Mypy strict app/tests/runners/baselines/observability | Sem erros em 121 arquivos |
 | `uv lock --project backend --check` | Resolvido e consistente (91 pacotes, incluindo grupos) |

@@ -4,6 +4,51 @@ from app.application.ports import RetrievalHitDTO, RetrieverPort
 from app.domain.prescription import PrescriptionAuditRequest
 from app.retrieval.text_normalizer import normalizar_texto_pt
 
+_DOMAIN_FALLBACK_PREFIXES = (
+    "medicament",
+    "remedi",
+    "farmac",
+    "exame",
+    "consult",
+    "receit",
+    "prescric",
+    "lme",
+    "pcdt",
+    "document",
+    "retir",
+    "peg",
+    "busc",
+    "onde",
+    "ubs",
+    "polo",
+    "ceaf",
+    "sisreg",
+    "prazo",
+    "validad",
+    "venc",
+    "procurac",
+    "terceir",
+    "estoq",
+    "disponib",
+    "sus",
+    "gratuit",
+    "fralda",
+    "absorvent",
+    "esse",
+    "este",
+    "desse",
+    "deste",
+    "dessa",
+    "desta",
+    "item",
+    "itens",
+)
+
+
+def _question_supports_item_fallback(normalized_question: str) -> bool:
+    tokens = normalized_question.split()
+    return any(tok.startswith(_DOMAIN_FALLBACK_PREFIXES) for tok in tokens)
+
 
 def consult_norms(
     request: PrescriptionAuditRequest, retriever: RetrieverPort
@@ -20,7 +65,7 @@ def consult_norms(
     ):
         expanded += " clinicas privadas convenios Farmacia Popular terceiros"
     hits = retriever.search(expanded, top_k=3)
-    if hits or not request.itens:
+    if hits or not request.itens or not _question_supports_item_fallback(normalized):
         return hits[:3]
     # Só recorre aos itens da requisição se a pergunta isolada não tiver evidência,
     # evitando diluir exames/normas com o fármaco de outro item nem multiplicar buscas.

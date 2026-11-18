@@ -224,3 +224,23 @@ def test_excecao_administrativa_nao_apaga_pedido_clinico(pergunta: str) -> None:
 def test_excecao_administrativa_preserva_emergencia() -> None:
     result = ClinicalGuardrail().inspecionar("Como usar o SUS? Estou com dor no peito agora")
     assert result.motivo == "EMERGENCIA_MEDICA"
+
+
+@pytest.mark.parametrize(
+    ("texto", "tipo_esperado", "trecho_sensivel"),
+    [
+        ("me chamo joao silva", "PATIENT_NAME", "joao silva"),
+        ("meu nome é maria clara", "PATIENT_NAME", "maria clara"),
+        ("Ligue 61 9 9999-0000", "PHONE", "9999-0000"),
+        ("Ligue 61.99999.0000", "PHONE", "99999"),
+        ("fone61999990000", "PHONE", "61999990000"),
+        ("CPF 123 456 789 00", "CPF", "123 456"),
+        ("898-0012-3456-7890", "CNS_CARTAO_SUS", "898-0012"),
+    ],
+)
+def test_pii_masker_cobre_variacoes_sem_falso_negativo(
+    texto: str, tipo_esperado: str, trecho_sensivel: str
+) -> None:
+    res = PIIMasker().mascarar(texto)
+    assert tipo_esperado in res.tipos_detectados
+    assert trecho_sensivel not in res.texto_sanitizado

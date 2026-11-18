@@ -97,3 +97,9 @@ def test_fracionamento_e_negacao_com_adversativa_reprovam() -> None:
     assert "ORIENTACAO_POSOLOGIA_OU_TROCA" in (
         validar_saida("Não troque o remédio, mas tome 2 comprimidos agora.").motivos
     )
+    assert "ORIENTACAO_POSOLOGIA_OU_TROCA" in (
+        validar_saida("Não troque, tome 2 comprimidos agora.").motivos
+    )
+    assert "ORIENTACAO_POSOLOGIA_OU_TROCA" in (
+        validar_saida("Use 50 mg duas vezes ao dia.").motivos
+    )

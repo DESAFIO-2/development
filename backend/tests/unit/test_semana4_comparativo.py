@@ -98,3 +98,46 @@ def test_semana4_comparativo_records_provider_failure_without_fallback(
     saved = json.loads((tmp_path / "resultado.json").read_text(encoding="utf-8"))
     assert saved["resumos"]["qwen2.5:7b"]["falhas_ou_rejeicoes"] == 1
     assert not list((tmp_path / "checkpoints").glob("*.json"))
+
+
+def test_semana4_comparativo_p95_outlier_and_manifest_isolation(
+    tmp_path: Path, services: ServiceContainer
+) -> None:
+    from evals.runners.semana4_comparativo import _summarize_model
+
+    summary = _summarize_model(
+        "qwen2.5:7b",
+        [
+            {"generation_status": "GERADO", "wall_ms": 100.0, "latency_ms": 50.0},
+            {"generation_status": "GERADO", "wall_ms": 9000.0, "latency_ms": 8900.0},
+        ],
+    )
+    assert summary["p95_wall_ms"] == 9000.0
+    assert summary["dentro_meta_rnf04_8s"] is False
+
+    run_comparison(
+        run_dir=tmp_path,
+        models=["qwen2.5:7b"],
+        base_url="http://localhost:11434",
+        timeout_seconds=10.0,
+        limit=1,
+        synthetic_smoke=True,
+        services=services,
+    )
+    identity = {
+        "version": "0.6.0",
+        "models": {"qwen2.5:7b": {"name": "qwen2.5:7b", "digest": "abc123", "size": 1}},
+    }
+    with (
+        patch("evals.runners.semana4_comparativo.ollama_identity", return_value=identity),
+        pytest.raises(ValueError, match="Experimento incompatível"),
+    ):
+        run_comparison(
+            run_dir=tmp_path,
+            models=["qwen2.5:7b"],
+            base_url="http://localhost:11434",
+            timeout_seconds=10.0,
+            limit=1,
+            synthetic_smoke=False,
+            services=services,
+        )

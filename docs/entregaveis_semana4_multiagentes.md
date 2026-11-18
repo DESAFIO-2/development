@@ -1,6 +1,6 @@
 # Entregável da Semana 4 — Orquestração Multiagente (SUS Cidadão)
 
-> Entrega técnica referente à **Semana 4 (`4_Second Challenge`)** na branch `feat/semana4-multiagentes`, seguindo o [ADR 0007](../docs/adr/0007_orquestracao_semana4.md), o [ADR 0004](../docs/adr/0004_integridade_comparativo_semana3.md) e as [Diretrizes de Integridade Científica](../docs/runbooks/diretrizes_integridade_ia.md).
+> Entrega técnica referente à **Semana 4 (`4_Second Challenge`)** na branch `feat/semana4-multiagentes`, seguindo o [ADR 0007](adr/0007_orquestracao_semana4.md), o [ADR 0004](adr/0004_integridade_comparativo_semana3.md) e as [Diretrizes de Integridade Científica](runbooks/diretrizes_integridade_ia.md).
 
 ---
 
@@ -102,7 +102,7 @@ O script `evals/runners/semana4_comparativo.py`:
 | **Formatação e Lint (`ruff`)** | `uv run ruff format --check` / `ruff check` — **0 erros** (`129` arquivos verificados no pipeline `backend` + `evals` + `observability`). |
 | **Tipagem estrita (`mypy --strict`)** | **0 erros** em `121` arquivos (`app`, `tests`, `evals/runners`, `evals/baselines`, `observability`). |
 | **Consistência de lockfile** | `uv lock --check` aprovado (`91` pacotes resolvidos). |
-| **Suíte do Backend (`pytest`)** | **410 passed** (inclui contrato HTTP, isolamento de memória, barreira paralela LangGraph, Personas Dona Helena e Lucas, preposição `"para o/a"`, todos os casos anteriormente bloqueados/numéricos e validação do runner Semana 4). |
+| **Suíte do Backend (`pytest`)** | **421 passed** (inclui contrato HTTP, isolamento de memória, barreira paralela LangGraph, Personas Dona Helena e Lucas, preposição `"para o/a"`, todos os casos anteriormente bloqueados/numéricos, endurecimentos P1/P2 pós-PR e validação do runner Semana 4). |
 | **Varredura Integral do Corpus Ativo** | Verificação automatizada sobre **todas** as apresentações do catálogo canônico e **todas** as evidências literais v2 / chunks normativos carregados pelo container (`bad_ev = 0`, `bad_med = 0`). |
 | **Suíte de Evals (`evals/tests`)** | **4 passed**. |
 | **Datasets e Guardrail Clínico** | `validar_datasets.py`: **6/6** JSONL válidos; `guardrail_runner.py`: **100,00%** de recall de bloqueio e **0,00%** de falso bloqueio. |

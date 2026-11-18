@@ -36,16 +36,18 @@ _ALVO = (
     r"(?:a dose|as doses|a dosagem|o remedio|os remedios|o medicamento|os medicamentos"
     r"|a medicacao|o comprimido|os comprimidos|a capsula|as capsulas|o xarope)"
 )
+_QUANTIDADE = r"(?:\d+(?:[.,]\d+)?|um|uma|dois|duas|tres|quatro|cinco|seis|meio|meia)"
 _POSOLOGIA = re.compile(
     rf"{_ACAO}(?:\W+\w+){{0,3}}?\W+{_ALVO}"
-    r"|\bde \d+ em \d+ ?h(?:oras)?\b"
-    r"|\ba cada \d+ ?h(?:oras)?\b"
-    r"|\b\d+ ?(?:x|vezes) (?:ao|por) dia\b"
-    r"|\btom[ea]r? \d+ (?:comprimidos?|capsulas?|gotas|doses?)\b"
+    rf"|\bde {_QUANTIDADE} em {_QUANTIDADE} ?h(?:oras)?\b"
+    rf"|\ba cada {_QUANTIDADE} ?h(?:oras)?\b"
+    rf"|\b{_QUANTIDADE} ?(?:x|vezes) (?:ao|por) dia\b"
+    rf"|\b(?:tom[ea]r?|us[ea]r?|aplic[ae]r?|inger[iu]\w*) "
+    rf"{_QUANTIDADE} (?:comprimidos?|capsulas?|gotas|doses?|ampolas?)\b"
 )
-# Delimitador de oração ou conjunção adversativa impede que "não" inicial libere "mas tome 2".
-_FRONTEIRA_CLAUSULA = re.compile(r"(?:[.;!?]|\b(?:mas|porem|contudo|entretanto|todavia)\b)")
-_NEGACAO = re.compile(r"\b(?:nao|nunca|jamais|evite|sem orientacao|sem falar)\b[^.;!?]{0,40}$")
+# Delimitador de oração (inclui vírgula) impede que negação inicial libere cláusula seguinte.
+_FRONTEIRA_CLAUSULA = re.compile(r"(?:[.,;!?]|\b(?:mas|porem|contudo|entretanto|todavia)\b)")
+_NEGACAO = re.compile(r"\b(?:nao|nunca|jamais|evite|sem orientacao|sem falar)\b[^.,;!?]{0,40}$")
 # Cada documento citado: "Fonte: <ID> | <título>". "[Fonte: Conhecimento Geral]" não
 # afirma documento nenhum e por isso não é tratado como citação.
 _CITACAO_DOCUMENTO = re.compile(r"fonte\s*:\s*([^|\]\n;]+?)\s*\|", re.IGNORECASE)
