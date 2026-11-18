@@ -78,3 +78,25 @@ Antes de submeter qualquer alteração, o agente de IA deve executar e validar m
 5. [ ] `uv run --project backend python evals/runners/validar_datasets.py` $\rightarrow$ Datasets íntegros.
 6. [ ] `uv run --project backend python evals/runners/comparar_semana3.py --synthetic-smoke` $\rightarrow$ Smoke sintético aprovado com status `NAO AVALIADO` para métricas que exigem LLM real.
 7. [ ] Os números apresentados em documentações refletem **estritamente** dados reais coletados ou estão rotulados com total transparência como sintéticos/pendentes?
+8. [ ] Todos os campos ecoados em respostas bloqueadas, de abstenção ou de fallback (ex.: `regiao_administrativa`, identificadores, mensagens) passam por validação de saída (`validar_saida`) ou normalização segura?
+9. [ ] Alterações em regex de guardrail/LGPD incluem testes adversariais de bypass (vírgula na negação, numerais por extenso, caixa baixa após autoidentificação, separadores alternativos) e varredura de falso positivo nas evidências/normas oficiais?
+10. [ ] Novos runners em `evals/runners/` usam `bind_manifest`, `source_hashes`, `p95` conservador (`math.ceil`) e possuem testes contra contaminação `synthetic_smoke` vs coleta real?
+11. [ ] Fallbacks de recuperação possuem teste negativo com pergunta fora de escopo acompanhada de item válido na requisição?
+
+---
+
+## 4. Post-Mortem Técnico da Semana 4 (Por que os Bugs Escaparam na 1ª Varredura e Como Evitar Repetição)
+
+Na revisão independente pós-PR da Semana 4, quatro defeitos `P1` e quatro melhorias `P2` foram reproduzidos em código que já havia passado em todos os testes unitários e na varredura completa do catálogo (`1.708` itens e `2.114` evidências). Os pontos cegos que explicam por que não apareceram antes — e as proteções permanentes adotadas — são:
+
+1. **Testar apenas o caminho feliz e o catálogo inteiro cria falsa confiança em campos secundários (`P1-1` / `P2-2`)**:
+   - *Por que escapou:* os testes de bloqueio e a varredura de catálogo preenchiam `pergunta_adicional` com ataques ou nomes de remédios, deixando `regiao_administrativa` e `tipo_prescritor` com valores benignos. Assim, `_synthesize` no ramo `BLOQUEADO` validou somente `resumo_acolhedor` e deixou `regiao_administrativa` passar sem `validar_saida`; e sinais fracos de injeção divididos entre campos passavam isoladamente.
+   - *Regra permanente:* sempre testar payloads adversariais cruzados (*cross-field probing*), injetando conteúdo proibido em **todos** os campos ecoados no cartão final (inclusive em rotas `BLOQUEADO`/`ABSTENCAO`) e agregando famílias de sinais fracos por requisição sem concatenar strings longas.
+
+2. **Confiar apenas nos exemplos positivos/negativos existentes mascarou variações triviais de regex (`P1-2` / `P1-3`)**:
+   - *Por que escapou:* a bateria existente só exercitava conjunções adversativas (`mas`), algarismos (`2 comprimidos`, `3 vezes`) e PII capitalizada/padrão. Variações simples — vírgula após `"Não troque,"`, `"duas vezes ao dia"`, `"me chamo joao silva"` em minúscula, espaço após o `9` ou pontos em telefone (`61 9 9999-0000`, `61.99999.0000`), prefixo colado (`fone...`), CPF separado por espaços e CNS com hífens — não tinham sonda de contorno dedicada.
+   - *Regra permanente:* ao escrever ou revisar regex de saída/LGPD, executar obrigatoriamente **tentativa explícita de contorno** (pontuação, numerais por extenso, caixa baixa após autoidentificação e separadores alternativos), cuidando para não relaxar preposições ambíguas como `"para o/a"` em minúscula (evitando falso mascaramento de frases comuns como `"para a entrega gratuita"`), e revalidar contra todas as evidências e normas carregadas.
+
+3. **Smoke sintético e testes de fallback sem invariantes negativas de contorno (`P1-4` / `P2-1`)**:
+   - *Por que escapou:* os testes de `semana4_comparativo.py` cobriam execução sintética e falha de provedor isoladamente, mas não comparavam o cálculo de `p95` com `ragas_runner.py` (`int(...)` vs `math.ceil(...)`, ocultando outliers em amostras pequenas como `--pilot`), nem testavam colisão de diretório entre `--synthetic-smoke` e coleta real sem `bind_manifest`/`source_hashes`. Em `consult_norms.py`, o fallback com itens foi testado apenas com perguntas válidas, sem testar pergunta totalmente fora de domínio acompanhada de item padronizado.
+   - *Regra permanente:* todo runner experimental deve herdar o mesmo padrão de manifesto (`bind_manifest` + `source_hashes` + chave de modo/digest nos checkpoints) e cálculo conservador de latência (`math.ceil`) já adotados em `ragas_runner.py` e `suite_seguranca.py`, acompanhado de testes negativos explícitos para mistura de modos, outliers e consultas fora de escopo com itens presentes.

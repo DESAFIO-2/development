@@ -57,8 +57,8 @@ _TERMOS_NAO_PESSOA: frozenset[str] = frozenset(
 class PIIMasker:
     """Aplica desidentificação determinística preservando fármacos e localidades."""
 
-    _CPF_PATTERN = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
-    _CNS_PATTERN = re.compile(r"\b[12789]\d{2}[\s.]?\d{4}[\s.]?\d{4}[\s.]?\d{4}\b")
+    _CPF_PATTERN = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{3}\s\d{3}\s\d{3}\s\d{2}\b")
+    _CNS_PATTERN = re.compile(r"\b[12789]\d{2}[\s.-]?\d{4}[\s.-]?\d{4}[\s.-]?\d{4}\b")
     _RG_PATTERN = re.compile(r"(?i)\bRG[:\s#-]*\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dX])?\b")
     _CRM_PATTERN = re.compile(r"(?i)\bCRM(?:[-/\s]*[A-Z]{2})?[:\s#-]*\d{4,7}\b")
     _CID10_PATTERN = re.compile(r"(?i)\bCID(?:-?10)?[:\s#-]*[A-TV-Z]\d{2}(?:\.\d{1,2})?\b")
@@ -69,7 +69,9 @@ class PIIMasker:
         r"|rua|avenida|av\.?)\s+[A-Za-zÀ-Ú0-9][^\n,;]{2,45})"
     )
     _PHONE_PATTERN = re.compile(
-        r"(?<!\w)(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b"
+        r"(?i:\b(?:fone|tel(?:efone)?|cel(?:ular)?|zap|whatsapp)[:\s]*)"
+        r"(?:\+?55\s?)?(?:\(?\d{2}\)?[.\s]?)?(?:9\s?\d{4}|\d{4})[-.\s]?\d{4}\b"
+        r"|(?<!\w)(?:\+?55\s?)?(?:\(?\d{2}\)?[.\s]?)?(?:9\s?\d{4}|\d{4})[-.\s]?\d{4}\b"
     )
     _EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     _PATIENT_NAME_PATTERN = re.compile(
@@ -77,21 +79,25 @@ class PIIMasker:
         r"([A-ZÀ-Úa-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú]+){1,4})"
     )
     _FREE_NAME_PATTERN = re.compile(
-        r"\b(?P<prefixo>(?i:meu nome [eé]|me chamo|chamo-me|para [oa]|dona|sr\.?|sra\.?)\s+)"
-        r"(?P<nome>[A-ZÀ-Ú][a-zà-ú]{1,20}"
+        r"\b(?P<prefixo>(?i:meu nome [eé]|me chamo|chamo-me)\s+)"
+        r"(?P<nome>[A-Za-zÀ-Úà-ú]{2,21}"
+        r"(?:\s+(?:da|de|do|dos|das|[A-Za-zÀ-Úà-ú]{2,21})){1,3})\b"
+        r"|\b(?P<prefixo_cap>(?i:para [oa]|dona|sr\.?|sra\.?)\s+)"
+        r"(?P<nome_cap>[A-ZÀ-Ú][a-zà-ú]{1,20}"
         r"(?:\s+(?:da|de|do|dos|das|[A-ZÀ-Ú][a-zà-ú]{1,20})){1,3})\b"
     )
 
     def _substituir_nome_livre(self, match: re.Match[str], cont: list[int]) -> str:
-        nome = match.group("nome")
+        prefixo_bruto = match.group("prefixo") or match.group("prefixo_cap") or ""
+        nome = match.group("nome") or match.group("nome_cap") or ""
         nome_ascii = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
         # Apenas a preposição ambígua recebe exceções de serviços. Identificação
         # explícita ("me chamo", "paciente:") continua sensível mesmo com esse nome.
-        prefixo = match.group("prefixo").strip().lower()
+        prefixo = prefixo_bruto.strip().lower()
         if prefixo in {"para o", "para a"} and nome_ascii in _TERMOS_NAO_PESSOA:
             return match.group(0)
         cont[0] += 1
-        return f"{match.group('prefixo')}[PACIENTE_DESIDENTIFICADO_LGPD]"
+        return f"{prefixo_bruto}[PACIENTE_DESIDENTIFICADO_LGPD]"
 
     def mascarar(self, texto: str) -> PIIMaskingDTO:
         """Sanitiza PII no texto informado."""

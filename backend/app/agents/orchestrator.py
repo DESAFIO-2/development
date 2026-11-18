@@ -93,15 +93,18 @@ class LangGraphOrchestrator:
         start = time.perf_counter()
         with trace_operation("agent.triagem"):
             blocked = inspect_request(state["request"], self.guardrail)
+            if blocked:
+                return AgentState(
+                    blocked=True,
+                    card=blocked,
+                    agent_trace=_trace("triagem", start),
+                )
             sanitized = sanitize_request(state["request"], self.guardrail)
-            result = AgentState(
+            return AgentState(
                 request=AgentRequest.model_validate(sanitized.model_dump()),
-                blocked=blocked is not None,
+                blocked=False,
                 agent_trace=_trace("triagem", start),
             )
-            if blocked:
-                result["card"] = blocked
-            return result
 
     def _audit(self, state: AgentState) -> AgentState:
         start = time.perf_counter()
@@ -124,15 +127,16 @@ class LangGraphOrchestrator:
         with trace_operation("agent.sintetizador_cidadao"):
             if state["blocked"]:
                 card = state["card"]
+                updates: dict[str, str] = {}
                 if not validar_saida(card.resumo_acolhedor).aprovada:
-                    card = card.model_copy(
-                        update={
-                            "resumo_acolhedor": (
-                                "Não é possível orientar sobre essa solicitação. "
-                                "Procure atendimento de saúde."
-                            )
-                        }
+                    updates["resumo_acolhedor"] = (
+                        "Não é possível orientar sobre essa solicitação. "
+                        "Procure atendimento de saúde."
                     )
+                if not validar_saida(card.regiao_administrativa).aprovada:
+                    updates["regiao_administrativa"] = "Distrito Federal"
+                if updates:
+                    card = card.model_copy(update=updates)
                 response = AgentResponse(
                     card=card,
                     primary_route="BLOQUEADO",
