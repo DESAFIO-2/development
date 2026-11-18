@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Ambiente isolado de avaliação (RAGAS + juiz local). Fora do runtime da API."
 requires-python = ">=3.12"
 dependencies = [
-    "ragas==0.4.3",
+    "ragas==0.4.4",
     "openai",
     # ragas 0.4.3 importa langchain_community.chat_models.vertexai, ausente nas
     # versões atuais do langchain 1.x: sem estes limites `import ragas` falha.
