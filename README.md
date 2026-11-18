@@ -54,7 +54,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB tabular, BM25 e TF-IDF com RRF (sem ChromaDB em runtime). |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
-| **Multiagentes Especializados** | Semana 4 | ⏳ Planejado | Orquestração LangGraph / CrewAI sobre Casos de Uso |
+| **Multiagentes Especializados** | Semana 4 | Implementados na branch; avaliação real pendente | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
 ---
@@ -87,14 +87,15 @@ development/
 │   │   ├── main.py              # Entrypoint da API FastAPI + lifespan
 │   │   ├── container.py         # Composição de serviços da API
 │   │   ├── core/                # Configurações, logs JSON e telemetria OpenTelemetry
-│   │   ├── api/                 # Rotas HTTP (/health, /api/v1/prescriptions/audit, /autocomplete)
+│   │   ├── api/                 # Rotas HTTP (/health, /api/v1/prescriptions/audit, /api/v1/agents/orchestrate, /autocomplete)
+│   │   ├── agents/              # Orquestração LangGraph stateless e CLI demo-agents (Semana 4)
 │   │   ├── domain/              # Modelos e regras de negócio puras (Prescription, Guidance, Medication)
-│   │   ├── application/         # Casos de uso (AuditPrescription) e portas abstratas (GuardrailPort, GeneratorPort, etc.)
+│   │   ├── application/         # Casos de uso (triagem, auditoria, consulta normativa, síntese) e portas abstratas
 │   │   ├── infrastructure/      # Adaptadores concretos (repositórios JSON e clientes REST LLM)
 │   │   ├── ingestion/           # Pipelines de consolidação de corpus e normalização DCB
 │   │   ├── retrieval/           # Hybrid Retriever: Busca Tabular (DCB) + Lexical (BM25 + TF-IDF RRF)
 │   │   ├── guardrails/          # Mascaramento PII (LGPD) e bloqueio clínico (Preservação do Ato Médico)
-│   │   └── seguranca/           # Esteira anti-injection, portão de arquivos e validação de saída
+│   │   └── seguranca/           # Esteira anti-injection, validação de contexto público, PDF/áudio e saída
 │   ├── tests/                   # Testes automatizados (unitários, integração e segurança)
 │   ├── Dockerfile               # Containerização com usuário não-root e healthcheck
 │   ├── pyproject.toml           # Dependências gerenciadas via uv
@@ -173,6 +174,7 @@ make semana3-finalize  # Consolidação offline após auditoria factual humana
 - `GET /health` — Verificação de prontidão do sistema e telemetria básica.
 - `GET /api/v1/medications/autocomplete?q=losartana` — Autocomplete assistido de fármacos da RENAME com princípios ativos DCB.
 - `POST /api/v1/prescriptions/audit` — Auditoria normativa de receitas médicas, mascaramento LGPD, roteiro de gratuidade e preservação do Ato Médico.
+- `POST /api/v1/agents/orchestrate` — Orquestração multiagente LangGraph stateless (`triagem`, `auditor_farmaceutico`, `consultor_normativo`, `sintetizador_cidadao`) com evidências por ocorrência e citações determinísticas.
 
 ---
 

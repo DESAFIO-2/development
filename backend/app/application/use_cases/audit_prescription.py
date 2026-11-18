@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from app.application.evidence import literal_hit
 from app.application.ports import (
     AuditPrescriptionUseCasePort,
+    AuditResult,
+    EvidenceRepositoryPort,
     GuardrailPort,
     MedicationRepositoryPort,
+    RetrievalHitDTO,
     RetrieverPort,
 )
+from app.application.use_cases.triage import inspect_request
 from app.core.telemetry import trace_operation
 from app.domain.guidance import CitizenGuidanceCard, ItemRoteiroCidadao
 from app.domain.medication import CoverageRoute
@@ -33,53 +38,31 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         retriever: RetrieverPort,
         guardrail: GuardrailPort | None = None,
         tabular_matcher: TabularDCBMatcher | None = None,
+        evidence_repo: EvidenceRepositoryPort | None = None,
     ) -> None:
+        self.evidence_repo = evidence_repo
         self.medication_repo = medication_repo
         self.retriever = retriever
         self.guardrail = guardrail or _default_guardrail()
         self.tabular_matcher = tabular_matcher or TabularDCBMatcher(medication_repo.listar_todos())
 
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
-        # 1. Guardrail Clínico, Anti-Injeção e Desidentificação LGPD
-        campos = [
-            value
-            for item in request.itens
-            for value in (
-                item.nome_digitado,
-                item.principio_ativo_dcb,
-                item.concentracao,
-                item.forma_farmaceutica,
-                item.posologia,
-                item.quantidade_prescrita,
-            )
-            if value
-        ] + [
-            request.pergunta_adicional or "",
-            request.regiao_administrativa,
-            request.tipo_prescritor,
-        ]
+        return self.executar_com_evidencias(request).card
 
+    def executar_com_evidencias(self, request: PrescriptionAuditRequest) -> AuditResult:
+        evidences: list[RetrievalHitDTO] = []
+        card = self._executar(request, evidences)
+        return AuditResult(card, tuple(evidences))
+
+    def _executar(
+        self, request: PrescriptionAuditRequest, evidences: list[RetrievalHitDTO]
+    ) -> CitizenGuidanceCard:
+        blocked = inspect_request(request, self.guardrail)
+        if blocked:
+            return blocked
         regiao = self.guardrail.desidentificar_dados_pessoais(
             request.regiao_administrativa
         ).texto_sanitizado
-        with trace_operation("guardrail"):
-            bloqueios = [
-                check
-                for campo in campos
-                if campo
-                if (check := self.guardrail.verificar_ato_medico(campo)).bloqueado
-            ]
-        if bloqueios:
-            check_clinico = next(
-                (check for check in bloqueios if check.alerta_emergencia), bloqueios[0]
-            )
-            return CitizenGuidanceCard(
-                sucesso=False,
-                regiao_administrativa=regiao,
-                itens_auditados=[],
-                resumo_acolhedor=check_clinico.mensagem_acolhedora,
-                solicitou_automedicacao=check_clinico.motivo != "PROMPT_INJECTION",
-            )
 
         hoje = date.today()
         data_base = request.data_emissao or hoje
@@ -94,31 +77,39 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             forma = self.guardrail.desidentificar_dados_pessoais(
                 item.forma_farmaceutica or ""
             ).texto_sanitizado
-            associacao_invalida = False
-            try:
-                doses = self.tabular_matcher.doses_no_texto(nome)
-            except ValueError:
-                doses = set()
-                associacao_invalida = True
-            dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
-            consulta = dcb or nome
-            # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
-            dose_ambigua = (
-                associacao_invalida
-                or self.tabular_matcher.tem_numero_nao_interpretado(nome)
-                or len(doses) > 1
-                or not self.tabular_matcher.doses_compativeis(
-                    consulta, doses, item.concentracao or ""
-                )
-            )
             with trace_operation("retrieval"):
-                matches = (
-                    self.tabular_matcher.casar(
-                        consulta, concentracao=dose, forma=forma, deduplicar=False
+                documentados = self.tabular_matcher.rotulo_documental(nome)
+                if documentados:
+                    dose = item.concentracao or ""
+                    matches = self.tabular_matcher.filtrar_rotulo(
+                        documentados, dcb=dcb, dose=dose, forma=forma
                     )
-                    if not dose_ambigua
-                    else []
-                )
+                    dose_ambigua = not matches
+                else:
+                    associacao_invalida = False
+                    try:
+                        doses = self.tabular_matcher.doses_no_texto(nome)
+                    except ValueError:
+                        doses = set()
+                        associacao_invalida = True
+                    dose = item.concentracao or (next(iter(doses)) if len(doses) == 1 else "")
+                    consulta = dcb or nome
+                    # Nunca retirar o filtro quando o texto contém concentrações ambíguas.
+                    dose_ambigua = (
+                        associacao_invalida
+                        or self.tabular_matcher.tem_numero_nao_interpretado(nome)
+                        or len(doses) > 1
+                        or not self.tabular_matcher.doses_compativeis(
+                            consulta, doses, item.concentracao or ""
+                        )
+                    )
+                    matches = (
+                        self.tabular_matcher.casar(
+                            consulta, concentracao=dose, forma=forma, deduplicar=False
+                        )
+                        if not dose_ambigua
+                        else []
+                    )
             if dcb:
                 dcb_norm = normalizar_texto_pt(dcb)
                 matches = [
@@ -129,6 +120,17 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
             if matches:
                 _, med_canonico = matches[0]
+                item_hits: list[RetrievalHitDTO] = []
+                if self.evidence_repo:
+                    for evidence in self.evidence_repo.buscar_por_occurrence_ids(
+                        med_canonico.occurrence_ids
+                    ):
+                        item_hits.append(
+                            literal_hit(
+                                evidence, med_canonico.dispensation_route, med_canonico.dcb_name
+                            )
+                        )
+                evidences.extend(item_hits)
                 route_str = med_canonico.dispensation_route
 
                 if route_str == "FARMACIA_POPULAR":
@@ -190,6 +192,12 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
                 citacao = f"{med_canonico.source_id} (p. {med_canonico.source_page})"
 
+                if item_hits:
+                    citacao = " ".join(
+                        f"[Fonte: {hit.chunk_id} | {hit.document_title}, p. {hit.page_number}]"
+                        for hit in item_hits
+                    )
+
                 itens_roteiro.append(
                     ItemRoteiroCidadao(
                         medicamento_ou_exame=nome,
@@ -222,6 +230,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                     "UBS_ATENCAO_PRIMARIA",
                 }:
                     hit = hits[0]
+                    evidences.append(hit)
                     cat = hit.route_category
                     if cat == "SISREG_EXAME_CONSULTA":
                         via = CoverageRoute.SISREG_EXAME_CONSULTA
@@ -285,7 +294,12 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                             data_limite_validade=dt_limite,
                             dias_restantes=d_restantes,
                             alerta_vencimento_proximo=d_restantes <= 15,
-                            citacao_normativa=f"{hit.document_title} (Pág. {hit.page_number})",
+                            citacao_normativa=(
+                                f"[Fonte: {hit.chunk_id} | {hit.document_title}, "
+                                f"p. {hit.page_number}]"
+                                if self.evidence_repo
+                                else f"{hit.document_title} (Pág. {hit.page_number})"
+                            ),
                         )
                     )
                 else:
@@ -319,6 +333,8 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
         partes: list[str] = [
             f"Auditamos {len(itens_roteiro)} item(ns) da sua receita para a região de {regiao}."
+            if itens_roteiro
+            else f"Consultamos as orientações administrativas para {regiao}."
         ]
         if total_pfpb > 0:
             partes.append(
@@ -333,6 +349,16 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 "e exigem abertura de processo com o laudo LME."
             )
 
+        total_sisreg = sum(
+            it.via_retirada == CoverageRoute.SISREG_EXAME_CONSULTA for it in itens_roteiro
+        )
+        if total_sisreg:
+            partes.append(
+                f"{total_sisreg} exame(s)/consulta(s) seguem a regulação SISREG pela UBS."
+            )
+        total_outros = sum(it.via_retirada == CoverageRoute.NAO_PADRONIZADO for it in itens_roteiro)
+        if total_outros:
+            partes.append(f"Não confirmamos a cobertura de {total_outros} item(ns) no catálogo.")
         resumo = " ".join(partes)
 
         return CitizenGuidanceCard(

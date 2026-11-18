@@ -40,10 +40,15 @@ class LocalCanonicalMedicationRepository(MedicationRepositoryPort):
         sugestoes: list[tuple[int, CanonicalMedicationItem]] = []
         for med in self._itens:
             dcb_norm = normalizar_texto_pt(med.dcb_name)
+            label_norm = normalizar_texto_pt(
+                f"{med.dcb_name} {med.concentration} {med.pharmaceutical_form}"
+            )
             if dcb_norm.startswith(norm):
                 sugestoes.append((0, med))
             elif norm in dcb_norm:
                 sugestoes.append((1, med))
+            elif norm in label_norm:
+                sugestoes.append((2, med))
 
         sugestoes.sort(key=lambda x: (x[0], x[1].dcb_name))
         return [item[1] for item in sugestoes[:limite]]

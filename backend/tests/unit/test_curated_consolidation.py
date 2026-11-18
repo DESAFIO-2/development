@@ -302,7 +302,9 @@ def test_evidencias_rejeitam_duplicatas_e_vinculos_ausentes(tmp_path: Path) -> N
     assert repo.listar_todos()[0].source_url.startswith("https://")
     with pytest.raises(ValueError, match="sem evidência"):
         repo.buscar_por_occurrence_ids([repo.listar_todos()[0].occurrence_id, "inexistente"])
-    raw = json.loads((RAIZ_REPO / "data/processed/evidence_chunks_v2.json").read_text())
+    raw = json.loads(
+        (RAIZ_REPO / "data/processed/evidence_chunks_v2.json").read_text(encoding="utf-8")
+    )
     path = tmp_path / "evidence.json"
     path.write_text(json.dumps([raw[0], raw[0]]))
     with pytest.raises(ValueError, match="duplicado"):
@@ -310,11 +312,13 @@ def test_evidencias_rejeitam_duplicatas_e_vinculos_ausentes(tmp_path: Path) -> N
 
 
 def test_reconciliacao_preserva_ocorrencias_e_nao_inventa_identidade() -> None:
-    raw = json.loads((RAIZ_REPO / "data/processed/medicamentos_sus_canonical.json").read_text())
+    raw = json.loads(
+        (RAIZ_REPO / "data/processed/medicamentos_sus_canonical.json").read_text(encoding="utf-8")
+    )
     occurrences = [
         json.loads(line)
         for line in (RAIZ_REPO / "data/staging/curated_occurrences_v9.jsonl")
-        .read_text()
+        .read_text(encoding="utf-8")
         .splitlines()
     ]
     expected = {

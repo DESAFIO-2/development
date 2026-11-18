@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 
+from app.application.catalog_labels import label_key
 from app.application.ports import ClinicalCheckDTO
 from app.seguranca.esteira import Canal, inspecionar_entrada
 
@@ -50,6 +52,9 @@ _FAMILIAR_TERCEIRO = (
 
 class ClinicalGuardrail:
     """Validador composicional de segurança clínica e ética médica."""
+
+    def __init__(self, documentary_labels: Iterable[str] = ()) -> None:
+        self._documentary_labels = frozenset(label_key(label) for label in documentary_labels)
 
     # Remover apenas o gatilho ambíguo, nunca seu objeto ou verbos clínicos vizinhos.
     # Validade de receita e preparo de exame não precisam de exceção às regras clínicas.
@@ -306,7 +311,12 @@ class ClinicalGuardrail:
                 mensagem_acolhedora=self._MSG_EMERGENCIA,
             )
 
-        clausulas = self._subclausulas_clinicas(norm)
+        # Um rótulo integral do catálogo não é pedido de troca de tratamento.
+        # A exceção não cobre prefixos/sufixos e nunca precede emergência/injeção.
+        documentary = (
+            not check_injecao.bloqueado and label_key(pergunta) in self._documentary_labels
+        )
+        clausulas = [] if documentary else self._subclausulas_clinicas(norm)
 
         todas_as_regras = (
             ("PRESCRICAO", self._PATTERNS_PRESCRICAO),

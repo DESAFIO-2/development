@@ -45,6 +45,9 @@ help:
 	@echo "  make seguranca-run-v2      - Suíte v2 (injeção indireta) com o modelo local (REGRA_CLINICA=...)"
 	@echo "  make semana3-quatro-bracos-v3 - Tabela dos 4 braços da rodada v3"
 	@echo "  make guardrail-holdout     - Camada 1, camada 2 (Llama Guard 3) e as duas no holdout"
+	@echo "  make demo-agents           - Executa os 5 cenários da orquestração Semana 4 via API"
+	@echo "  make semana4-pilot         - Piloto MacBook/Ollama (2 cenários, Qwen2.5 7B vs 14B)"
+	@echo "  make semana4-compare       - Comparativo completo Semana 4 no Ollama local"
 	@echo "  make docker-build  - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
@@ -153,3 +156,16 @@ docker-build:
 
 clean:
 	uv run --project backend python -c "import pathlib, shutil; root = pathlib.Path('.'); [shutil.rmtree(p, ignore_errors=True) for name in ('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache') for p in root.rglob(name) if '.venv' not in p.parts]; [p.unlink(missing_ok=True) for p in root.rglob('*.pyc') if '.venv' not in p.parts]"
+
+S4_PILOT_DIR ?= evals/reports/semana4_piloto
+S4_RUN_DIR ?= evals/reports/semana4_comparativo
+
+.PHONY: demo-agents semana4-pilot semana4-compare
+demo-agents:
+	cd backend && uv run python -m app.agents.demo
+
+semana4-pilot:
+	uv run --project backend python evals/runners/semana4_comparativo.py --pilot --run-dir "$(S4_PILOT_DIR)"
+
+semana4-compare:
+	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)"

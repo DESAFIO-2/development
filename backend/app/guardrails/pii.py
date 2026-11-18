@@ -38,6 +38,18 @@ _TERMOS_NAO_PESSOA: frozenset[str] = frozenset(
         "sol nascente",
         "aguas claras",
         "sus cidadao",
+        "endoscopia digestiva alta",
+        "ecocardiograma transtoracico",
+        "ressonancia magnetica",
+        "centro especializado",
+        "centro especializado em doencas",
+        "policlinica",
+        "policlinica de planaltina",
+        "policlinica de taguatinga",
+        "policlinica do gama",
+        "policlinica de ceilandia",
+        "hospital universitario de brasilia",
+        "farmacia escola",
     }
 )
 
@@ -56,7 +68,9 @@ class PIIMasker:
         r"|(?:quadra|qnm|qnn|qno|qnj|qnl|qs|csb|cnb|sqs|sqn|shis|shin|cln|cls"
         r"|rua|avenida|av\.?)\s+[A-Za-zÀ-Ú0-9][^\n,;]{2,45})"
     )
-    _PHONE_PATTERN = re.compile(r"(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b")
+    _PHONE_PATTERN = re.compile(
+        r"(?<!\w)(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b"
+    )
     _EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     _PATIENT_NAME_PATTERN = re.compile(
         r"(?i)\b(paciente|nome\s+do\s+paciente|titular)\s*:\s*"
@@ -71,7 +85,10 @@ class PIIMasker:
     def _substituir_nome_livre(self, match: re.Match[str], cont: list[int]) -> str:
         nome = match.group("nome")
         nome_ascii = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
-        if nome_ascii in _TERMOS_NAO_PESSOA:
+        # Apenas a preposição ambígua recebe exceções de serviços. Identificação
+        # explícita ("me chamo", "paciente:") continua sensível mesmo com esse nome.
+        prefixo = match.group("prefixo").strip().lower()
+        if prefixo in {"para o", "para a"} and nome_ascii in _TERMOS_NAO_PESSOA:
             return match.group(0)
         cont[0] += 1
         return f"{match.group('prefixo')}[PACIENTE_DESIDENTIFICADO_LGPD]"

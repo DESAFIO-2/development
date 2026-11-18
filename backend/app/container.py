@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.application.ports import EvidenceRepositoryPort, GuardrailPort
+from app.agents.orchestrator import LangGraphOrchestrator
+from app.application.agents import OrchestratorPort
+from app.application.catalog_labels import medication_labels
+from app.application.evidence import literal_hit
+from app.application.ports import EvidenceRepositoryPort, GuardrailPort, RetrievalHitDTO
 from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
+from app.core.config import settings
 from app.guardrails.adapter import LocalGuardrailAdapter
+from app.guardrails.clinical import ClinicalGuardrail
+from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS, build_generator
 from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
 )
@@ -18,6 +25,7 @@ from app.infrastructure.persistence.repositories.normative_chunk_repository impo
 )
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.tabular_matcher import TabularDCBMatcher
+from app.seguranca.contexto import PublicContextRegistry, build_public_context
 
 
 @dataclass(frozen=True)
@@ -29,6 +37,8 @@ class ServiceContainer:
     hybrid_retriever: HybridRetriever
     guardrail: GuardrailPort
     audit_use_case: AuditPrescriptionUseCase
+    agents: OrchestratorPort
+    public_context: PublicContextRegistry
 
 
 _cached_services: ServiceContainer | None = None
@@ -51,12 +61,59 @@ def build_services() -> ServiceContainer:
         chunks=chunks,
         tabular_matcher=tabular_matcher,
     )
-    guardrail = LocalGuardrailAdapter()
+    guardrail = LocalGuardrailAdapter(
+        clinical=ClinicalGuardrail(
+            label for med in medications for label in (*medication_labels(med), med.concentration)
+        )
+    )
     audit_use_case = AuditPrescriptionUseCase(
         medication_repo=medication_repo,
         retriever=hybrid_retriever,
         guardrail=guardrail,
         tabular_matcher=tabular_matcher,
+    )
+    agents_auditor = AuditPrescriptionUseCase(
+        medication_repo=medication_repo,
+        retriever=hybrid_retriever,
+        guardrail=guardrail,
+        tabular_matcher=tabular_matcher,
+        evidence_repo=evidence_chunk_repo,
+    )
+    generator = None
+    if settings.agents_provider != "deterministic":
+        if not settings.agents_model.strip():
+            raise ValueError("APP_AGENTS_MODEL é obrigatório para geração")
+        generator = build_generator(
+            settings.agents_provider,
+            model_name=settings.agents_model,
+            timeout_seconds=settings.agents_timeout_seconds,
+            prompt_version=PROMPT_VERSION_AGENTS,
+        )
+    public_context = build_public_context(
+        [
+            *(literal_hit(e) for e in evidence_chunk_repo.listar_todos()),
+            *(
+                RetrievalHitDTO(
+                    chunk_id=c.chunk_id,
+                    score=0.0,
+                    source_id=c.source_id,
+                    document_title=c.document_title,
+                    section=c.section,
+                    page_number=c.page_number,
+                    route_category=c.route_category,
+                    text=c.text,
+                )
+                for c in chunks
+            ),
+        ],
+        catalog_texts=(channel for med in medications for channel in med.df_channels),
+    )
+    agents = LangGraphOrchestrator(
+        auditor=agents_auditor,
+        guardrail=guardrail,
+        retriever=hybrid_retriever,
+        generator=generator,
+        public_context=public_context,
     )
     return ServiceContainer(
         medication_repo=medication_repo,
@@ -66,6 +123,8 @@ def build_services() -> ServiceContainer:
         hybrid_retriever=hybrid_retriever,
         guardrail=guardrail,
         audit_use_case=audit_use_case,
+        agents=agents,
+        public_context=public_context,
     )
 
 

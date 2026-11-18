@@ -17,18 +17,19 @@ backend/app/
 ├── container.py             # Composição de dependências e instância única de TabularDCBMatcher
 ├── core/                    # Configurações com Pydantic Settings, logs JSON e telemetria OTel
 ├── domain/                  # Entidades e modelos puros de negócio (Prescription, Guidance, Medication)
+├── agents/                  # Grafo LangGraph (triagem, auditoria, normas, síntese) e CLI demo
 ├── application/             # Casos de uso e portas abstratas (Clean Architecture)
 │   ├── ports/               # Contratos e DTOs desacoplados (RetrieverPort, GuardrailPort, GeneratorPort, etc.)
-│   └── use_cases/           # AuditPrescriptionUseCase (orquestração do fluxo)
+│   └── use_cases/           # Triagem, auditoria de receitas, consulta normativa e síntese cidadã
 ├── infrastructure/          # Adaptadores concretos (repositórios em JSON e adaptadores REST LLM)
 │   ├── llm/                 # GeminiRESTGeneratorAdapter e OllamaRESTGeneratorAdapter
-│   └── persistence/         # Repositórios concretos do catálogo canônico e chunks normativos
+│   └── persistence/         # Repositórios concretos do catálogo canônico, evidências e chunks normativos
 ├── retrieval/               # Motor de Recuperação Híbrida (Tabular DCB + BM25Okapi + TF-IDF RRF)
 ├── guardrails/              # Preservação do Ato Médico (Lei 12.842/2013) e Mascaramento LGPD (PII)
-├── seguranca/               # Esteira anti-injection, validação de PDF/áudio e validação de saída
+├── seguranca/               # Esteira anti-injection, validação de contexto, PDF/áudio e saída
 ├── ingestion/               # Pipeline determinístico de consolidação do corpus
 └── api/                     # Camada de apresentação REST (rotas, middleware e schemas)
-    └── routes/              # /health, /api/v1/medications/autocomplete e /api/v1/prescriptions/audit
+    └── routes/              # /health, /api/v1/medications/autocomplete, /prescriptions/audit e /agents/orchestrate
 ```
 
 ---
@@ -147,3 +148,17 @@ docker build -t sus-cidadao-backend -f backend/Dockerfile .
 # Execução do container:
 docker run --rm -p 8000:8000 sus-cidadao-backend
 ```
+
+## Agentes da Semana 4
+
+Nova rota `POST /api/v1/agents/orchestrate`: quatro nós LangGraph, execução stateless,
+auditoria determinística e geração opcional via `GeneratorPort`. A rota de auditoria
+anterior permanece disponível. Sem frontend nesta entrega.
+
+Execute `uv run python -m app.agents.demo` de `backend/` (ou `make demo-agents` da raiz).
+O padrão é `APP_AGENTS_PROVIDER=deterministic`. Para Ollama, configure esse campo
+como `ollama` e `APP_AGENTS_MODEL=qwen2.5:7b`. A execução `--strict` falha sem gerador
+ou quando a geração é rejeitada; fixtures não são evidência científica.
+
+Responsabilidades, diagrama, contratos, modelos, limites, testes e operação:
+[guia dos agentes](../docs/architecture/agentes_semana4.md).
