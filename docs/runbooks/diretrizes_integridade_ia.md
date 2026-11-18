@@ -60,9 +60,10 @@ Na entrega inicial da Semana 3, um agente de IA cometeu erros conceituais e meto
 
 ### Regra 7: Transparência Arquitetural de Escopo
 - Documente com clareza o que está em **Produção Ativa** versus o que está em **Experimento Offline** ou **Roadmap**:
-  - *Produção Atual da API*: Auditoria e navegação determinística via Catálogo Canônico consolidado (1.787 registros) e Guardrails Clínicos/Anti-Injeção locais.
-  - *Experimento*: Geração textual por LLM (`GeneratorPort`) com RAG híbrido lexical.
-  - *Roadmap Adiado*: ChromaDB, estoque em tempo real InfoSaúde, app móvel React Native e orquestração multiagentes LangGraph (Semanas 4 a 6).
+  - *API determinística*: catálogo reconciliado de 1.708 apresentações, recuperação lexical e guardrails locais; sem ChromaDB em runtime.
+  - *Implementação da Semana 4 nesta branch*: rota aditiva de quatro nós LangGraph, evidência por ocorrência e geração opcional explicitamente configurada. Padrão determinístico, sem memória de sessão. Ver [ADR 0007](../adr/0007_orquestracao_semana4.md).
+  - *Avaliação pendente*: qualidade/latência da geração no grafo novo requer coleta real, RAGAS e revisão humana; testes com fakes não satisfazem esse gate.
+  - *Roadmap*: multimodalidade/mobile, sessões com retenção definida e estoque com política de frescor. Bases locais de estoque não equivalem a consulta em tempo real.
 
 ---
 

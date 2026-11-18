@@ -1,4 +1,9 @@
-"""Pipeline determinístico de extração integral da RENAME 2024 (2ª Edição).
+"""LEGADO HISTÓRICO: não usado pela API nem pelo corpus reconciliado v9.
+
+Preservado para rastrear a entrega da Semana 2; não executar para atualizar a base
+ativa. O gerador vigente é consolidate_curated_corpus.py (ADR 0006).
+
+Pipeline determinístico de extração integral da RENAME 2024 (2ª Edição).
 
 Extrai todas as 1.150 apresentações farmacêuticas a partir das 237 páginas de tabelas
 do PDF oficial do Ministério da Saúde (`data/raw/F01-rename/rename-2024-2ed.pdf`).

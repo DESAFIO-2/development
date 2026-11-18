@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.application.catalog_labels import label_key, medication_labels
 from app.application.ports import CanonicalMedicationItem
 from app.retrieval.text_normalizer import normalizar_texto_pt
 
@@ -177,6 +178,29 @@ class TabularDCBMatcher:
 
     def __init__(self, medications: list[CanonicalMedicationItem]) -> None:
         self.medications = medications
+        self._labels: dict[str, list[CanonicalMedicationItem]] = {}
+        for med in medications:
+            for label in medication_labels(med):
+                self._labels.setdefault(label_key(label), []).append(med)
+
+    def rotulo_documental(self, texto: str) -> list[CanonicalMedicationItem]:
+        """Reconhece inclusive números da DCB e descrições compostas literais."""
+        return self._labels.get(label_key(texto), [])
+
+    def filtrar_rotulo(
+        self, candidatos: list[CanonicalMedicationItem], *, dcb: str, dose: str, forma: str
+    ) -> list[tuple[float, CanonicalMedicationItem]]:
+        return [
+            (1.0, med)
+            for med in candidatos
+            if (not dcb or label_key(dcb) == label_key(med.dcb_name))
+            and self._doses_equivalentes(
+                normalizar_texto_pt(med.dcb_name),
+                self.normalizar_concentracao(dose),
+                self.normalizar_concentracao(med.concentration),
+            )
+            and (not forma or label_key(forma) == label_key(med.pharmaceutical_form))
+        ]
 
     def casar(
         self, consulta: str, *, concentracao: str = "", forma: str = "", deduplicar: bool = True

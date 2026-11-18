@@ -268,4 +268,11 @@ __all__ = [
     "GeneratorPort",
     "EvidenceChunkDTO",
     "EvidenceRepositoryPort",
+    "AuditResult",
 ]
+
+
+@dataclass(frozen=True)
+class AuditResult:
+    card: CitizenGuidanceCard
+    evidences: tuple[RetrievalHitDTO, ...]

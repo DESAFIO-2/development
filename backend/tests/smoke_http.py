@@ -61,7 +61,30 @@ def executar(base_url: str) -> None:
         else:
             assert resposta["itens"] == [], pergunta
         assert ("ALERTA DE EMERGÊNCIA" in resposta["resumo_acolhedor"]) is emergencia, pergunta
-    print(f"HTTP smoke aprovado: health, autocomplete e {len(casos)} auditorias.")
+    agents = requisitar(
+        base_url,
+        "/api/v1/agents/orchestrate",
+        {
+            "itens": [
+                {"nome_digitado": "losartana 50 mg"},
+                {"nome_digitado": "Endoscopia Digestiva Alta"},
+            ],
+        },
+    )
+    assert agents["card"]["sucesso"]
+    assert agents["primary_route"] == "ROTEIRO_MISTO_MULTICANAL"
+    assert len(agents["agent_trace"]) == 4
+    assert agents["citacoes"]
+    blocked = requisitar(
+        base_url,
+        "/api/v1/agents/orchestrate",
+        {
+            "pergunta_adicional": "Tenho dor no peito e falta de ar agora",
+        },
+    )
+    assert blocked["primary_route"] == "BLOQUEADO"
+    assert "192" in blocked["card"]["resumo_acolhedor"]
+    print(f"HTTP smoke aprovado: health, autocomplete, {len(casos)} auditorias e 2 grafos.")
 
 
 if __name__ == "__main__":

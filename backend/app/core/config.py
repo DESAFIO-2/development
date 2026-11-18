@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DATA_DIR = Path(__file__).resolve().parents[3] / "data"
@@ -23,13 +25,12 @@ class Settings(BaseSettings):
     llm_provider: str = "gemini"
     llm_model_name: str = ""
     ollama_base_url: str = "http://localhost:11434"
-    openai_api_key: str = ""
     google_api_key: str = ""
-    anthropic_api_key: str = ""
 
-    # Embeddings e Vector Store
-    embedding_model_name: str = "BAAI/bge-m3"
-    vector_store_path: Path = DATA_DIR / "vectorstore" / "chroma"
+    # Ativação explícita, independente dos experimentos da Semana 3.
+    agents_provider: Literal["deterministic", "ollama", "gemini"] = "deterministic"
+    agents_model: str = "qwen2.5:7b"
+    agents_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
 
     # Diretórios de Dados
     data_raw_dir: Path = DATA_DIR / "raw"
