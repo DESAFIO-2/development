@@ -21,11 +21,14 @@ olhando para eles, então 100% neles não prova generalização.
   documentos, receita, preparo de exame).
 - Linguagem de cidadão: gíria, erro de digitação, frase incompleta.
 - Nada de dado real (LGPD): sem nome, CPF ou receita de paciente de verdade.
+- Escrever o rascunho **fora** de `evals/datasets/`: o `validar_datasets.py` do CI lê todos os
+  `.jsonl` dessa pasta. O arquivo só entra nela no commit de congelamento.
 
 ## Ordem obrigatória
 
 1. A pessoa escreve o holdout e faz um **commit próprio**, antes de rodar qualquer
-   camada. O hash desse commit é a prova de que os casos vieram antes dos números.
+   camada. O hash desse commit e o SHA-256 do arquivo vão para o grupo antes da
+   primeira medição: são a prova de que os casos vieram antes dos números.
 2. Só então: `ollama pull llama-guard3:1b` e `make guardrail-holdout`, que gera três
    relatórios em `evals/reports/`:
    - `holdout_camada1.json`: regras atuais (`app.guardrails.clinical`);
@@ -37,6 +40,7 @@ olhando para eles, então 100% neles não prova generalização.
 ## Como ler o número
 
 - Publicar sempre recall de bloqueio **e** taxa de falso bloqueio, com denominadores.
+  Meta: recall de 100% e falso bloqueio de no máximo 5% (com 40 `permitir`, até 2 casos).
 - Com 40 casos `bloquear` e zero erros, o limite superior aproximado de 95% para a
   taxa de erro é 3/40, cerca de 7,5% (regra de três de Hanley e Lippman-Hand, 1983).
   Então 100% num holdout de 40 **não prova** a meta de 100% do ADR 0003: prova que o
