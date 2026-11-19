@@ -10,10 +10,10 @@
 Este documento detalha o fluxo de dados ponta a ponta do projeto **SUS Cidadão**, estruturado no padrão empresarial adotado por Big Techs e healthtechs de missão crítica. 
 
 O sistema é dividido em **4 Zonas Arquiteturais**:
-1. **Zona 1 (Governança e Ingestão de Dados Oficiais):** Pipeline offline/batch que normaliza as regras governamentais na Denominação Comum Brasileira (DCB) e alimenta o banco vetorial;
-2. **Zona 2 (Entrada do Cidadão e Gestão da Receita):** Preenchimento assistido com autocomplete no app React Native e digitalização da receita na Carteira Digital local (RF08);
-3. **Zona 3 (Núcleo de Decisão e Recuperação Híbrida):** Orquestração dos casos de uso, consulta determinística tabular e busca semântica em portarias;
-4. **Zona 4 (Entrega Cidadã e LLMOps):** Exibição do roteiro de retirada gratuita e rastreamento contínuo de latência, fidelidade factual (RAGAS) e custos.
+1. **Zona 1 (Governança e Ingestão de Dados Oficiais):** Pipeline offline que normaliza as regras governamentais na Denominação Comum Brasileira (DCB) e gera artefatos JSON versionados (`medicamentos_sus_canonical.json`, `evidence_chunks_v2.json` e `normative_chunks.json`);
+2. **Zona 2 (Entrada do Cidadão e Gestão da Receita):** Preenchimento assistido com autocomplete baseado na tabela oficial do SUS, mantendo a eventual digitalização da receita apenas no dispositivo do usuário (arquitetura alvo mobile React Native, RF08);
+3. **Zona 3 (Orquestração Multiagente e RAG Híbrido):** Grafo stateless em LangGraph com 4 agentes especializados (`triagem`, `auditor_farmaceutico`, `consultor_normativo` e `sintetizador_cidadao`), consulta determinística tabular e busca em chunks auditados/normativos;
+4. **Zona 4 (Entrega Cidadã e LLMOps):** Exibição do roteiro de retirada gratuita e observabilidade via OpenTelemetry/Jaeger, MLflow (`evals/reports/mlflow.db`) e suíte de avaliação (`evals/` + RAGAS).
 
 ---
 
@@ -24,78 +24,74 @@ flowchart TD
     %% ZONA 1: DADOS OFICIAIS & GOVERNANÇA (OFFLINE / BATCH)
     subgraph ZONA_1["ZONA 1: Fontes Oficiais e Governança de Dados (Offline)"]
         direction TB
-        F1["RENAME 2024 (Portaria GM/MS 6.324)"] --> ETL["ETL & Normalização DCB (Ingestion Engine)"]
+        F1["RENAME 2024 (Portaria GM/MS 6.324)"] --> ETL["ETL & Normalização DCB (app/ingestion)"]
         F2["Farmácia Popular (Elenco Gratuito MS)"] --> ETL
         F3["REME-DF (Relação SES-DF)"] --> ETL
-        F4["Protocolos SISREG / CPPAS (DF)"] --> ETL
-        
-        ETL --> MAN["Data Manifests (YAML: hashes, datas e versões)"]
-        ETL --> TAB["Tabela Canônica Estruturada (Parquet / SQLite)"]
-        ETL --> CHK["Chunks Normativos e Regras de Laudo LME"]
-        
-        CHK --> EMB_OFF["Modelo de Embeddings (BAAI/bge-m3)"]
-        EMB_OFF --> VEC[("Vector Store (ChromaDB)")]
+        F4["Protocolos SISREG / CPPAS e Manuais CEAF"] --> ETL
+
+        ETL --> MAN["Data Manifests (data/manifests/)"]
+        ETL --> TAB["Tabela Canônica (medicamentos_sus_canonical.json)"]
+        ETL --> EVI["Evidências Literais (evidence_chunks_v2.json)"]
+        ETL --> NRM["Chunks Normativos (normative_chunks.json)"]
     end
 
-    %% ZONA 2: ENTRADA DO CIDADÃO & GESTÃO DA RECEITA (MOBILE REACT NATIVE)
-    subgraph ZONA_2["ZONA 2: Entrada do Cidadão e Gestão da Receita (Mobile)"]
+    %% ZONA 2: ENTRADA DO CIDADÃO & GESTÃO DA RECEITA (CONTRATO ESTRUTURADO)
+    subgraph ZONA_2["ZONA 2: Entrada do Cidadão e Contrato Estruturado"]
         direction TB
-        USER(["Cidadão / Cuidador (Helena ou Lucas)"]) --> APP["App Mobile (React Native / Expo)"]
-        
-        APP -->|"1. Remédios Prescritos"| AUTOCOMPLETE["Busca Assistida / Autocomplete (DCB e Nomes Comerciais)"]
-        APP -->|"2. Data de Emissão"| DATE_PICKER["Seleção da Data da Receita (Base para Contagem de Validade)"]
-        APP -->|"3. Região Administrativa"| LOC_INPUT["Seleção de RA (Texto ou Áudio via Whisper)"]
-        APP -->|"4. Foto da Receita Física"| LOCAL_VAULT["Carteira Digital Local (RF08: Seguro no Celular, Sem Envio para Nuvem)"]
-        
+        USER(["Cidadão / Cuidador (Helena ou Lucas)"]) --> CLIENT["Cliente App / API (Autocomplete DCB)"]
+
+        CLIENT -->|"1. Itens Prescritos"| AUTOCOMPLETE["GET /api/v1/medications/autocomplete"]
+        CLIENT -->|"2. Data e Região"| FORM["Data da Receita + Região Administrativa (DF)"]
+        CLIENT -->|"3. Dúvida Opcional"| QUESTION["Pergunta Administrativa (CEAF / PFPB / SISREG)"]
+        CLIENT -.->|"Armazenamento Local Planejado (RF08)"| LOCAL_VAULT["Carteira Digital Local (Sem envio de foto para nuvem)"]
+
         AUTOCOMPLETE --> REQ["PrescriptionAuditRequest (JSON Estruturado)"]
-        DATE_PICKER --> REQ
-        LOC_INPUT --> REQ
+        FORM --> REQ
+        QUESTION --> REQ
     end
 
-    %% ZONA 3: NÚCLEO DE DECISÃO & RAG HÍBRIDO (BACKEND FASTAPI)
-    subgraph ZONA_3["ZONA 3: Núcleo de Aplicação e RAG Híbrido (Clean Architecture)"]
+    %% ZONA 3: NÚCLEO MULTIAGENTE & RAG HÍBRIDO (BACKEND FASTAPI + LANGGRAPH)
+    subgraph ZONA_3["ZONA 3: Núcleo Multiagente & RAG Híbrido (Clean Architecture)"]
         direction TB
-        REQ --> API["FastAPI Router: /api/v1/prescriptions/audit"]
-        API --> UC["UseCase: AuditPrescriptionUseCase"]
-        
-        UC --> GUARD_IN{"Guardrail Clínico: Pedido de diagnóstico ou troca de remédio?"}
-        GUARD_IN -->|"Sim (Bloqueio)"| BLOCK["Alerta: Preservação do Ato Médico (Retornar ao Prescritor)"]
-        
-        GUARD_IN -->|"Não (Válido)"| HYBRID["Hybrid Retriever (Orquestrador de Busca)"]
-        
-        %% Ramo Determinístico
-        HYBRID -->|"Busca Exata por DCB + Concentração"| TAB
-        TAB -->|"Match: Cobertura PFPB ou UBS"| DET_RESULT["Resultado Determinístico (CBAF / Farmácia Popular)"]
-        
-        %% Ramo Semântico
-        HYBRID -->|"Busca Vetorial: Critérios LME / SISREG"| EMB_ON["Embeddings da Consulta"]
-        EMB_ON --> VEC
-        VEC -->|"Top-K Chunks Relevantes"| RERANK["Reranker (Cross-Encoder BGE)"]
-        RERANK --> SEM_RESULT["Contexto Normativo Auditado"]
-        
-        DET_RESULT --> SYNTH["Prompt de Síntese Cidadã"]
-        SEM_RESULT --> SYNTH
-        
-        SYNTH --> LLM["LLM Synthesizer (Zero Prescrição / Ancoragem Estrita)"]
-        LLM --> GUARD_OUT{"Guardrail de Saída: Citação de portaria e sem alucinação?"}
-        GUARD_OUT -->|"Aprovado"| GUIDANCE["CitizenGuidanceCard (Pydantic Schema)"]
+        REQ --> API["FastAPI: POST /api/v1/agents/orchestrate"]
+        API --> ORCH["Orquestrador LangGraph Stateless (app/agents/orchestrator.py)"]
+
+        ORCH --> TRI["1. Agente triagem (triage.py)<br/>PII Masking LGPD + Guardrail Clínico"]
+        TRI -->|"BLOQUEADO (Emergência / Ato Médico / Injeção)"| SYN
+        TRI -->|"APROVADO (Fan-out paralelo)"| AUD["2. Agente auditor_farmaceutico<br/>(AuditPrescriptionUseCase)"]
+        TRI -->|"APROVADO (Fan-out paralelo)"| CON["3. Agente consultor_normativo<br/>(consult_norms.py)"]
+
+        %% Ramo Auditor
+        AUD -->|"Match exato DCB"| TAB
+        AUD -->|"Evidências literais"| EVI
+
+        %% Ramo Consultor Normativo
+        CON -->|"HybridRetriever"| NRM
+
+        %% Barreira de Junção e Síntese
+        AUD -->|"Barreira (card + audit_hits)"| SYN["4. Agente sintetizador_cidadao<br/>(synthesize_guidance.py)"]
+        CON -->|"Barreira (normative_hits)"| SYN
+
+        SYN --> REG_CHECK["PublicContextRegistry<br/>(Identidade + Conteúdo Literal)"]
+        REG_CHECK -->|"Opcional (Ollama / Gemini)"| LLM["GeneratorPort (Prompt semana4-v2)"]
+        LLM --> GUARD_OUT{"validar_saida + Citações Exatas"}
+        REG_CHECK -->|"Modo determinístico ou sem LLM"| GUIDANCE
+        GUARD_OUT -->|"Aprovado -> resposta_adicional"| GUIDANCE["AgentResponse (card determinístico + citações)"]
     end
 
     %% ZONA 4: ENTREGA & OBSERVABILIDADE (MONITORAMENTO)
     subgraph ZONA_4["ZONA 4: Experiência Cidadã e LLMOps"]
         direction TB
-        GUIDANCE --> RESP_APP["App Mobile: Roteiro Visual Descomplicado"]
-        
-        RESP_APP --> CARD1["Onde Ir: Farmácia Popular, UBS ou Alto Custo"]
-        RESP_APP --> CARD2["O que Levar: Checklist Documental (RG, CPF, LME)"]
-        RESP_APP --> CARD3["Gestão da Receita: Alertas a 15 e 7 dias do vencimento"]
-        
-        LOCAL_VAULT -.->|"Apresentação física na farmácia"| CARD3
-        BLOCK --> RESP_APP
-        
+        GUIDANCE --> RESP_APP["Roteiro Cidadão Estruturado"]
+
+        RESP_APP --> CARD1["Onde Ir: Farmácia Popular, UBS, Alto Custo ou SISREG"]
+        RESP_APP --> CARD2["O que Levar: Checklist Documental (RG, CPF, LME, ECG)"]
+        RESP_APP --> CARD3["Validade da Receita e Citações Oficiais"]
+
         %% Telemetria
-        UC -.->|"Traces & Latência"| OTEL["OpenTelemetry / Langfuse"]
-        GUIDANCE -.->|"Avaliação Offline"| RAGAS["Framework RAGAS (Faithfulness >= 0.92)"]
+        ORCH -.->|"Spans sem entrada bruta"| OTEL["OpenTelemetry / Jaeger"]
+        GUIDANCE -.->|"Métricas & Comparativos"| MLF["MLflow (evals/reports/mlflow.db)"]
+        MLF -.->|"Avaliação Científica"| RAGAS["Suíte evals/ & RAGAS (Faithfulness >= 0.92)"]
     end
 ```
 
@@ -104,28 +100,26 @@ flowchart TD
 ## 3. Detalhamento das Etapas do Fluxo
 
 ### Passo 1: Ingestão de Dados e Linhagem (Zona 1)
-- **Origem dos Dados:** RENAME 2024 (Portaria GM/MS nº 6.324/2024), Elenco da Farmácia Popular (atualizado em 2026), REME-DF (SES-DF) e Protocolos SISREG/CPPAS.
-- **Data Lineage:** Cada documento gera um manifesto YAML em `data/manifests/` contendo data de publicação, hash do arquivo e órgão emissor.
-- **Bifurcação de Armazenamento:**
-  - *Tabela Canônica (Parquet/SQLite):* Armazena `dcb_principio_ativo`, `concentracao`, `forma_farmaceutica` e flags de gratuidade (PFPB e REME-DF).
-  - *Vector Store (ChromaDB):* Armazena chunks semânticos com regras de laudos LME e critérios de agendamento de exames.
+- **Origem dos Dados:** RENAME 2024 (Portaria GM/MS nº 6.324/2024), Elenco da Farmácia Popular, REME-DF (SES-DF), Manuais do CEAF e Protocolos SISREG/CPPASS.
+- **Data Lineage:** Cada fonte registra metadados e hashes em manifestos dentro de `data/manifests/`.
+- **Armazenamento Estruturado em Runtime:**
+  - *Tabela Canônica JSON (`medicamentos_sus_canonical.json`):* armazena princípios ativos normalizados pela DCB, concentração, forma farmacêutica, componente e cobertura (PFPB, REME-DF, CEAF, SISREG).
+  - *Chunks Auditados e Normativos (`evidence_chunks_v2.json` e `normative_chunks.json`):* armazenam trechos literais com identificador do chunk, fonte oficial e página para busca via `HybridRetriever` e ancoragem estrita de citações.
 
 ### Passo 2: Entrada do Cidadão e Gestão da Receita (Zona 2)
-- **Decisão Arquitetural de Segurança e Responsabilidade:** Para mitigar 100% dos riscos de erro de leitura em caligrafia médica ilegível (evitando responsabilidade civil por troca de medicamentos), a entrada dos itens prescritos é realizada **pelo próprio cidadão com apoio de autocomplete** baseado na tabela oficial do SUS.
-- **Foto da Receita (Carteira Digital Local - RF08):** A foto da receita física permanece armazenada localmente no dispositivo móvel do usuário (armazenamento seguro via React Native). Ela serve exclusivamente como carteira digital (comprovante visual para apresentação na farmácia) e para alimentar a contagem regressiva de validade (alertas preventivos a 15 e 7 dias). Nenhum arquivo de imagem precisa transitar pela rede ou servidores de IA externos, garantindo conformidade total com a LGPD (*Privacy by Design*).
-- **Voz/Áudio:** O usuário pode utilizar gravação de áudio (transcrita via Whisper) para indicar sua Região Administrativa ou tirar dúvidas de navegação.
+- **Decisão Arquitetural de Segurança e Responsabilidade:** Para mitigar riscos de erro na leitura de receitas físicas (evitando troca indevida de medicamentos), a seleção dos itens prescritos usa entrada estruturada com suporte do endpoint `/api/v1/medications/autocomplete` baseado na tabela oficial do SUS.
+- **Privacidade por Concepção (LGPD / RF08):** O sistema não trafega imagens de receita nem cria histórico de usuário no backend. O orquestrador recebe requisições 100% stateless e o agente `triagem` aplica mascaramento prévio de PII (`PIIMasker`) antes de acionar qualquer trabalhador.
 
-### Passo 3: Núcleo de Decisão e RAG Híbrido (Zona 3)
-- O backend **FastAPI** recebe o payload estruturado no endpoint `/api/v1/prescriptions/audit` e aciona o caso de uso `AuditPrescriptionUseCase`.
-- **Guardrail de Segurança Clínica:** Se a consulta contiver perguntas de automedicação ("posso dobrar a dose?", "qual remédio substitui este?"), o sistema bloqueia imediatamente e orienta o retorno ao médico.
-- **Recuperação Híbrida (Hybrid Retrieval):**
-  1. *Ramo Determinístico:* Faz match exato por princípio ativo (DCB) na tabela canônica. Se o remédio é Losartana 50mg, o sistema determina imediatamente: *Disponível 100% gratuito na Farmácia Popular (drogaria privada com CPF) e na UBS*.
-  2. *Ramo Semântico:* Para remédios que exigem processo de Alto Custo (ex.: Dapagliflozina 10mg) ou exames (Ecocardiograma), busca nos chunks vetoriais os critérios clínicos e documentos exigidos.
-- **Síntese Cidadã:** A LLM atua exclusivamente como redatora empática e acessível, traduzindo termos técnicos sem criar novas regras.
+### Passo 3: Orquestração Multiagente e RAG Híbrido (Zona 3)
+- O backend **FastAPI** expõe `POST /api/v1/agents/orchestrate` (além de preservar `POST /api/v1/prescriptions/audit` para clientes diretos da auditoria determinística).
+- **1. `triagem`:** Executa desidentificação LGPD (`PIIMasker`) e guardrail clínico/segurança (`ClinicalGuardrail` + `inspecionar_entrada`). Em casos de emergência médica, pedido de conduta clínica (Ato Médico) ou prompt injection, marca `blocked=True` e desvia imediatamente para `sintetizador_cidadao`.
+- **2. `auditor_farmaceutico` (paralelo):** Aciona `AuditPrescriptionUseCase.executar_com_evidencias(..., already_triaged=True)` para classificar cada item deterministicamente na tabela canônica e recuperar evidências literais em `evidence_chunks_v2.json`.
+- **3. `consultor_normativo` (paralelo):** Executa busca em `normative_chunks.json` via `HybridRetriever` para responder dúvidas administrativas (regionalização CEAF, procuração no Farmácia Popular, requisitos SISREG).
+- **4. `sintetizador_cidadao` (barreira única):** Recebe os dois ramos, valida todo o contexto contra `PublicContextRegistry`, preserva o `CitizenGuidanceCard` 100% determinístico e, quando há gerador LLM (`Ollama` ou `Gemini`, com `skip_input_guardrail=True` no contexto já triado), gera explicação complementar em `resposta_adicional` validada por `validar_saida` e acompanhada de citações exatas.
 
 ### Passo 4: Entrega ao Cidadão e Observabilidade (Zona 4)
-- O app exibe o **Roteiro Cidadão**:
-  - **Onde ir:** Drogaria credenciada ao Farmácia Popular ou farmácia da UBS;
-  - **O que levar:** Documento com foto, CPF, receita válida e formulário LME preenchido (se aplicável);
-  - **Validade da receita:** Contagem regressiva com notificações push locais a 15 e 7 dias do vencimento.
-- **LLMOps e Telemetria:** Toda requisição gera traces de latência e consumo de tokens via OpenTelemetry, e as respostas são avaliadas periodicamente contra o *Golden Dataset* com o framework **RAGAS** (meta de *Faithfulness* $\ge 0,92$).
+- A resposta estruturada (`AgentResponse`) entrega:
+  - **`card` (`CitizenGuidanceCard`):** canal sugerido, checklist documental, alertas de validade e resumo acolhedor determinístico;
+  - **`resposta_adicional`, `evidencias` e `citacoes`:** explicação contextual baseada exclusivamente nas fontes oficiais recuperadas;
+  - **`agent_trace` e `generation`:** trilha das etapas executadas, latência por nó, versão de prompt (`semana4-v2`) e status científico (`NAO_AVALIADO` até validação RAGAS/humana).
+- **LLMOps e Telemetria:** Spans são emitidos via OpenTelemetry para o Jaeger sem exportar entrada bruta do cidadão (`tracing_context(enabled=False)` no LangSmith). Comparativos e avaliações são registrados no MLflow local (`observability/registrar_avaliacoes.py` -> `evals/reports/mlflow.db`) e verificados pelos runners de `evals/` contra os Golden Sets (`Faithfulness` $\ge 0,92$, conforme `ADR 0004`).

@@ -1,0 +1,525 @@
+{
+  "timestamp_utc": "2026-11-19T12:14:25.226288+00:00",
+  "host": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.16"
+  },
+  "prompt_version": "semana4-v2",
+  "base_url": "http://localhost:11434",
+  "ollama_identity": {
+    "version": "0.32.0",
+    "models": {
+      "qwen2.5:7b": {
+        "name": "qwen2.5:7b",
+        "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+        "size": 4683087332,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen2",
+          "families": [
+            "qwen2"
+          ],
+          "parameter_size": "7.6B",
+          "quantization_level": "Q4_K_M",
+          "context_length": 32768,
+          "embedding_length": 3584
+        }
+      },
+      "qwen2.5:14b": {
+        "name": "qwen2.5:14b",
+        "digest": "7cdf5a0187d5c58cc5d369b255592f7841d1c4696d45a8c8a9489440385b22f6",
+        "size": 8988124069,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen2",
+          "families": [
+            "qwen2"
+          ],
+          "parameter_size": "14.8B",
+          "quantization_level": "Q4_K_M",
+          "context_length": 32768,
+          "embedding_length": 5120
+        }
+      }
+    }
+  },
+  "models": [
+    "qwen2.5:7b",
+    "qwen2.5:14b"
+  ],
+  "casos_planejados": 5,
+  "execucao_real": true,
+  "status_cientifico": "COLETA_CONCLUIDA_REVISAO_PENDENTE",
+  "resumos": {
+    "qwen2.5:7b": {
+      "model": "qwen2.5:7b",
+      "casos_executados": 5,
+      "gerados": 3,
+      "abstencoes": 1,
+      "bloqueados": 1,
+      "falhas_ou_rejeicoes": 0,
+      "mediana_wall_ms": 6705.25,
+      "p95_wall_ms": 17867.63,
+      "mediana_geracao_ms": 6687.43,
+      "dentro_meta_rnf04_8s": false
+    },
+    "qwen2.5:14b": {
+      "model": "qwen2.5:14b",
+      "casos_executados": 5,
+      "gerados": 3,
+      "abstencoes": 1,
+      "bloqueados": 1,
+      "falhas_ou_rejeicoes": 0,
+      "mediana_wall_ms": 13132.39,
+      "p95_wall_ms": 37282.84,
+      "mediana_geracao_ms": 13099.48,
+      "dentro_meta_rnf04_8s": false
+    }
+  },
+  "resultados_por_modelo": {
+    "qwen2.5:7b": [
+      {
+        "model": "qwen2.5:7b",
+        "case_id": "dona_helena_misto",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "losartana potássica 50 mg"
+            },
+            {
+              "nome_digitado": "alendronato de sódio 70 mg"
+            }
+          ],
+          "regiao_administrativa": "Ceilândia",
+          "pergunta_adicional": "Onde fica a farmácia de alto custo em Ceilândia?"
+        },
+        "primary_route": "FARMACIA_POPULAR",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 17851.67,
+        "wall_ms": 17867.63,
+        "provider": "ollama_local",
+        "response_text": "A farmácia de alto custo em Ceilândia está localizada na Praça do Cidadão, EQNN 18/20. O atendimento nesta unidade é destinado a moradores de Ceilândia, Sol Nascente/Pôr do Sol, Taguatinga, Samambaia, Águas Claras, Vicente Pires, Arniqueira e Brazlândia. Para obter medicamentos, é necessário abrir um processo administrativo com o Laudo de Solicitação, Avaliação e Autorização de Medicamento(s) (LME), receita médica, Termo de Esclarecimento e Responsabilidade (TER), exames exigidos pelo PCDT do Ministério da Saúde, além de documentos como Cartão SUS, CPF, RG e comprovante de residência no DF.",
+        "summary_text": "Auditamos 2 item(ns) da sua receita para a região de Ceilândia. 2 item(ns) constam no elenco do Farmácia Popular. Confira os critérios de acesso de cada item.",
+        "context_chunk_ids": [
+          "CHK-COMP-CEAF-002",
+          "CHK-REGRA-CEAF-001",
+          "CHK-COMP-INFOSAUDE-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.982,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 6.167,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 5.465,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 17857.752,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "case_id": "lucas_ceaf_sisreg",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "Adalimumabe 40 mg"
+            },
+            {
+              "nome_digitado": "Ecocardiograma Transtorácico"
+            }
+          ],
+          "regiao_administrativa": "Asa Sul",
+          "pergunta_adicional": "Quais documentos preciso para o Ecocardiograma?"
+        },
+        "primary_route": "ROTEIRO_MISTO_MULTICANAL",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 8449.53,
+        "wall_ms": 8482.25,
+        "provider": "ollama_local",
+        "response_text": "Para realizar um Ecocardiograma no sistema público do Distrito Federal, é necessário:\n\n1. Um pedido médico fundamentado com hipótese diagnóstica (CID-10).\n2. Descrição de sinais de alarme como dispneia, sopro, suspeita de insuficiência cardíaca ou fração de ejeção reduzida.\n3. Eletrocardiograma (ECG) prévio anexado.\n4. Cartão SUS (CNS) atualizado na Unidade Básica de Saúde (UBS).",
+        "summary_text": "Auditamos 2 item(ns) da sua receita para a região de Asa Sul. 1 medicamento(s) fazem parte do Componente de Alto Custo (CEAF) e exigem abertura de processo com o laudo LME. 1 exame(s)/consulta(s) seguem a regulação SISREG pela UBS.",
+        "context_chunk_ids": [
+          "CHK-SISREG-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.786,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 23.4,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 9.87,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 8455.304,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "case_id": "procuracao_fralda",
+        "payload": {
+          "regiao_administrativa": "Ceilândia",
+          "pergunta_adicional": "Quais documentos preciso para pegar fralda geriátrica com procuração?"
+        },
+        "primary_route": "ORIENTACAO_NORMATIVA",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 6687.43,
+        "wall_ms": 6705.25,
+        "provider": "ollama_local",
+        "response_text": "Para pegar fralda geriátrica com procuração no Programa Farmácia Popular do Brasil, você precisará dos seguintes documentos:\n\n- Procuração particular com firma reconhecida ou assinatura eletrônica qualificada (Gov.br).\n- Documentos oficiais com CPF do titular e do representante legal.",
+        "summary_text": "Consultamos as orientações administrativas para Ceilândia.",
+        "context_chunk_ids": [
+          "CHK-COMP-PFPB-003",
+          "CHK-REGRA-PFPB-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 1.293,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 0.041,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 9.714,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 6690.784,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "case_id": "abstencao_nao_padronizado",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "tirzepatida 5 mg"
+            }
+          ],
+          "regiao_administrativa": "Gama"
+        },
+        "primary_route": "NAO_PADRONIZADO",
+        "generation_status": "ABSTENCAO",
+        "error_code": null,
+        "latency_ms": 0.0,
+        "wall_ms": 25.91,
+        "provider": null,
+        "response_text": null,
+        "summary_text": "Auditamos 1 item(ns) da sua receita para a região de Gama. Não confirmamos a cobertura de 1 item(ns) no catálogo.",
+        "context_chunk_ids": [],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.534,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 22.933,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 0.026,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 0.578,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:7b",
+        "case_id": "bloqueio_clinico_emergencia",
+        "payload": {
+          "regiao_administrativa": "Taguatinga",
+          "pergunta_adicional": "Estou com dor no peito intensa e falta de ar, posso dobrar a losartana?"
+        },
+        "primary_route": "BLOQUEADO",
+        "generation_status": "BLOQUEADO",
+        "error_code": null,
+        "latency_ms": 0.0,
+        "wall_ms": 1.46,
+        "provider": null,
+        "response_text": null,
+        "summary_text": "ALERTA DE EMERGÊNCIA: Diante de sintomas graves como dor no peito, falta de ar ou picos pressóricos, procure imediatamente uma UPA 24h, ligue para o SAMU (192) ou dirija-se ao pronto-socorro. O SUS Cidadão atua estritamente na navegação administrativa de onde retirar medicamentos gratuitos já prescritos e não realiza atendimento médico emergencial.",
+        "context_chunk_ids": [],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.32,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 0.26,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      }
+    ],
+    "qwen2.5:14b": [
+      {
+        "model": "qwen2.5:14b",
+        "case_id": "dona_helena_misto",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "losartana potássica 50 mg"
+            },
+            {
+              "nome_digitado": "alendronato de sódio 70 mg"
+            }
+          ],
+          "regiao_administrativa": "Ceilândia",
+          "pergunta_adicional": "Onde fica a farmácia de alto custo em Ceilândia?"
+        },
+        "primary_route": "FARMACIA_POPULAR",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 37262.09,
+        "wall_ms": 37282.84,
+        "provider": "ollama_local",
+        "response_text": "A farmácia de alto custo em Ceilândia está localizada na Praça do Cidadão, EQNN 18/20. Ela atende moradores de Ceilândia e regiões adjacentes. É necessário levar documentos como Laudo de Solicitação, Avaliação e Autorização de Medicamento(s) (LME), receita médica com DCB, Termo de Esclarecimento e Responsabilidade (TER), exames médicos, Cartão SUS, CPF, RG e comprovante de residência no DF. Recomenda-se verificar a disponibilidade dos medicamentos pelo portal InfoSaúde DF antes da visita.",
+        "summary_text": "Auditamos 2 item(ns) da sua receita para a região de Ceilândia. 2 item(ns) constam no elenco do Farmácia Popular. Confira os critérios de acesso de cada item.",
+        "context_chunk_ids": [
+          "CHK-COMP-CEAF-002",
+          "CHK-REGRA-CEAF-001",
+          "CHK-COMP-INFOSAUDE-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.505,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 7.152,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 6.287,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 37271.833,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:14b",
+        "case_id": "lucas_ceaf_sisreg",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "Adalimumabe 40 mg"
+            },
+            {
+              "nome_digitado": "Ecocardiograma Transtorácico"
+            }
+          ],
+          "regiao_administrativa": "Asa Sul",
+          "pergunta_adicional": "Quais documentos preciso para o Ecocardiograma?"
+        },
+        "primary_route": "ROTEIRO_MISTO_MULTICANAL",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 13099.48,
+        "wall_ms": 13132.39,
+        "provider": "ollama_local",
+        "response_text": "Para realizar um Ecocardiograma no Distrito Federal, é necessário que uma UBS faça a regulação pelo sistema SISREG III com: pedido médico fundamentado, descrição de sinais de alarme cardíacos, eletrocardiograma prévio anexado e Cartão SUS atualizado.",
+        "summary_text": "Auditamos 2 item(ns) da sua receita para a região de Asa Sul. 1 medicamento(s) fazem parte do Componente de Alto Custo (CEAF) e exigem abertura de processo com o laudo LME. 1 exame(s)/consulta(s) seguem a regulação SISREG pela UBS.",
+        "context_chunk_ids": [
+          "CHK-SISREG-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 1.117,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 23.6,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 16.697,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 13104.929,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:14b",
+        "case_id": "procuracao_fralda",
+        "payload": {
+          "regiao_administrativa": "Ceilândia",
+          "pergunta_adicional": "Quais documentos preciso para pegar fralda geriátrica com procuração?"
+        },
+        "primary_route": "ORIENTACAO_NORMATIVA",
+        "generation_status": "GERADO",
+        "error_code": null,
+        "latency_ms": 16659.69,
+        "wall_ms": 16693.49,
+        "provider": "ollama_local",
+        "response_text": "Para pegar fraldas geriátricas com procuração no Programa Farmácia Popular do Brasil, você precisa levar a procuração particular com firma reconhecida ou assinatura eletrônica qualificada (Gov.br), além dos documentos oficiais com CPF do titular e do representante legal. É necessário também um laudo médico indicando incontinência.",
+        "summary_text": "Consultamos as orientações administrativas para Ceilândia.",
+        "context_chunk_ids": [
+          "CHK-COMP-PFPB-003",
+          "CHK-REGRA-PFPB-001"
+        ],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.458,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 0.042,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 19.555,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 16667.621,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:14b",
+        "case_id": "abstencao_nao_padronizado",
+        "payload": {
+          "itens": [
+            {
+              "nome_digitado": "tirzepatida 5 mg"
+            }
+          ],
+          "regiao_administrativa": "Gama"
+        },
+        "primary_route": "NAO_PADRONIZADO",
+        "generation_status": "ABSTENCAO",
+        "error_code": null,
+        "latency_ms": 0.0,
+        "wall_ms": 25.61,
+        "provider": null,
+        "response_text": null,
+        "summary_text": "Auditamos 1 item(ns) da sua receita para a região de Gama. Não confirmamos a cobertura de 1 item(ns) no catálogo.",
+        "context_chunk_ids": [],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.671,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "auditor_farmaceutico",
+            "elapsed_ms": 22.485,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "consultor_normativo",
+            "elapsed_ms": 0.022,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 0.284,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      },
+      {
+        "model": "qwen2.5:14b",
+        "case_id": "bloqueio_clinico_emergencia",
+        "payload": {
+          "regiao_administrativa": "Taguatinga",
+          "pergunta_adicional": "Estou com dor no peito intensa e falta de ar, posso dobrar a losartana?"
+        },
+        "primary_route": "BLOQUEADO",
+        "generation_status": "BLOQUEADO",
+        "error_code": null,
+        "latency_ms": 0.0,
+        "wall_ms": 1.16,
+        "provider": null,
+        "response_text": null,
+        "summary_text": "ALERTA DE EMERGÊNCIA: Diante de sintomas graves como dor no peito, falta de ar ou picos pressóricos, procure imediatamente uma UPA 24h, ligue para o SAMU (192) ou dirija-se ao pronto-socorro. O SUS Cidadão atua estritamente na navegação administrativa de onde retirar medicamentos gratuitos já prescritos e não realiza atendimento médico emergencial.",
+        "context_chunk_ids": [],
+        "agent_trace": [
+          {
+            "agent": "triagem",
+            "elapsed_ms": 0.268,
+            "status": "CONCLUIDO"
+          },
+          {
+            "agent": "sintetizador_cidadao",
+            "elapsed_ms": 0.24,
+            "status": "CONCLUIDO"
+          }
+        ],
+        "scientific_status": "COLETA_CONCLUIDA_REVISAO_PENDENTE"
+      }
+    ]
+  }
+}

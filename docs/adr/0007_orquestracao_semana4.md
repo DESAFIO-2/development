@@ -1,7 +1,7 @@
 # ADR 0007 — Orquestração delimitada da Semana 4
 
-- Data: 17/11/2026.
-- Status: implementado na branch; revisão do squad e avaliação real pendentes.
+- Data: 17/11/2026 (revisado em 19/11/2026).
+- Status: implementado na `main`; coleta comparativa local com Ollama concluída em `semana4-v2` (RAGAS exploratório realizado; gates integrais e revisão factual humana pendentes).
 - Complementa ADRs 0001, 0002, 0004 e 0006; não altera metas científicas.
 
 ## Decisão
@@ -37,8 +37,7 @@ no MacBook. A escolha final exige execução no hardware alvo: a medição anter
 de 14B (~22 s) não atende à meta de 8 s. Não prometer velocidade ou qualidade do 7B
 sem medição. Modelo leve 1.5B serve somente para smoke de transporte, se necessário.
 
-Prompt novo `semana4-v1`, separado do protocolo congelado `semana3-v3`: o modelo
-só explica evidências, enquanto código monta cartões e citações. A quantidade de
+Prompt versionado `semana4-v2` (evoluído de `semana4-v1`), separado do protocolo congelado `semana3-v3`: quando há `pergunta_adicional`, o contexto enviado ao gerador prioriza `normative_hits` para evitar abstenção indevida, a resposta da LLM fica isolada em `resposta_adicional` mantendo o `card` 100% determinístico, e código monta cartões e citações. Na coleta local com Ollama (`qwen2.5:7b` e `qwen2.5:14b`), `semana4-v2` zerou falhas e rejeições nos 5 casos planejados, mas a latência `p95` local (17,87 s no 7B e 37,28 s no 14B) ainda ficou acima da meta `RNF04` (`<= 8 s`) na rodada observada; sem isolamento experimental do efeito de cold-start. A quantidade de
 contexto é limitada e os IDs efetivamente enviados são registrados. Testes com
 fakes ficam exclusivamente em `tests/`. Falhas geram metadados explícitos; `strict`
 levanta `GenerationFailure` com latência/erro e não produz resposta substituta.
@@ -64,3 +63,19 @@ O runner científico da Semana 3 não é modificado nem confundido com o grafo n
 
 Reversão: reverter a unidade de integração do grafo, rota, composição e dependências,
 conforme [registro de portação](../implementation/portacao_agentes_semana4.md).
+
+
+## Avaliação e observabilidade — correção de 19/11
+
+A rubrica `semana4-eval-v2` exige cinco cenários distintos e conhecidos; métricas
+não avaliadas não satisfazem gates. Qualidade automatizada, latência RNF04 e
+revisão humana permanecem dimensões separadas. O runner retorna 1 para avaliação
+incompleta, 2 para reprovação e 3 quando os gates automáticos passam, mas falta
+revisão humana. Smoke sintético retorna 0 apenas como teste de protocolo.
+
+Resultados da rubrica v1 são históricos, não recalculados nem sobrescritos.
+A nova instrução do juiz limita completude ao pedido do cidadão e exige conferência
+literal antes de apontar omissão; isso requer nova medição, não prova melhora.
+Backfills MLflow não atribuem o manifesto de importação à execução histórica.
+Reversão dessas correções deve manter relatórios e seus manifestos originais;
+reverter código não autoriza declarar aprovação dos antigos gates permissivos.

@@ -13,22 +13,25 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 ---
 ## Arquitetura Técnica & Roadmap (7 Semanas)
 
-  
-
-[ Usuário ] ──> (PDF / Imagem / Áudio)
-│
-▼
-[ Pipeline Multimodal ]  ──>  Desidentificação LGPD (PII Masking)
-│
-▼
-[ Orquestrador Multiagentes ]
-├── 1. Agente Extrator & Triador Multimodal
-├── 2. Agente Auditor Farmacêutico (RAG: RENAME 2024 + Farmácia Popular + REME-DF)
-├── 3. Agente Consultor SISREG / SES-DF (RAG: Protocolos CPPAS)
-└── 4. Agente Sintetizador do Roteiro Cidadão
-│
-▼
-[ Painel de Apoio à Decisão & Gestão da Receita ]
+```text
+[ Usuário ] ──> Receita estruturada (autocomplete DCB) + dúvida administrativa (RA / Região DF)
+    │
+    ▼
+[ Orquestrador LangGraph Multiagentes (/api/v1/agents/orchestrate) ]
+    ├── 1. triagem                ──> Desidentificação LGPD (PII) + Guardrail Clínico
+    │       ├── BLOQUEADO ──────────> vai direto para sintetizador_cidadao
+    │       └── APROVADO  ──(destinos paralelos)──┐
+    │                                           ▼
+    ├── 2. auditor_farmaceutico   ──> Elegibilidade determinística (RENAME 2024 + PFPB + REME-DF) + RAG lexical
+    ├── 3. consultor_normativo    ──> Protocolos CEAF, Farmácia Popular e regulação SISREG / CPPAS (RAG normativo)
+    │                                           │
+    │                                    (barreira)
+    │                                           ▼
+    └── 4. sintetizador_cidadao   ──> Cartão determinístico + explicação opcional (LLM) + citações auditáveis
+    │
+    ▼
+[ Roteiro Cidadão & Telemetria (OpenTelemetry + MLflow) ]
+```
 
 
   
@@ -54,7 +57,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB tabular, BM25 e TF-IDF com RRF (sem ChromaDB em runtime). |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
-| **Multiagentes Especializados** | Semana 4 | Implementados na branch; avaliação real pendente | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
+| **Multiagentes Especializados** | Semana 4 | Implementados na `main`; comparativo local Ollama (`semana4-v2`) executado | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
 ---
@@ -106,7 +109,7 @@ development/
 │   ├── staging/                 # Ocorrências curadas intermediárias
 │   └── processed/               # Catálogo canônico, chunks normativos e evidências literais
 ├── docs/                        # Documentação Técnica e Decisões
-│   ├── adr/                     # Architecture Decision Records (ADRs 0001, 0002, 0003 e 0004)
+│   ├── adr/                     # Architecture Decision Records (ADRs 0001 a 0007)
 │   ├── architecture/            # Diagramas C4, Matriz de Métricas e Especificação RAG
 │   ├── pdr_semana1/             # Documento de Definição de Produto e Requisitos aprovado
 │   ├── data_sources/            # Dicionários de dados das fontes oficiais
@@ -167,6 +170,14 @@ make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
 make semana3-pilot     # Piloto rápido de 2 casos para verificar hardware e contexto
 make semana3-run       # Coleta pareada (22 casos) + RAGAS oficial desacoplado com checkpoints
 make semana3-finalize  # Consolidação offline após auditoria factual humana
+
+# 10. Multiagentes (Semana 4) e Observabilidade MLflow
+make demo-agents       # Execução da demo multiagentes (modo determinístico ou com APP_AGENTS_PROVIDER=ollama)
+make semana4-pilot     # Piloto rápido 7B x 14B (2 casos) no Ollama local
+make semana4-compare   # Coleta comparativa completa (5 casos, timeout padrão 120s)
+make semana4-eval      # Avaliação automatizada Semana 4 (controles + juiz estruturado + RAGAS 0.4.3)
+make registrar-avaliacoes  # Indexa execuções locais no SQLite MLflow (evals/reports/mlflow.db)
+make mlflow-ui         # Sobe interface MLflow local para comparar execuções e versões de prompt
 ```
 
 ### Endpoints Principais da API (FastAPI)

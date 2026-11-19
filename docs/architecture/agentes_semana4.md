@@ -36,8 +36,8 @@ por requisição; a aresta de barreira espera ambos e executa a síntese uma vez
 Bloqueios passam diretamente à resposta de segurança, sem invocar a LLM.
 `agent_trace` apresenta ordem lógica; não deve ser lido como ordem temporal dos ramos.
 
-O auditor mantém uma inspeção defensiva própria para também ser seguro fora do grafo.
-Isso repete uma checagem local barata, sem duplicar regras ou chamadas ao modelo.
+O auditor mantém inspeção defensiva e mascaramento PII próprios para também ser seguro quando chamado fora do grafo (ex.: endpoint `/api/v1/prescriptions/audit`).
+Dentro do grafo, o orquestrador envia `already_triaged=True` após a `triagem`, evitando repetir a checagem clínica e logs redundantes, e o adaptador LLM dos agentes recebe `skip_input_guardrail=True` para não bloquear trechos em contexto já triado.
 Não há extração probabilística de texto livre nesta semana: medicamentos/exames
 vêm em itens estruturados; perguntas administrativas podem vir sozinhas.
 
@@ -149,8 +149,8 @@ ollama pull qwen2.5:14b
 cd backend
 export APP_AGENTS_PROVIDER=ollama
 export APP_AGENTS_MODEL=qwen2.5:7b
-export APP_AGENTS_TIMEOUT_SECONDS=30
-uv run python -m app.agents.demo --strict
+export APP_AGENTS_TIMEOUT_SECONDS=60
+uv run python -m app.agents.demo --strict --summary
 ```
 
 Para comparar `qwen2.5:7b` vs `qwen2.5:14b` no MacBook com checkpoints e medição
