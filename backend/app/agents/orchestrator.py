@@ -109,7 +109,7 @@ class LangGraphOrchestrator:
     def _audit(self, state: AgentState) -> AgentState:
         start = time.perf_counter()
         with trace_operation("agent.auditor_farmaceutico"):
-            result = self.auditor.executar_com_evidencias(state["request"])
+            result = self.auditor.executar_com_evidencias(state["request"], already_triaged=True)
             return AgentState(
                 card=result.card,
                 audit_hits=list(result.evidences),

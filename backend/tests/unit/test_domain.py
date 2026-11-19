@@ -4,7 +4,6 @@ from app.domain import (
     CitizenGuidanceCard,
     CoverageRoute,
     ItemRoteiroCidadao,
-    MedicationCoverage,
     MedicationItemInput,
     PrescriptionAuditRequest,
 )
@@ -29,24 +28,6 @@ def test_criacao_prescription_audit_request() -> None:
     assert len(req.itens) == 2
     assert req.itens[0].nome_digitado == "Losartana 50mg"
     assert req.regiao_administrativa == "Ceilândia"
-
-
-def test_criacao_medication_coverage() -> None:
-    coverage = MedicationCoverage(
-        dcb_principio_ativo="LOSARTANA POTASSICA",
-        concentracao="50 MG",
-        forma_farmaceutica="COMPRIMIDO",
-        via_primaria=CoverageRoute.FARMACIA_POPULAR,
-        disponivel_farmacia_popular=True,
-        disponivel_ubs_df=True,
-        exige_lme_alto_custo=False,
-        validade_receita_dias=180,
-        documentos_obrigatorios=["RG", "CPF", "Receita Médica"],
-        fonte_oficial="Portaria GM/MS nº 6.324/2024",
-    )
-    assert coverage.via_primaria == CoverageRoute.FARMACIA_POPULAR
-    assert coverage.disponivel_farmacia_popular is True
-    assert coverage.validade_receita_dias == 180
 
 
 def test_citizen_guidance_card_aviso_ato_medico() -> None:

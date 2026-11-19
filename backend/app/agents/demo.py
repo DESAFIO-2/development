@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,28 @@ def _run_payload(client: TestClient, payload: dict[str, Any], *, strict: bool) -
     return data
 
 
+def _format_summary(output: dict[str, Any]) -> str:
+    scenarios: list[dict[str, Any]] = (
+        output["cenarios"] if "cenarios" in output else [{"cenario": "avulso", "resultado": output}]
+    )
+    lines: list[str] = []
+    for entry in scenarios:
+        res = entry["resultado"]
+        gen = res["generation"]
+        trace = " -> ".join(f"{t['agent']} ({t['elapsed_ms']} ms)" for t in res["agent_trace"])
+        modelo = gen.get("model") or "determinístico"
+        lines.append(f"=== {entry['cenario']} ===")
+        lines.append(f"Rota: {res['primary_route']} | Geração: {gen['status']} ({modelo})")
+        lines.append(f"Fluxo: {trace}")
+        lines.append(f"Cartão: {res['card']['resumo_acolhedor']}")
+        if res.get("resposta_adicional"):
+            lines.append(f"Resposta: {res['resposta_adicional']}")
+        if res.get("citacoes"):
+            lines.append(f"Citações ({len(res['citacoes'])}): " + "; ".join(res["citacoes"]))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def main() -> int:
     # A saída redirecionada também é JSON UTF-8 no Windows (não CP1252).
     if isinstance(sys.stdout, io.TextIOWrapper):
@@ -88,27 +111,44 @@ def main() -> int:
         "--input", type=Path, help="Payload JSON UTF-8 (dados públicos ou sintéticos)"
     )
     parser.add_argument("--strict", action="store_true", help="Falha de geração retorna código 2")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Imprime resumo legível da colaboração dos 4 agentes sem logs INFO",
+    )
     args = parser.parse_args()
 
-    with TestClient(app) as client:
-        try:
-            if args.input:
-                payload = json.loads(args.input.read_text(encoding="utf-8"))
-                output: Any = _run_payload(client, payload, strict=args.strict)
-            else:
-                output = {
-                    "cenarios": [
-                        {
-                            "cenario": name,
-                            "resultado": _run_payload(client, payload, strict=args.strict),
-                        }
-                        for name, payload in DEMO_SCENARIOS
-                    ]
-                }
-        except GenerationFailure as exc:
-            print(exc.metadata.model_dump_json(indent=2))
-            return 2
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+    app_logger = logging.getLogger("app")
+    previous_level = app_logger.level
+    if args.summary:
+        app_logger.setLevel(logging.WARNING)
+    try:
+        with TestClient(app) as client:
+            try:
+                if args.input:
+                    payload = json.loads(args.input.read_text(encoding="utf-8"))
+                    output: Any = _run_payload(client, payload, strict=args.strict)
+                else:
+                    output = {
+                        "cenarios": [
+                            {
+                                "cenario": name,
+                                "resultado": _run_payload(client, payload, strict=args.strict),
+                            }
+                            for name, payload in DEMO_SCENARIOS
+                        ]
+                    }
+            except GenerationFailure as exc:
+                print(exc.metadata.model_dump_json(indent=2))
+                return 2
+            print(
+                _format_summary(output)
+                if args.summary
+                else json.dumps(output, ensure_ascii=False, indent=2)
+            )
+    finally:
+        if args.summary:
+            app_logger.setLevel(previous_level)
     return 0
 
 

@@ -8,7 +8,12 @@ from app.agents.orchestrator import LangGraphOrchestrator
 from app.application.agents import OrchestratorPort
 from app.application.catalog_labels import medication_labels
 from app.application.evidence import literal_hit
-from app.application.ports import EvidenceRepositoryPort, GuardrailPort, RetrievalHitDTO
+from app.application.ports import (
+    EvidenceRepositoryPort,
+    GeneratorPort,
+    GuardrailPort,
+    RetrievalHitDTO,
+)
 from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
 from app.core.config import settings
 from app.guardrails.adapter import LocalGuardrailAdapter
@@ -88,6 +93,7 @@ def build_services() -> ServiceContainer:
             model_name=settings.agents_model,
             timeout_seconds=settings.agents_timeout_seconds,
             prompt_version=PROMPT_VERSION_AGENTS,
+            skip_input_guardrail=True,
         )
     public_context = build_public_context(
         [
@@ -125,6 +131,26 @@ def build_services() -> ServiceContainer:
         audit_use_case=audit_use_case,
         agents=agents,
         public_context=public_context,
+    )
+
+
+def build_orchestrator(
+    services: ServiceContainer, generator: GeneratorPort | None
+) -> LangGraphOrchestrator:
+    """Compõe o grafo de agentes com um gerador específico sobre o container existente."""
+    auditor = AuditPrescriptionUseCase(
+        medication_repo=services.medication_repo,
+        retriever=services.hybrid_retriever,
+        guardrail=services.guardrail,
+        tabular_matcher=services.tabular_matcher,
+        evidence_repo=services.evidence_chunk_repo,
+    )
+    return LangGraphOrchestrator(
+        auditor=auditor,
+        guardrail=services.guardrail,
+        retriever=services.hybrid_retriever,
+        generator=generator,
+        public_context=services.public_context,
     )
 
 

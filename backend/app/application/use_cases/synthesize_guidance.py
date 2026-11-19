@@ -76,8 +76,9 @@ def synthesize(
     metadata = GenerationMetadata()
     if not hits:
         metadata.status = "ABSTENCAO"
-    # Uma dúvida sem contexto normativo não é respondida com conhecimento do modelo.
-    candidates = [*normative_hits, *audit_hits]
+    # Se há pergunta_adicional, foca o prompt apenas nos trechos normativos
+    # para não diluir o contexto da LLM com linhas literais de outros itens.
+    candidates = list(normative_hits) if request.pergunta_adicional else list(audit_hits)
     context: list[RetrievalHitDTO] = []
     budget = 6000
     for hit in {hit.chunk_id: hit for hit in candidates}.values():
@@ -87,6 +88,7 @@ def synthesize(
             budget -= size
     context_truncated = len(context) < len({hit.chunk_id for hit in candidates})
     can_generate = bool(context) and (not request.pergunta_adicional or bool(normative_hits))
+    prompt_version: str | None = getattr(generator, "prompt_version", None) if generator else None
     if generator and can_generate:
         start = time.perf_counter()
         try:
@@ -102,6 +104,7 @@ def synthesize(
                 model=result.model_name,
                 latency_ms=result.latency_ms,
                 error_code=result.error_code,
+                prompt_version=prompt_version,
                 context_chunk_ids=[hit.chunk_id for hit in context],
                 context_truncated=context_truncated,
             )
@@ -119,18 +122,13 @@ def synthesize(
                 metadata.status = "SAIDA_REJEITADA"
                 metadata.error_code = "VALIDACAO_SAIDA"
             else:
-                text = remover_citacoes(text)
-                if request.pergunta_adicional:
-                    additional = text
-                else:
-                    card = card.model_copy(
-                        update={"resumo_acolhedor": f"{card.resumo_acolhedor} {text}"}
-                    )
+                additional = remover_citacoes(text)
         except (OSError, TimeoutError, ValueError, RuntimeError):
             metadata = GenerationMetadata(
                 status="FALHA_PROVEDOR",
                 error_code="ERRO_GERADOR",
                 latency_ms=round((time.perf_counter() - start) * 1000, 2),
+                prompt_version=prompt_version,
                 context_chunk_ids=[hit.chunk_id for hit in context],
                 context_truncated=context_truncated,
             )
@@ -144,6 +142,7 @@ def synthesize(
         )
     elif generator and not can_generate:
         metadata.status = "ABSTENCAO"
+        metadata.prompt_version = prompt_version
         metadata.context_truncated = context_truncated
 
     routes = {item.via_retirada.value for item in card.itens_auditados}

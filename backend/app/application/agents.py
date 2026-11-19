@@ -22,7 +22,9 @@ class AgentRequest(PrescriptionAuditRequest):
 
 
 class AuditorPort(Protocol):
-    def executar_com_evidencias(self, request: PrescriptionAuditRequest) -> AuditResult: ...
+    def executar_com_evidencias(
+        self, request: PrescriptionAuditRequest, *, already_triaged: bool = False
+    ) -> AuditResult: ...
 
 
 class AgentTrace(BaseModel):
@@ -46,7 +48,7 @@ class GenerationMetadata(BaseModel):
     latency_ms: float = 0.0
     error_code: str | None = None
     fallback_used: bool = False
-    prompt_version: str = "semana4-v1"
+    prompt_version: str | None = None
     context_chunk_ids: list[str] = Field(default_factory=list)
     context_truncated: bool = False
 

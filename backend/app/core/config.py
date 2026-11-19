@@ -30,16 +30,10 @@ class Settings(BaseSettings):
     # Ativação explícita, independente dos experimentos da Semana 3.
     agents_provider: Literal["deterministic", "ollama", "gemini"] = "deterministic"
     agents_model: str = "qwen2.5:7b"
-    agents_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    agents_timeout_seconds: float = Field(default=60.0, gt=0, le=120)
 
-    # Diretórios de Dados
-    data_raw_dir: Path = DATA_DIR / "raw"
+    # Diretório de Dados Processados
     data_processed_dir: Path = DATA_DIR / "processed"
-    data_manifests_dir: Path = DATA_DIR / "manifests"
-
-    # Metas de Qualidade e RAGAS
-    rag_faithfulness_threshold: float = 0.92
-    rag_top_k: int = 5
 
 
 settings = Settings()
