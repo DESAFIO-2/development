@@ -33,6 +33,7 @@ evals/reports/*.json
 evals/reports/*.csv
 evals/reports/*.md
 evals/reports/mlflow_runs/
+evals/reports/mlflow.db
 evals/reports/mlruns/
 
 # OS & Editors

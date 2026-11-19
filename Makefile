@@ -9,6 +9,8 @@ RUN_DIR_BLINDADO ?= evals/reports/coleta_blindada
 SEG_DIR ?= evals/reports/seguranca_variantes
 COLETA_PADRAO ?= $(RUN_DIR)
 QUATRO_DIR ?= evals/reports/quatro_bracos
+MLFLOW_VERSAO ?= 3.18.0
+ROTULO ?=
 RUN_DIR_V3 ?= evals/reports/coleta_v3
 RUN_DIR_BLINDADO_V3 ?= evals/reports/coleta_blindada_v3
 SEG_DIR_V2 ?= evals/reports/seguranca_variantes_v2
@@ -48,6 +50,8 @@ help:
 	@echo "  make demo-agents           - Executa os 5 cenários da orquestração Semana 4 via API"
 	@echo "  make semana4-pilot         - Piloto MacBook/Ollama (2 cenários, Qwen2.5 7B vs 14B)"
 	@echo "  make semana4-compare       - Comparativo completo Semana 4 no Ollama local"
+	@echo "  make registrar-avaliacoes  - Registra no MLflow os resultados de uma rodada (ROTULO=..., ARTEFATOS=...)"
+	@echo "  make mlflow-ui             - Abre o MLflow local em http://127.0.0.1:5050"
 	@echo "  make docker-build  - Constrói a imagem Docker do backend"
 	@echo "  make clean          - Limpa caches e artefatos temporários"
 
@@ -169,3 +173,14 @@ semana4-pilot:
 
 semana4-compare:
 	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)"
+
+# Monitoramento: o MLflow fica fora do uv.lock (entra só nestes alvos, versão fixa).
+# Ex.: make registrar-avaliacoes ROTULO=semana4-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo/resultado.json"
+.PHONY: registrar-avaliacoes mlflow-ui
+registrar-avaliacoes:
+	@test -n "$(ROTULO)" || (echo "Defina ROTULO=, ex.: ROTULO=semana4-2026-11-19" && exit 1)
+	@test -n "$(ARTEFATOS)" || (echo "Defina ARTEFATOS=, ex.: ARTEFATOS=\"--seguranca pasta/seguranca.json\"" && exit 1)
+	uv run --project backend --with "mlflow==$(MLFLOW_VERSAO)" python observability/registrar_avaliacoes.py --rotulo "$(ROTULO)" $(ARTEFATOS)
+
+mlflow-ui:
+	uv run --project backend --with "mlflow==$(MLFLOW_VERSAO)" mlflow ui --backend-store-uri sqlite:///evals/reports/mlflow.db --host 127.0.0.1 --port 5050
