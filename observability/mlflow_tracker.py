@@ -81,6 +81,45 @@ class MLflowExperimentTracker:
             "evidence_chunks_v2_count": str(counts.get("evidence_chunks_v2", 0)),
         }
 
+    def _montar_tags(
+        self,
+        dataset_path: Path | None = None,
+        extra_tags: dict[str, str] | None = None,
+        *,
+        include_current_lineage: bool = True,
+    ) -> dict[str, str]:
+        tags: dict[str, str] = {
+            "project": "sus-cidadao-navegasus",
+            "architecture": "clean-architecture-ponytail",
+            **(self.carregar_linhagem_manifesto() if include_current_lineage else {}),
+        }
+        if dataset_path and dataset_path.exists():
+            tags["dataset_file"] = dataset_path.name
+            tags["dataset_sha256"] = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+        if extra_tags:
+            tags.update(extra_tags)
+        return tags
+
+    def registrar_no_mlflow(
+        self,
+        run_name: str,
+        params: dict[str, Any],
+        metrics: dict[str, float],
+        dataset_path: Path | None = None,
+        extra_tags: dict[str, str] | None = None,
+        *,
+        include_current_lineage: bool = True,
+    ) -> bool:
+        """Registra apenas no MLflow nativo (útil para sincronizar JSON já gravado)."""
+        return self._log_to_native_mlflow_if_available(
+            run_name=run_name,
+            params={str(k): str(v) for k, v in params.items()},
+            metrics={str(k): float(v) for k, v in metrics.items()},
+            tags=self._montar_tags(
+                dataset_path, extra_tags, include_current_lineage=include_current_lineage
+            ),
+        )
+
     def registrar_execucao(
         self,
         run_name: str,
@@ -88,33 +127,27 @@ class MLflowExperimentTracker:
         metrics: dict[str, float],
         dataset_path: Path | None = None,
         extra_tags: dict[str, str] | None = None,
+        *,
+        include_current_lineage: bool = True,
+        log_native: bool = True,
     ) -> ExperimentRunRecord:
         """Registra parâmetros, métricas e linhagem no MLflow (se ativo) e em disco."""
         inicio = datetime.now(UTC).isoformat()
         run_id = uuid.uuid4().hex
-        linhagem = self.carregar_linhagem_manifesto()
-
-        tags: dict[str, str] = {
-            "project": "sus-cidadao-navegasus",
-            "architecture": "clean-architecture-ponytail",
-            **linhagem,
-        }
-        if dataset_path and dataset_path.exists():
-            tags["dataset_file"] = dataset_path.name
-            tags["dataset_sha256"] = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
-        if extra_tags:
-            tags.update(extra_tags)
-
+        tags = self._montar_tags(
+            dataset_path, extra_tags, include_current_lineage=include_current_lineage
+        )
         params_str = {str(k): str(v) for k, v in params.items()}
         metrics_float = {str(k): float(v) for k, v in metrics.items()}
 
         # Tenta logar no pacote mlflow caso esteja instalado no ambiente
-        self._log_to_native_mlflow_if_available(
-            run_name=run_name,
-            params=params_str,
-            metrics=metrics_float,
-            tags=tags,
-        )
+        if log_native:
+            self._log_to_native_mlflow_if_available(
+                run_name=run_name,
+                params=params_str,
+                metrics=metrics_float,
+                tags=tags,
+            )
 
         self.pasta_runs.mkdir(parents=True, exist_ok=True)
         destino_run = self.pasta_runs / f"run_{run_id[:12]}.json"
@@ -151,7 +184,7 @@ class MLflowExperimentTracker:
         params: dict[str, str],
         metrics: dict[str, float],
         tags: dict[str, str],
-    ) -> None:
+    ) -> bool:
         """Envia telemetria ao MLflow nativo se a biblioteca estiver instalada.
 
         O MLflow 3.x recusa o backend de pastas (`./mlruns`); por isso o padrão é SQLite
@@ -161,7 +194,7 @@ class MLflowExperimentTracker:
         try:
             mlflow_mod: Any = importlib.import_module("mlflow")
         except ModuleNotFoundError:
-            return
+            return False
 
         try:
             uri = os.environ.get("MLFLOW_TRACKING_URI") or self.uri_mlflow_padrao()
@@ -171,8 +204,10 @@ class MLflowExperimentTracker:
                 mlflow_mod.log_params(params)
                 mlflow_mod.log_metrics(metrics)
                 mlflow_mod.set_tags(tags)
+            return True
         except Exception as erro:  # noqa: BLE001 - monitoramento não pode quebrar a avaliação
             print(f"Aviso: MLflow não registrou '{run_name}': {erro}", file=sys.stderr)
+            return False
 
     def uri_mlflow_padrao(self) -> str:
         banco = self.raiz_repo / "evals" / "reports" / "mlflow.db"

@@ -49,20 +49,31 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
         return self.executar_com_evidencias(request).card
 
-    def executar_com_evidencias(self, request: PrescriptionAuditRequest) -> AuditResult:
+    def executar_com_evidencias(
+        self, request: PrescriptionAuditRequest, *, already_triaged: bool = False
+    ) -> AuditResult:
         evidences: list[RetrievalHitDTO] = []
-        card = self._executar(request, evidences)
+        card = self._executar(request, evidences, already_triaged=already_triaged)
         return AuditResult(card, tuple(evidences))
 
     def _executar(
-        self, request: PrescriptionAuditRequest, evidences: list[RetrievalHitDTO]
+        self,
+        request: PrescriptionAuditRequest,
+        evidences: list[RetrievalHitDTO],
+        *,
+        already_triaged: bool = False,
     ) -> CitizenGuidanceCard:
-        blocked = inspect_request(request, self.guardrail)
-        if blocked:
-            return blocked
-        regiao = self.guardrail.desidentificar_dados_pessoais(
+        if not already_triaged:
+            blocked = inspect_request(request, self.guardrail)
+            if blocked:
+                return blocked
+        regiao = (
             request.regiao_administrativa
-        ).texto_sanitizado
+            if already_triaged
+            else self.guardrail.desidentificar_dados_pessoais(
+                request.regiao_administrativa
+            ).texto_sanitizado
+        )
 
         hoje = date.today()
         data_base = request.data_emissao or hoje
@@ -70,13 +81,20 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
 
         # 3. Auditoria Farmacêutica para cada item da receita
         for item in request.itens:
-            nome = self.guardrail.desidentificar_dados_pessoais(item.nome_digitado).texto_sanitizado
-            dcb = self.guardrail.desidentificar_dados_pessoais(
-                item.principio_ativo_dcb or ""
-            ).texto_sanitizado
-            forma = self.guardrail.desidentificar_dados_pessoais(
-                item.forma_farmaceutica or ""
-            ).texto_sanitizado
+            if already_triaged:
+                nome = item.nome_digitado
+                dcb = item.principio_ativo_dcb or ""
+                forma = item.forma_farmaceutica or ""
+            else:
+                nome = self.guardrail.desidentificar_dados_pessoais(
+                    item.nome_digitado
+                ).texto_sanitizado
+                dcb = self.guardrail.desidentificar_dados_pessoais(
+                    item.principio_ativo_dcb or ""
+                ).texto_sanitizado
+                forma = self.guardrail.desidentificar_dados_pessoais(
+                    item.forma_farmaceutica or ""
+                ).texto_sanitizado
             with trace_operation("retrieval"):
                 documentados = self.tabular_matcher.rotulo_documental(nome)
                 if documentados:

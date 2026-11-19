@@ -14,9 +14,8 @@ from app.agents.orchestrator import LangGraphOrchestrator
 from app.application.agents import AgentRequest, GenerationFailure
 from app.application.evidence import literal_hit
 from app.application.ports import AuditResult, GenerationResultDTO, GeneratorPort, RetrievalHitDTO
-from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
 from app.application.use_cases.synthesize_guidance import synthesize
-from app.container import ServiceContainer, build_services
+from app.container import ServiceContainer, build_orchestrator, build_services
 from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS, montar_prompt
 from app.main import app
 
@@ -33,6 +32,8 @@ def client() -> Iterator[TestClient]:
 
 
 class RecordingGenerator(GeneratorPort):
+    prompt_version = PROMPT_VERSION_AGENTS
+
     def __init__(
         self, text: str = "Consulte os documentos indicados no roteiro.", error: str | None = None
     ) -> None:
@@ -59,20 +60,7 @@ class RecordingGenerator(GeneratorPort):
 
 
 def graph(services: ServiceContainer, generator: GeneratorPort | None) -> LangGraphOrchestrator:
-    auditor = AuditPrescriptionUseCase(
-        medication_repo=services.medication_repo,
-        retriever=services.hybrid_retriever,
-        guardrail=services.guardrail,
-        tabular_matcher=services.tabular_matcher,
-        evidence_repo=services.evidence_chunk_repo,
-    )
-    return LangGraphOrchestrator(
-        auditor=auditor,
-        guardrail=services.guardrail,
-        retriever=services.hybrid_retriever,
-        generator=generator,
-        public_context=services.public_context,
-    )
+    return build_orchestrator(services, generator)
 
 
 def request(question: str | None = None) -> AgentRequest:
@@ -256,9 +244,9 @@ def test_parallel_workers_join_once_and_request_isolation(services: ServiceConta
     original_audit = orchestrator.auditor.executar_com_evidencias
     original_search = orchestrator.retriever.search
 
-    def audit(req: AgentRequest) -> AuditResult:
+    def audit(req: AgentRequest, *, already_triaged: bool = False) -> AuditResult:
         rendezvous.wait()
-        return original_audit(req)
+        return original_audit(req, already_triaged=already_triaged)
 
     def search(query: str, top_k: int = 5, min_score: float = 0.18) -> list[RetrievalHitDTO]:
         rendezvous.wait()
@@ -547,7 +535,7 @@ def test_full_evidences_and_catalog_items_validate_cleanly(services: ServiceCont
             ).tipos_detectados, (med.medication_id, channel)
 
 
-def test_montar_prompt_semana4_v1_omits_fonte_header(services: ServiceContainer) -> None:
+def test_montar_prompt_semana4_omits_fonte_header(services: ServiceContainer) -> None:
     baseline = graph(services, None).executar(request("Documentos para SISREG?"))
     prompt = montar_prompt("Pergunta?", tuple(baseline.evidencias), PROMPT_VERSION_AGENTS)
     assert "[Fonte:" not in prompt
@@ -615,3 +603,48 @@ def test_cross_field_weak_injection_blocks_while_single_weak_allows(
     ).json()
     assert allowed["generation"]["status"] == "DETERMINISTICO"
     assert allowed["card"]["sucesso"]
+
+
+def test_question_focuses_generator_context_on_normative_hits(
+    services: ServiceContainer,
+) -> None:
+    generator = RecordingGenerator()
+    result = graph(services, generator).executar(
+        AgentRequest.model_validate(
+            {
+                "itens": [
+                    {"nome_digitado": "Adalimumabe 40 mg"},
+                    {"nome_digitado": "Ecocardiograma Transtorácico"},
+                ],
+                "regiao_administrativa": "Asa Sul",
+                "pergunta_adicional": "Quais documentos preciso para o Ecocardiograma?",
+            }
+        )
+    )
+    assert result.generation.status == "GERADO"
+    assert result.generation.prompt_version == PROMPT_VERSION_AGENTS
+    assert result.generation.context_chunk_ids == ["CHK-SISREG-001"]
+    assert any(h.matched_dcb == "adalimumabe" for h in result.evidencias)
+
+
+def test_item_only_generation_keeps_card_deterministic(services: ServiceContainer) -> None:
+    baseline = graph(services, None).executar(request())
+    generator = RecordingGenerator("Presença documental confirmada nos anexos oficiais.")
+    generated = graph(services, generator).executar(request())
+    assert baseline.generation.prompt_version is None
+    assert generated.generation.status == "GERADO"
+    assert generated.generation.prompt_version == PROMPT_VERSION_AGENTS
+    assert generated.card.resumo_acolhedor == baseline.card.resumo_acolhedor
+    assert generated.resposta_adicional == generator.text
+
+
+def test_demo_summary_flag_formats_agent_collaboration(capsys: pytest.CaptureFixture[str]) -> None:
+    from app.agents import demo
+
+    with patch("sys.argv", ["demo", "--summary"]):
+        code = demo.main()
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "=== lucas_ceaf_sisreg ===" in out
+    assert "Fluxo: triagem" in out
+    assert "sintetizador_cidadao" in out

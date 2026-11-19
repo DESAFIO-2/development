@@ -1,0 +1,20 @@
+================================================================================
+  BENCHMARK CIENTÍFICO RAG — DATASET: golden_set_v2_consolidado.jsonl
+================================================================================
+Total de Casos Avaliados:     22
+Hit Rate@3:                  100.00%
+Recall@3:                    100.00%
+Mean Reciprocal Rank (MRR):  1.0000
+Precision@1:                 100.00%
+Precision@3:                 40.74%  (teto do dataset: 40.74%)
+R-Precision:                 100.00%
+nDCG@3:                      1.0000
+Acurácia de Roteamento:      100.00%
+Taxa Bloqueio Clínico:       100.00%
+Acurácia de Abstenção:       100.00%
+Latência da API (positivos): mediana 5.177 ms, p95 10.271 ms (n=18; em processo, sem HTTP)
+MLflow Run ID:               8ed73ff0d6cf493c8f478676d96ee7ef
+Manifest Lineage SHA-256:    8dd32c07897b054b...
+
+Relatório salvo em: evals/reports/rag_benchmark_golden_set_v2_consolidado.json
+[OK] APROVADO: Sistema atende a todos os critérios de qualidade.

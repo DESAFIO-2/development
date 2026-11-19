@@ -15,8 +15,6 @@ from app.application.catalog_labels import label_key
 from app.application.ports import ClinicalCheckDTO
 from app.seguranca.esteira import Canal, inspecionar_entrada
 
-ClinicalCheckResult = ClinicalCheckDTO
-
 
 def _normalizar(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()

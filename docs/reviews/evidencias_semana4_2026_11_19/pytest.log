@@ -1,0 +1,239 @@
+........................................................................ [ 16%]
+........................................................................ [ 33%]
+........................................................................ [ 49%]
+........................................................................ [ 66%]
+........................................................................ [ 82%]
+..................................................F..................... [ 99%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+__________ test_synthetic_smoke_checkpoint_e_isolamento_de_manifesto ___________
+
+self = <urllib.request.HTTPHandler object at 0x10da399d0>
+http_class = <class 'http.client.HTTPConnection'>
+req = <urllib.request.Request object at 0x10da399a0>, http_conn_args = {}
+
+    def do_open(self, http_class, req, **http_conn_args):
+        """Return an HTTPResponse object for the request, using http_class.
+    
+        http_class must implement the HTTPConnection API from http.client.
+        """
+        host = req.host
+        if not host:
+            raise URLError('no host given')
+    
+        # will parse host:port
+        h = http_class(host, timeout=req.timeout, **http_conn_args)
+        h.set_debuglevel(self._debuglevel)
+    
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items()
+                        if k not in headers})
+    
+        # TODO(jhylton): Should this be redesigned to handle
+        # persistent connections?
+    
+        # We want to make an HTTP/1.1 request, but the addinfourl
+        # class isn't prepared to deal with a persistent connection.
+        # It will try to read all remaining data from the socket,
+        # which will block while the server waits for the next request.
+        # So make sure the connection gets closed after the (only)
+        # request.
+        headers["Connection"] = "close"
+        headers = {name.title(): val for name, val in headers.items()}
+    
+        if req._tunnel_host:
+            tunnel_headers = {}
+            proxy_auth_hdr = "Proxy-Authorization"
+            if proxy_auth_hdr in headers:
+                tunnel_headers[proxy_auth_hdr] = headers[proxy_auth_hdr]
+                # Proxy-Authorization should not be sent to origin
+                # server.
+                del headers[proxy_auth_hdr]
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
+    
+        try:
+            try:
+>               h.request(req.get_method(), req.selector, req.data, headers,
+                          encode_chunked=req.has_header('Transfer-encoding'))
+
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:1357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1386: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1432: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1381: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1141: in _send_output
+    self.send(msg)
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1085: in send
+    self.connect()
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/http/client.py:1051: in connect
+    self.sock = self._create_connection(
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/socket.py:865: in create_connection
+    raise exceptions[0]
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+address = ('localhost', 11434), timeout = 15, source_address = None
+all_errors = False
+
+    def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT,
+                          source_address=None, *, all_errors=False):
+        """Connect to *address* and return the socket object.
+    
+        Convenience function.  Connect to *address* (a 2-tuple ``(host,
+        port)``) and return the socket object.  Passing the optional
+        *timeout* parameter will set the timeout on the socket instance
+        before attempting to connect.  If no *timeout* is supplied, the
+        global default timeout setting returned by :func:`getdefaulttimeout`
+        is used.  If *source_address* is set it must be a tuple of (host, port)
+        for the socket to bind as a source address before making the connection.
+        A host of '' or port 0 tells the OS to use the default. When a connection
+        cannot be created, raises the last error if *all_errors* is False,
+        and an ExceptionGroup of all errors if *all_errors* is True.
+        """
+    
+        host, port = address
+        exceptions = []
+        for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket(af, socktype, proto)
+                if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+                    sock.settimeout(timeout)
+                if source_address:
+                    sock.bind(source_address)
+>               sock.connect(sa)
+E               PermissionError: [Errno 1] Operation not permitted
+
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/socket.py:850: PermissionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/private/var/folders/6c/s7_yh4656l3gryb6pc1kjgl80000gq/T/pytest-of-aluno2/pytest-11/test_synthetic_smoke_checkpoin0')
+
+    def test_synthetic_smoke_checkpoint_e_isolamento_de_manifesto(tmp_path: Path) -> None:
+        report_path = tmp_path / "resultado.json"
+        report_path.write_text(json.dumps(_sample_report(execucao_real=True)), encoding="utf-8")
+        eval_dir = tmp_path / "eval"
+    
+        first = evaluate_report(report_path=report_path, eval_dir=eval_dir, synthetic_smoke=True)
+        assert first["status_cientifico"] == "SMOKE_SINTETICO_NAO_E_EVIDENCIA"
+        assert first["execucao_real"] is False
+        assert first["revisao_humana_realizada"] is False
+        assert (eval_dir / "avaliacao_automatica.json").exists()
+        assert (eval_dir / "avaliacao_automatica.md").exists()
+    
+        with pytest.raises(ValueError, match="Experimento incompatível"):
+>           evaluate_report(
+                report_path=report_path,
+                eval_dir=eval_dir,
+                synthetic_smoke=False,
+                judge=_FakeJudge(
+                    CaseJudgeRubric(
+                        fidelidade_0_10=10,
+                        completude_0_10=10,
+                        clareza_relevancia_0_10=10,
+                        seguranca_postura_0_10=10,
+                        afirmacoes_corretas=["ok"],
+                        afirmacoes_contraditas=[],
+                        afirmacoes_nao_verificaveis=[],
+                        omissoes_relevantes=[],
+                        veredito="APROVADO",
+                        justificativa_honesta="ok",
+                    )
+                ),
+                com_ragas=False,
+            )
+
+backend/tests/unit/test_semana4_avaliacao.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+evals/runners/semana4_avaliacao.py:651: in evaluate_report
+    else ollama_identity(
+evals/runners/local_preflight.py:17: in ollama_identity
+    version = get("/api/version")["version"]
+              ^^^^^^^^^^^^^^^^^^^
+evals/runners/local_preflight.py:14: in get
+    with urllib.request.urlopen(f"{base}{path}", timeout=15) as response:  # nosec B310
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:1386: in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <urllib.request.HTTPHandler object at 0x10da399d0>
+http_class = <class 'http.client.HTTPConnection'>
+req = <urllib.request.Request object at 0x10da399a0>, http_conn_args = {}
+
+    def do_open(self, http_class, req, **http_conn_args):
+        """Return an HTTPResponse object for the request, using http_class.
+    
+        http_class must implement the HTTPConnection API from http.client.
+        """
+        host = req.host
+        if not host:
+            raise URLError('no host given')
+    
+        # will parse host:port
+        h = http_class(host, timeout=req.timeout, **http_conn_args)
+        h.set_debuglevel(self._debuglevel)
+    
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items()
+                        if k not in headers})
+    
+        # TODO(jhylton): Should this be redesigned to handle
+        # persistent connections?
+    
+        # We want to make an HTTP/1.1 request, but the addinfourl
+        # class isn't prepared to deal with a persistent connection.
+        # It will try to read all remaining data from the socket,
+        # which will block while the server waits for the next request.
+        # So make sure the connection gets closed after the (only)
+        # request.
+        headers["Connection"] = "close"
+        headers = {name.title(): val for name, val in headers.items()}
+    
+        if req._tunnel_host:
+            tunnel_headers = {}
+            proxy_auth_hdr = "Proxy-Authorization"
+            if proxy_auth_hdr in headers:
+                tunnel_headers[proxy_auth_hdr] = headers[proxy_auth_hdr]
+                # Proxy-Authorization should not be sent to origin
+                # server.
+                del headers[proxy_auth_hdr]
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
+    
+        try:
+            try:
+                h.request(req.get_method(), req.selector, req.data, headers,
+                          encode_chunked=req.has_header('Transfer-encoding'))
+            except OSError as err: # timeout error
+>               raise URLError(err)
+E               urllib.error.URLError: <urlopen error [Errno 1] Operation not permitted>
+
+../../.local/share/uv/python/cpython-3.12.16-macos-aarch64-none/lib/python3.12/urllib/request.py:1360: URLError
+----------------------------- Captured stderr call -----------------------------
+{"ts": "2026-11-19T13:16:45.569715+00:00", "nivel": "INFO", "logger": "app.seguranca", "mensagem": "decisao_saida_llm", "request_id": "-", "seguranca_saida_aprovada": true, "seguranca_saida_motivos": []}
+{"ts": "2026-11-19T13:16:45.569809+00:00", "nivel": "INFO", "logger": "app.seguranca", "mensagem": "decisao_saida_llm", "request_id": "-", "seguranca_saida_aprovada": true, "seguranca_saida_motivos": []}
+[juiz] qwen2.5:7b / procuracao_fralda: nota=8.3 (APROVADO)
+{"ts": "2026-11-19T13:16:45.570139+00:00", "nivel": "INFO", "logger": "app.seguranca", "mensagem": "decisao_saida_llm", "request_id": "-", "seguranca_saida_aprovada": true, "seguranca_saida_motivos": []}
+------------------------------ Captured log call -------------------------------
+INFO     app.seguranca:saida.py:108 decisao_saida_llm
+INFO     app.seguranca:saida.py:108 decisao_saida_llm
+INFO     app.seguranca:saida.py:108 decisao_saida_llm
+=========================== short test summary info ============================
+FAILED backend/tests/unit/test_semana4_avaliacao.py::test_synthetic_smoke_checkpoint_e_isolamento_de_manifesto
+1 failed, 435 passed in 6.97s

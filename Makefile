@@ -50,6 +50,7 @@ help:
 	@echo "  make demo-agents           - Executa os 5 cenários da orquestração Semana 4 via API"
 	@echo "  make semana4-pilot         - Piloto MacBook/Ollama (2 cenários, Qwen2.5 7B vs 14B)"
 	@echo "  make semana4-compare       - Comparativo completo Semana 4 no Ollama local"
+	@echo "  make semana4-eval          - Avaliação automatizada Semana 4 (controles + Juiz LLM + RAGAS)"
 	@echo "  make registrar-avaliacoes  - Registra no MLflow os resultados de uma rodada (ROTULO=..., ARTEFATOS=...)"
 	@echo "  make mlflow-ui             - Abre o MLflow local em http://127.0.0.1:5050"
 	@echo "  make docker-build  - Constrói a imagem Docker do backend"
@@ -151,9 +152,9 @@ semana3-quatro-bracos-v3:
 
 guardrail-holdout:
 	@test -f "$(HOLDOUT)" || (echo "Holdout ausente: $(HOLDOUT). Siga evals/configs/protocolo_holdout_guardrail.md"; exit 1)
-	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.clinical:deve_bloquear --relatorio holdout_camada1.json
-	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear --relatorio holdout_camada2.json
-	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear_combinado --relatorio holdout_combinado.json
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.clinical:deve_bloquear --max-falso-bloqueio 0.05 --relatorio holdout_camada1.json
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear --max-falso-bloqueio 0.05 --relatorio holdout_camada2.json
+	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear_combinado --max-falso-bloqueio 0.05 --relatorio holdout_combinado.json
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .
@@ -162,9 +163,12 @@ clean:
 	uv run --project backend python -c "import pathlib, shutil; root = pathlib.Path('.'); [shutil.rmtree(p, ignore_errors=True) for name in ('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache') for p in root.rglob(name) if '.venv' not in p.parts]; [p.unlink(missing_ok=True) for p in root.rglob('*.pyc') if '.venv' not in p.parts]"
 
 S4_PILOT_DIR ?= evals/reports/semana4_piloto
-S4_RUN_DIR ?= evals/reports/semana4_comparativo
+S4_RUN_DIR ?= evals/reports/semana4_comparativo_v3
+S4_RESULTADO ?= $(S4_RUN_DIR)/resultado.json
+S4_EVAL_DIR ?= $(S4_RUN_DIR)/avaliacao
+S4_EVAL_MODEL ?= $(LOCAL_MODEL)
 
-.PHONY: demo-agents semana4-pilot semana4-compare
+.PHONY: demo-agents semana4-pilot semana4-compare semana4-eval
 demo-agents:
 	cd backend && uv run python -m app.agents.demo
 
@@ -173,6 +177,9 @@ semana4-pilot:
 
 semana4-compare:
 	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)"
+
+semana4-eval:
+	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)"
 
 # Monitoramento: o MLflow fica fora do uv.lock (entra só nestes alvos, versão fixa).
 # Ex.: make registrar-avaliacoes ROTULO=semana4-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo/resultado.json"

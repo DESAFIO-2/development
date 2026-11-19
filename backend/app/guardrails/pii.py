@@ -12,8 +12,6 @@ import unicodedata
 
 from app.application.ports import PIIMaskingDTO
 
-PIIMaskingResult = PIIMaskingDTO
-
 _TERMOS_NAO_PESSOA: frozenset[str] = frozenset(
     {
         "distrito federal",

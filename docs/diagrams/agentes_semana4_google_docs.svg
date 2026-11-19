@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1750" height="1750" viewBox="0 0 1750 1750"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10" fill="none" stroke="#52647a" stroke-width="1.8"/></marker><marker id="red" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10" fill="none" stroke="#ad4350" stroke-width="1.8"/></marker></defs><rect width="1750" height="1750" fill="white"/><g transform="translate(175 0)">
+<text x="700" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#16375b">Como os agentes trabalham</text>
+<text x="700" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="29" font-weight="normal" fill="#27394e">SUS Cidadão • fluxo da Semana 4</text>
+<rect x="350" y="155" width="700" height="110" rx="22" fill="#edf4fc" stroke="#bbcbdc" stroke-width="2.5"/>
+<text x="700" y="200" text-anchor="middle" font-family="Arial, sans-serif" font-size="29" font-weight="bold" fill="#16375b">SOLICITAÇÃO DO CIDADÃO</text>
+<text x="700" y="240" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">Medicamentos, região e dúvida sobre o SUS</text>
+<path d="M700 265 V310" fill="none" stroke="#52647a" stroke-width="4"  marker-end="url(#arrow)"/>
+<rect x="350" y="320" width="700" height="210" rx="22" fill="#f3f7fc" stroke="#bbcbdc" stroke-width="2.5"/>
+<text x="700" y="370" text-anchor="middle" font-family="Arial, sans-serif" font-size="35" font-weight="bold" fill="#16375b">1. TRIAGEM</text>
+<text x="700" y="418" text-anchor="middle" font-family="Arial, sans-serif" font-size="29" font-weight="normal" fill="#27394e">Verifica segurança e mascara dados pessoais.</text>
+<text x="700" y="460" text-anchor="middle" font-family="Arial, sans-serif" font-size="29" font-weight="normal" fill="#27394e">Bloqueia pedidos clínicos ou maliciosos.</text>
+<text x="700" y="499" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="normal" fill="#27394e">Em emergência, orienta buscar atendimento.</text>
+<path d="M700 530 V590 H375 V645" fill="none" stroke="#52647a" stroke-width="4"  marker-end="url(#arrow)"/>
+<path d="M700 590 H985 V645" fill="none" stroke="#52647a" stroke-width="4"  marker-end="url(#arrow)"/>
+<text x="730" y="570" text-anchor="start" font-family="Arial, sans-serif" font-size="25" font-weight="normal" fill="#52647a">Entrada segura</text>
+<rect x="100" y="655" width="550" height="280" rx="22" fill="#f3f7fc" stroke="#bbcbdc" stroke-width="2.5"/>
+<rect x="710" y="655" width="550" height="280" rx="22" fill="#f3f7fc" stroke="#bbcbdc" stroke-width="2.5"/>
+<text x="375" y="705" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#16375b">2. AUDITOR</text>
+<text x="375" y="746" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#16375b">FARMACÊUTICO</text>
+<text x="375" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">Confere os itens no catálogo SUS.</text>
+<text x="375" y="842" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">Calcula rotas e documentos.</text>
+<text x="375" y="886" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="normal" fill="#27394e">Vincula as evidências de cada item.</text>
+<text x="985" y="705" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#16375b">3. CONSULTOR</text>
+<text x="985" y="746" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#16375b">NORMATIVO</text>
+<text x="985" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">Busca regras e orientações</text>
+<text x="985" y="837" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">nos trechos normativos.</text>
+<text x="985" y="886" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="normal" fill="#27394e">Considera a dúvida e a região.</text>
+<text x="680" y="974" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="bold" fill="#52647a">Os agentes 2 e 3 executam em paralelo.</text>
+<path d="M375 935 V1015 H700 V1085" fill="none" stroke="#52647a" stroke-width="4"  marker-end="url(#arrow)"/>
+<path d="M985 935 V1015 H700" fill="none" stroke="#52647a" stroke-width="4"/>
+<text x="735" y="1060" text-anchor="start" font-family="Arial, sans-serif" font-size="24" font-weight="normal" fill="#52647a">Aguarda os dois resultados.</text>
+<path d="M1050 425 H1320 V1230 H1070" fill="none" stroke="#ad4350" stroke-width="4" stroke-dasharray="10 8" marker-end="url(#red)"/>
+<rect x="1090" y="477" width="280" height="110" rx="22" fill="#fff5f5" stroke="#e7c4c8" stroke-width="2.5"/>
+<text x="1230" y="519" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="bold" fill="#9b3543">Entrada bloqueada</text>
+<text x="1230" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="normal" fill="#9b3543">vai direto à síntese</text>
+<rect x="330" y="1095" width="740" height="265" rx="22" fill="#eef8f3" stroke="#9ccab5" stroke-width="2.5"/>
+<text x="700" y="1146" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="bold" fill="#205b45">4. SINTETIZADOR CIDADÃO</text>
+<text x="700" y="1197" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="normal" fill="#27394e">Reúne e valida as evidências e a resposta.</text>
+<text x="700" y="1240" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="normal" fill="#27394e">Mantém o cartão calculado por código.</text>
+<text x="700" y="1283" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="normal" fill="#27394e">Se habilitada, a IA explica os trechos recuperados.</text>
+<text x="700" y="1325" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="normal" fill="#27394e">No bloqueio, retorna a orientação de segurança.</text>
+<path d="M700 1360 V1410" fill="none" stroke="#52647a" stroke-width="4"  marker-end="url(#arrow)"/>
+<rect x="250" y="1420" width="900" height="125" rx="22" fill="#edf4fc" stroke="#bbcbdc" stroke-width="2.5"/>
+<text x="700" y="1468" text-anchor="middle" font-family="Arial, sans-serif" font-size="31" font-weight="bold" fill="#16375b">RESPOSTA AO CIDADÃO</text>
+<text x="700" y="1512" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="normal" fill="#27394e">Orientação, locais, documentos e fontes — ou bloqueio/abstenção.</text>
+<text x="700" y="1610" text-anchor="middle" font-family="Arial, sans-serif" font-size="29" font-weight="bold" fill="#16375b">3 agentes determinísticos + 1 síntese com IA opcional</text>
+<text x="700" y="1658" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="normal" fill="#27394e">A IA não decide cobertura nem prescreve medicamentos.</text>
+<text x="700" y="1700" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="normal" fill="#27394e">Cada solicitação é independente: não há memória entre requisições.</text>
+</g></svg>

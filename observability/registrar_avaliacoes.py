@@ -11,9 +11,10 @@ para registrar rodadas antigas a partir das evidências publicadas.
 Artefatos aceitos:
   --guardrail     evals/reports/<--relatorio>.json (guardrail_runner.py)
   --seguranca     <SEG_DIR>/seguranca.json (suite_seguranca.py)
-  --ragas         <RUN_DIR>/avaliacao_ragas.json (semana3_local.py), pode repetir
-  --quatro-bracos <QUATRO_DIR>/quatro_bracos.json (consolidar_quatro_bracos.py)
-  --semana4       <S4_RUN_DIR>/resultado.json (semana4_comparativo.py)
+  --ragas              <RUN_DIR>/avaliacao_ragas.json (semana3_local.py), pode repetir
+  --quatro-bracos      <QUATRO_DIR>/quatro_bracos.json (consolidar_quatro_bracos.py)
+  --semana4            <S4_RUN_DIR>/resultado.json (semana4_comparativo.py)
+  --semana4-avaliacao  <S4_EVAL_DIR>/avaliacao_automatica.json (semana4_avaliacao.py)
 
 Registrar o mesmo artefato duas vezes não duplica: a execução é identificada pelo
 SHA-256 do arquivo e pelo nome da execução.
@@ -28,7 +29,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
+import os
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -241,12 +244,61 @@ def registros_semana4(relatorio: dict[str, Any]) -> list[Registro]:
     return registros
 
 
+def registros_semana4_avaliacao(relatorio: dict[str, Any]) -> list[Registro]:
+    """Um registro por modelo avaliado com notas 0-10 e métricas RAGAS."""
+    registros = []
+    for modelo, resumo in (relatorio.get("resumos_por_modelo") or {}).items():
+        metricas = _metricas(
+            (chave, resumo.get(chave))
+            for chave in (
+                "nota_qualidade_geral_0_10",
+                "nota_deterministica_0_10",
+                "nota_juiz_llm_0_10",
+                "media_fidelidade_0_10",
+                "media_completude_0_10",
+                "media_clareza_relevancia_0_10",
+                "media_seguranca_postura_0_10",
+                "afirmacoes_corretas",
+                "afirmacoes_contraditas",
+                "afirmacoes_nao_verificaveis",
+                "casos_com_omissoes",
+                "ragas_faithfulness",
+                "ragas_answer_relevancy",
+                "p95_wall_ms",
+            )
+        )
+        metricas["revisao_humana_realizada"] = (
+            1.0 if relatorio.get("revisao_humana_realizada") else 0.0
+        )
+        registros.append(
+            Registro(
+                run_name=f"semana4_avaliacao_{modelo}",
+                params={
+                    "model": str(modelo),
+                    "evaluator_model": str(relatorio.get("evaluator_model", "")),
+                    "embedding_model": str(relatorio.get("embedding_model") or ""),
+                    "rubric_version": str(relatorio.get("rubric_version", "")),
+                },
+                metrics=metricas,
+                tags={
+                    "suite": "semana4_avaliacao",
+                    "status_cientifico": str(relatorio.get("status_cientifico", "")),
+                    "status_modelo": str(resumo.get("status_modelo", "")),
+                    "execucao_real": str(relatorio.get("execucao_real", "")),
+                    "executado_em": str(relatorio.get("timestamp_utc", "")),
+                },
+            )
+        )
+    return registros
+
+
 EXTRATORES = {
     "guardrail": registros_guardrail,
     "seguranca": registros_seguranca,
     "ragas": registros_ragas,
     "quatro_bracos": registros_quatro_bracos,
     "semana4": registros_semana4,
+    "semana4_avaliacao": registros_semana4_avaliacao,
 }
 
 
@@ -261,6 +313,31 @@ def ja_registrados(pasta_runs: Path) -> set[tuple[str, str]]:
     return vistos
 
 
+def ja_registrados_no_mlflow(tracker: MLflowExperimentTracker) -> set[tuple[str, str]] | None:
+    """Pares (sha256, run_name) presentes no MLflow ativo, ou None se mlflow não estiver ativo."""
+    try:
+        mlflow_mod: Any = importlib.import_module("mlflow")
+    except ModuleNotFoundError:
+        return None
+    try:
+        uri = os.environ.get("MLFLOW_TRACKING_URI") or tracker.uri_mlflow_padrao()
+        mlflow_mod.set_tracking_uri(uri)
+        experimento = mlflow_mod.get_experiment_by_name(tracker.experiment_name)
+        if experimento is None:
+            return set()
+        runs = mlflow_mod.search_runs(
+            experiment_ids=[experimento.experiment_id], output_format="list"
+        )
+        return {
+            (str(sha), str(tags.get("mlflow.runName", "")))
+            for run in runs
+            if (tags := run.data.tags) and (sha := tags.get("artefato_sha256"))
+        }
+    except Exception as exc:  # noqa: BLE001 - manter registro local recuperável
+        print(f"Aviso: consulta MLflow falhou; sincronização adiada: {exc}", file=sys.stderr)
+        return None
+
+
 def registrar(
     tracker: MLflowExperimentTracker, tipo: str, caminho: Path, rotulo: str
 ) -> tuple[int, int]:
@@ -268,18 +345,41 @@ def registrar(
     bruto = caminho.read_bytes()
     sha = hashlib.sha256(bruto).hexdigest()
     relatorio = json.loads(bruto.decode("utf-8"))
-    vistos = ja_registrados(tracker.pasta_runs)
+    em_json = ja_registrados(tracker.pasta_runs)
+    em_mlflow = ja_registrados_no_mlflow(tracker)
     novos = pulados = 0
     for registro in EXTRATORES[tipo](relatorio):
-        if (sha, registro.run_name) in vistos:
+        chave = (sha, registro.run_name)
+        extra_tags = registro.tags | {
+            "rotulo": rotulo,
+            "artefato": caminho.name,
+            "artefato_sha256": sha,
+            "linhagem_experimento": "NAO_INFORMADA_NO_ARTEFATO",
+            **{
+                f"ambiente_importacao_{k}": v
+                for k, v in tracker.carregar_linhagem_manifesto().items()
+            },
+        }
+        if chave in em_json:
+            if em_mlflow is not None and chave not in em_mlflow:
+                if tracker.registrar_no_mlflow(
+                    run_name=registro.run_name,
+                    params=registro.params,
+                    metrics=registro.metrics,
+                    extra_tags=extra_tags,
+                    include_current_lineage=False,
+                ):
+                    novos += 1
+                    continue
             pulados += 1
             continue
         tracker.registrar_execucao(
             run_name=registro.run_name,
             params=registro.params,
             metrics=registro.metrics,
-            extra_tags=registro.tags
-            | {"rotulo": rotulo, "artefato": caminho.name, "artefato_sha256": sha},
+            extra_tags=extra_tags,
+            include_current_lineage=False,
+            log_native=em_mlflow is not None and chave not in em_mlflow,
         )
         novos += 1
     return novos, pulados
@@ -293,6 +393,7 @@ def main() -> int:
     parser.add_argument("--ragas", type=Path, action="append", default=[])
     parser.add_argument("--quatro-bracos", type=Path, action="append", default=[])
     parser.add_argument("--semana4", type=Path, action="append", default=[])
+    parser.add_argument("--semana4-avaliacao", type=Path, action="append", default=[])
     args = parser.parse_args()
     pedidos = [
         (tipo, caminho)
@@ -302,6 +403,7 @@ def main() -> int:
             ("ragas", args.ragas),
             ("quatro_bracos", args.quatro_bracos),
             ("semana4", args.semana4),
+            ("semana4_avaliacao", args.semana4_avaliacao),
         )
         for caminho in caminhos
     ]

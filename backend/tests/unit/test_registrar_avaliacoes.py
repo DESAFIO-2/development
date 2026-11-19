@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from observability.mlflow_tracker import MLflowExperimentTracker
 from observability.registrar_avaliacoes import (
@@ -14,6 +17,7 @@ from observability.registrar_avaliacoes import (
     registros_ragas,
     registros_seguranca,
     registros_semana4,
+    registros_semana4_avaliacao,
 )
 
 
@@ -126,3 +130,109 @@ def test_semana4_um_registro_por_modelo_com_meta_de_latencia() -> None:
     assert registros["semana4_qwen2.5:7b"].metrics["dentro_meta_rnf04_8s"] == 1.0
     assert "p95_wall_ms" not in registros["semana4_qwen2.5:14b"].metrics
     assert registros["semana4_qwen2.5:14b"].tags["status_cientifico"].startswith("COLETA")
+
+
+def test_backfill_mlflow_quando_json_ja_existe_sem_duplicar_arquivo(tmp_path: Path) -> None:
+    artefato = tmp_path / "seguranca.json"
+    artefato.write_text(json.dumps(_seguranca()), encoding="utf-8")
+    tracker = MLflowExperimentTracker(raiz_repo=tmp_path)
+
+    # 1ª rodada sem MLflow ativo: grava apenas JSON local.
+    assert registrar(tracker, "seguranca", artefato, "teste") == (2, 0)
+    arquivos_iniciais = list(tracker.pasta_runs.glob("run_*.json"))
+    assert len(arquivos_iniciais) == 2
+
+    # 2ª rodada com MLflow ativo, mas ainda vazio: sincroniza no MLflow sem duplicar JSON.
+    registrados_mlflow: list[str] = []
+
+    class _RunCtx:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def _start_run(run_name: str) -> _RunCtx:
+        registrados_mlflow.append(run_name)
+        return _RunCtx()
+
+    fake_mlflow = types.SimpleNamespace(
+        set_tracking_uri=lambda uri: None,
+        set_experiment=lambda name: None,
+        get_experiment_by_name=lambda name: None,
+        start_run=_start_run,
+        log_params=lambda p: None,
+        log_metrics=lambda m: None,
+        set_tags=lambda t: None,
+    )
+    with patch.dict(sys.modules, {"mlflow": fake_mlflow}):
+        assert registrar(tracker, "seguranca", artefato, "teste") == (2, 0)
+
+    assert len(list(tracker.pasta_runs.glob("run_*.json"))) == 2
+    assert sorted(registrados_mlflow) == ["seguranca_B_llm_com_rag", "seguranca_C_rag_sem_llm"]
+
+
+def test_semana4_avaliacao_registra_notas_e_ragas() -> None:
+    relatorio = {
+        "rubric_version": "semana4-eval-v1",
+        "evaluator_model": "qwen2.5:14b",
+        "embedding_model": "bge-m3",
+        "execucao_real": True,
+        "revisao_humana_realizada": False,
+        "status_cientifico": "AVALIACAO_AUTOMATICA_CONCLUIDA_SEM_REVISAO_HUMANA",
+        "timestamp_utc": "2026-11-19T12:35:00+00:00",
+        "resumos_por_modelo": {
+            "qwen2.5:7b": {
+                "status_modelo": "APROVADO_COM_OMISSOES_PENDENTE_REVISAO",
+                "nota_qualidade_geral_0_10": 8.95,
+                "nota_deterministica_0_10": 10.0,
+                "nota_juiz_llm_0_10": 8.5,
+                "media_fidelidade_0_10": 9.3,
+                "media_completude_0_10": 7.5,
+                "afirmacoes_contraditas": 0,
+                "casos_com_omissoes": 1,
+                "ragas_faithfulness": 0.94,
+                "ragas_answer_relevancy": 0.91,
+                "p95_wall_ms": 17867.63,
+            }
+        },
+    }
+    [registro] = registros_semana4_avaliacao(relatorio)
+    assert registro.run_name == "semana4_avaliacao_qwen2.5:7b"
+    assert registro.metrics["nota_qualidade_geral_0_10"] == 8.95
+    assert registro.metrics["ragas_faithfulness"] == 0.94
+    assert registro.metrics["revisao_humana_realizada"] == 0.0
+    assert registro.tags["status_modelo"] == "APROVADO_COM_OMISSOES_PENDENTE_REVISAO"
+
+
+def test_backfill_reverso_preserva_mlflow_e_reconstroi_json(tmp_path: Path) -> None:
+    import hashlib
+
+    artefato = tmp_path / "seguranca.json"
+    artefato.write_text(json.dumps(_seguranca()))
+    sha = hashlib.sha256(artefato.read_bytes()).hexdigest()
+    tracker = MLflowExperimentTracker(raiz_repo=tmp_path)
+    native = {(sha, r.run_name) for r in registros_seguranca(_seguranca())}
+    with (
+        patch("observability.registrar_avaliacoes.ja_registrados_no_mlflow", return_value=native),
+        patch.object(tracker, "_log_to_native_mlflow_if_available") as log,
+    ):
+        assert registrar(tracker, "seguranca", artefato, "restauracao") == (2, 0)
+        assert registrar(tracker, "seguranca", artefato, "restauracao") == (0, 2)
+        log.assert_not_called()
+    assert len(list(tracker.pasta_runs.glob("run_*.json"))) == 2
+
+
+def test_backfill_nao_atribui_corpus_atual_ao_experimento(tmp_path: Path) -> None:
+    artefato = tmp_path / "seguranca.json"
+    artefato.write_text(json.dumps(_seguranca()))
+    tracker = MLflowExperimentTracker(raiz_repo=tmp_path)
+    with patch.object(
+        tracker, "carregar_linhagem_manifesto", return_value={"combined_sha256": "novo"}
+    ):
+        registrar(tracker, "seguranca", artefato, "historico")
+    for file in tracker.pasta_runs.glob("run_*.json"):
+        tags = json.loads(file.read_text())["tags"]
+        assert "combined_sha256" not in tags
+        assert tags["ambiente_importacao_combined_sha256"] == "novo"
+        assert tags["linhagem_experimento"] == "NAO_INFORMADA_NO_ARTEFATO"
