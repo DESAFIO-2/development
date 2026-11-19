@@ -57,7 +57,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB tabular, BM25 e TF-IDF com RRF (sem ChromaDB em runtime). |
 | **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
-| **Multiagentes Especializados** | Semana 4 | Implementados na `main`; comparativo local Ollama (`semana4-v2`) executado | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
+| **Multiagentes Especializados** | Semana 4 |  ✅  Implementados na `main`; comparativo local Ollama (`semana4-v2`) executado | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
 | **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
 ---
