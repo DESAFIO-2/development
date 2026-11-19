@@ -28,8 +28,7 @@ from app.agents.demo import DEMO_SCENARIOS
 from app.agents.orchestrator import LangGraphOrchestrator
 from app.application.agents import AgentRequest, GenerationFailure
 from app.application.ports import GenerationResultDTO, GeneratorPort, RetrievalHitDTO
-from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
-from app.container import ServiceContainer, build_services
+from app.container import ServiceContainer, build_orchestrator, build_services
 from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS, OllamaRESTGeneratorAdapter
 from evals.runners.artifacts import (
     atomic_json,
@@ -65,6 +64,8 @@ class Semana4CaseResult:
 
 class SyntheticSmokeGenerator(GeneratorPort):
     """Fixture explícita somente para --synthetic-smoke; nunca representa evidência científica."""
+
+    prompt_version: str = PROMPT_VERSION_AGENTS
 
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
@@ -106,26 +107,6 @@ def _checkpoint_path(
         }
     )
     return run_dir / "checkpoints" / f"{model.replace(':', '_')}_{case_id}_{key[:10]}.json"
-
-
-def _build_orchestrator(
-    services: ServiceContainer,
-    generator: GeneratorPort | None,
-) -> LangGraphOrchestrator:
-    auditor = AuditPrescriptionUseCase(
-        medication_repo=services.medication_repo,
-        retriever=services.hybrid_retriever,
-        guardrail=services.guardrail,
-        tabular_matcher=services.tabular_matcher,
-        evidence_repo=services.evidence_chunk_repo,
-    )
-    return LangGraphOrchestrator(
-        auditor=auditor,
-        guardrail=services.guardrail,
-        retriever=services.hybrid_retriever,
-        generator=generator,
-        public_context=services.public_context,
-    )
 
 
 def _run_case(
@@ -274,9 +255,10 @@ def run_comparison(
                 model_name=model,
                 timeout_seconds=timeout_seconds,
                 prompt_version=PROMPT_VERSION_AGENTS,
+                skip_input_guardrail=True,
             )
         )
-        orchestrator = _build_orchestrator(resolved_services, generator)
+        orchestrator = build_orchestrator(resolved_services, generator)
         entries: list[dict[str, Any]] = []
         for case_id, payload in scenarios:
             ckpt = _checkpoint_path(
@@ -379,7 +361,7 @@ def main() -> int:
     )
     parser.add_argument("--models", nargs="+", default=list(DEFAULT_MODELS))
     parser.add_argument("--base-url", default="http://localhost:11434")
-    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--pilot", action="store_true", help="Executa somente os 2 primeiros casos")
     parser.add_argument(
