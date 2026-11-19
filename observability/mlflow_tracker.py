@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
+import sys
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -150,19 +152,32 @@ class MLflowExperimentTracker:
         metrics: dict[str, float],
         tags: dict[str, str],
     ) -> None:
-        """Envia telemetria ao MLflow nativo se a biblioteca estiver instalada."""
+        """Envia telemetria ao MLflow nativo se a biblioteca estiver instalada.
+
+        O MLflow 3.x recusa o backend de pastas (`./mlruns`); por isso o padrão é SQLite
+        em `evals/reports/mlflow.db` (ou `MLFLOW_TRACKING_URI`, se definido). Falha do
+        MLflow nunca derruba a avaliação: o registro JSON local continua sendo a fonte.
+        """
         try:
             mlflow_mod: Any = importlib.import_module("mlflow")
         except ModuleNotFoundError:
             return
 
-        tracking_dir = self.raiz_repo / "evals" / "reports" / "mlruns"
-        mlflow_mod.set_tracking_uri(tracking_dir.as_uri())
-        mlflow_mod.set_experiment(self.experiment_name)
-        with mlflow_mod.start_run(run_name=run_name):
-            mlflow_mod.log_params(params)
-            mlflow_mod.log_metrics(metrics)
-            mlflow_mod.set_tags(tags)
+        try:
+            uri = os.environ.get("MLFLOW_TRACKING_URI") or self.uri_mlflow_padrao()
+            mlflow_mod.set_tracking_uri(uri)
+            mlflow_mod.set_experiment(self.experiment_name)
+            with mlflow_mod.start_run(run_name=run_name):
+                mlflow_mod.log_params(params)
+                mlflow_mod.log_metrics(metrics)
+                mlflow_mod.set_tags(tags)
+        except Exception as erro:  # noqa: BLE001 - monitoramento não pode quebrar a avaliação
+            print(f"Aviso: MLflow não registrou '{run_name}': {erro}", file=sys.stderr)
+
+    def uri_mlflow_padrao(self) -> str:
+        banco = self.raiz_repo / "evals" / "reports" / "mlflow.db"
+        banco.parent.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{banco.as_posix()}"
 
 
 __all__ = ["ExperimentRunRecord", "MLflowExperimentTracker"]
