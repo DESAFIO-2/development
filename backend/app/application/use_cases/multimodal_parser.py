@@ -108,9 +108,14 @@ _SECAO_POSOLOGIA_PREFIX_RE = re.compile(
 
 # Qualquer intenção de pergunta cidadã, alteração de dose ou jailbreak impede a omissão no PDF.
 _INTENCAO_CIDADAO_PDF_RE = re.compile(
-    r"\?|\b(?:o\s+que|qual|quais|posso|pode|devo|como\s+eu|me\s+indique|me\s+receite"
+    r"\?|\b(?:o\s+que|qual|quais|posso"
+    r"|pode\s+(?:me|nos|tomar|dar|usar|partir|quebrar|dobrar|trocar"
+    r"|substituir|passar|indicar|receitar|prescrever)"
+    r"|devo|como\s+eu|como\s+(?:eu\s+)?(?:usar|tomar|aplicar)|me\s+indique|me\s+receite"
     r"|prescreva|estou\s+com|sinto|dobre|dobro|duplique|aumente|aumento|diminua|reduza"
     r"|pare|paro|suspenda|troque|substitua|mude|parta|quebre|divida|faz\s+mal"
+    r"|interac(?:ao|oes)|interage\w*\s+com|efeito\w*\s+colatera\w*"
+    r"|reac(?:ao|oes)\s+adversa\w*"
     r"|de\s+uma\s+vez|esqueci|regras|instrucoes|prompt|hipotetica|desenvolvedor)\b",
     re.IGNORECASE,
 )

@@ -468,6 +468,27 @@ def test_multimodal_pdf_clinico_legitimo_sisreg_e_posologia_partir_passam(
     assert vias == {"FARMACIA_POPULAR", "SISREG_EXAME_CONSULTA"}
     assert "partir o comprimido" not in json.dumps(body, ensure_ascii=False).lower()
 
+    pdf_pode_descritivo = _construir_pdf_digital(
+        [
+            "GUIA DIGITAL SISREG III — SES-DF",
+            "Exame solicitado: Ecocardiograma Transtorácico",
+            "Justificativa clínica: Dor no peito; quadro pode evoluir para angina.",
+            "1. Losartana Potássica 50 mg - Comprimido",
+        ]
+    )
+    resp_desc = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("guia_pode_evoluir.pdf", pdf_pode_descritivo, "application/pdf")},
+    )
+    assert resp_desc.status_code == 200
+    body_desc = resp_desc.json()
+    assert body_desc["sucesso"] is True
+    assert body_desc["motivo_falha_ou_bloqueio"] is None
+    vias_desc = {
+        it["via_retirada"] for it in body_desc["resultado_agentes"]["card"]["itens_auditados"]
+    }
+    assert vias_desc == {"FARMACIA_POPULAR", "SISREG_EXAME_CONSULTA"}
+
 
 def test_multimodal_pdf_justificativa_com_ataque_ou_emergencia_continua_bloqueado(
     client_com_stt: tuple[TestClient, ServiceContainer],
@@ -500,6 +521,35 @@ def test_multimodal_pdf_justificativa_com_ataque_ou_emergencia_continua_bloquead
     assert resp_emg.status_code == 200
     assert resp_emg.json()["sucesso"] is False
     assert resp_emg.json()["motivo_falha_ou_bloqueio"] == "EMERGENCIA_MEDICA"
+
+    pdf_como_usar = _construir_pdf_digital(
+        [
+            "Justificativa clínica: acompanhamento ambulatorial.",
+            "Como usar paracetamol para dor de cabeca",
+            "1. Losartana Potássica 50 mg - Comprimido",
+        ]
+    )
+    resp_como = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("como_usar.pdf", pdf_como_usar, "application/pdf")},
+    )
+    assert resp_como.status_code == 200
+    assert resp_como.json()["sucesso"] is False
+    assert resp_como.json()["motivo_falha_ou_bloqueio"] == "ATO_MEDICO"
+
+    pdf_interage = _construir_pdf_digital(
+        [
+            "Justificativa clínica: interage com alcool",
+            "1. Losartana Potássica 50 mg - Comprimido",
+        ]
+    )
+    resp_inter = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("interage.pdf", pdf_interage, "application/pdf")},
+    )
+    assert resp_inter.status_code == 200
+    assert resp_inter.json()["sucesso"] is False
+    assert resp_inter.json()["motivo_falha_ou_bloqueio"] == "ATO_MEDICO"
 
 
 def test_multimodal_upload_acima_1mb_permanece_em_ram_e_respeita_teto_413_415(

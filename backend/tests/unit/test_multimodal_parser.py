@@ -224,3 +224,21 @@ def test_texto_pdf_para_guardrail_clinico_poupa_secoes_medicas_e_mantem_ataques(
     filtrado_ataque = texto_pdf_para_guardrail_clinico(disfarce_ataque)
     assert "o que eu tomo?" in filtrado_ataque.lower()
     assert "posso dobrar a dose" in filtrado_ataque.lower()
+
+    pode_descritivo = (
+        "Exame solicitado: Ecocardiograma Transtorácico\n"
+        "Justificativa clínica: Dor no peito; quadro pode evoluir para angina.\n"
+        "1. Losartana Potássica 50 mg - Comprimido\n"
+    )
+    filtrado_descritivo = texto_pdf_para_guardrail_clinico(pode_descritivo)
+    assert "pode evoluir para angina" not in filtrado_descritivo.lower()
+    assert "Ecocardiograma Transtorácico" in filtrado_descritivo
+
+    disfarce_continuacao = (
+        "Justificativa clínica: acompanhamento ambulatorial.\n"
+        "Como usar paracetamol para dor de cabeça\n"
+        "Justificativa clínica: uso contínuo; interage com alcool.\n"
+    )
+    filtrado_continuacao = texto_pdf_para_guardrail_clinico(disfarce_continuacao)
+    assert "como usar paracetamol" in filtrado_continuacao.lower()
+    assert "interage com alcool" in filtrado_continuacao.lower()
