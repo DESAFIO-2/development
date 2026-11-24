@@ -10,7 +10,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY backend/app ./app
-COPY data/processed/medicamentos_sus_canonical.json data/processed/normative_chunks.json data/processed/evidence_chunks_v2.json ./data/processed/
+COPY data/processed/medicamentos_sus_canonical.json data/processed/normative_chunks.json data/processed/evidence_chunks_v3.json ./data/processed/
 ENV APP_DATA_PROCESSED_DIR=/app/data/processed
 
 # Não rodar como root

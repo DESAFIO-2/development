@@ -88,8 +88,9 @@ class ClinicalGuardrail:
             r"\b(?:tomar|tomo|dar|dou|usar|uso|tomaria)\b"
         ),
         re.compile(
-            rf"\b(?:me|nos|pode|poderia)\b(?:\W+\w+){{0,3}}?\W+"
-            rf"\b(?:indica\w*|receit\w*|prescrev\w*|passa\w*|recomenda\w*)\b"
+            rf"\b(?:(?:me|nos|pode|poderia)\b(?:\W+\w+){{0,3}}?\W+"
+            rf"\b(?:indica\w*|receit\w*|prescrev\w*|passa\w*|recomenda\w*)"
+            rf"|\b(?:indique|receite|prescreva|recomende))\b"
             rf"(?:\W+\w+){{0,6}}?\W+\b(?:{_SUBST_TERAPEUTICO}|{_SINTOMA_OU_QUEIXA})\b"
         ),
         re.compile(
@@ -114,9 +115,12 @@ class ClinicalGuardrail:
     _PATTERNS_DOSAGEM: tuple[re.Pattern[str], ...] = (
         # Partir / dividir / quebrar / dobrar / ajustar / suspender medicamento ou dose
         re.compile(
-            r"\b(?:partir|parto|parta|quebrar|quebro|dividir|divido|cortar|corto|amassar|abrir"
-            r"|dobrar|dobro|duplicar|triplicar|aumentar|aumento|diminuir|diminuo|reduzir|reduzo"
-            r"|repetir|repito|parar|paro|suspender|suspendo|interromper)\b"
+            r"\b(?:partir|parto|parta|quebrar|quebro|quebre|dividir|divido|divida"
+            r"|cortar|corto|corte|amassar|amasso|amasse|abrir|abro|abra"
+            r"|dobrar|dobro|dobre|duplicar|duplico|duplique|triplicar|triplico|triplique"
+            r"|aumentar|aumento|aumente|diminuir|diminuo|diminua|reduzir|reduzo|reduza"
+            r"|repetir|repito|repita|parar|paro|pare|suspender|suspendo|suspenda"
+            r"|interromper|interrompo|interrompa)\b"
             rf"(?:\W+\w+){{0,6}}?\W+\b(?:{_SUBST_TERAPEUTICO}|ao meio|no meio|metade|tratamento)\b"
         ),
         # Suspensão/interrupção por conta própria ou antes de coleta/exame (mesmo nomeando fármaco)
@@ -189,13 +193,20 @@ class ClinicalGuardrail:
     # 4. Troca terapêutica, compartilhamento entre pessoas ou substituição por suplemento
     _PATTERNS_TROCA: tuple[re.Pattern[str], ...] = (
         re.compile(
-            r"\b(?:trocar|troco|substitu\w*|alternativa|equivalente|no\s+lugar\s+(?:de|do|da)"
-            r"|em\s+vez\s+(?:de|do|da))\b(?:\W+\w+){0,7}?\W+"
+            r"\b(?:trocar|troco|troque|substitu\w*|mudar|mude|alternativa|equivalente"
+            r"|no\s+lugar\s+(?:de|do|da)|em\s+vez\s+(?:de|do|da))\b(?:\W+\w+){0,7}?\W+"
             rf"\b(?:{_SUBST_TERAPEUTICO}|exame|tratamento|medico|receita|marca|jejum)\b"
         ),
         re.compile(
             r"\b(?:posso|pode|devo|consigo|quero)\b(?:\W+\w+){0,3}?\W+"
             r"\b(?:trocar|substituir|mudar)\b(?:\W+\w+){0,6}?\W+\b(?:pelo|pela|por)\b"
+            r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante|documento|conta)\b)"
+        ),
+        re.compile(
+            r"\b(?:troque|substitua|mude)\b"
+            r"(?!(?:\W+\w+){0,3}?\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante"
+            r"|documento|conta)\b)"
+            r"(?:\W+\w+){0,6}?\W+\b(?:pelo|pela|por)\b"
             r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante|documento|conta)\b)"
         ),
         re.compile(
@@ -297,9 +308,10 @@ class ClinicalGuardrail:
                     return True
         return False
 
-    def inspecionar(self, pergunta: str) -> ClinicalCheckDTO:
-        """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
-        check_injecao = inspecionar_entrada(pergunta, Canal.TEXTO)
+    def inspecionar_clinico(
+        self, pergunta: str, *, injection_blocked: bool = False
+    ) -> ClinicalCheckDTO:
+        """Avalia apenas regras de emergência e Ato Médico, sem re-inspecionar entrada."""
         norm = _normalizar(pergunta)
         if self._tem_emergencia_ativa(norm):
             return ClinicalCheckDTO(
@@ -311,9 +323,7 @@ class ClinicalGuardrail:
 
         # Um rótulo integral do catálogo não é pedido de troca de tratamento.
         # A exceção não cobre prefixos/sufixos e nunca precede emergência/injeção.
-        documentary = (
-            not check_injecao.bloqueado and label_key(pergunta) in self._documentary_labels
-        )
+        documentary = not injection_blocked and label_key(pergunta) in self._documentary_labels
         clausulas = [] if documentary else self._subclausulas_clinicas(norm)
 
         todas_as_regras = (
@@ -334,6 +344,20 @@ class ClinicalGuardrail:
                         mensagem_acolhedora=self._MSG_ATO_MEDICO,
                     )
 
+        return ClinicalCheckDTO(
+            bloqueado=False,
+            motivo="PERMITIDO",
+            alerta_emergencia=False,
+            mensagem_acolhedora="",
+        )
+
+    def inspecionar(self, pergunta: str, *, canal: Canal = Canal.TEXTO) -> ClinicalCheckDTO:
+        """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
+        check_injecao = inspecionar_entrada(pergunta, canal)
+        clinico = self.inspecionar_clinico(pergunta, injection_blocked=check_injecao.bloqueado)
+        if clinico.bloqueado:
+            return clinico
+
         if check_injecao.bloqueado:
             return ClinicalCheckDTO(
                 bloqueado=True,
@@ -347,12 +371,7 @@ class ClinicalGuardrail:
                 ),
             )
 
-        return ClinicalCheckDTO(
-            bloqueado=False,
-            motivo="PERMITIDO",
-            alerta_emergencia=False,
-            mensagem_acolhedora="",
-        )
+        return clinico
 
 
 _GUARDRAIL_GLOBAL = ClinicalGuardrail()

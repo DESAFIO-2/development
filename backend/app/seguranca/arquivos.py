@@ -9,17 +9,20 @@ from __future__ import annotations
 
 import io
 import re
+import struct
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-from pypdf import PdfReader
+from pypdf import PdfReader, apply_configuration
 from pypdf.errors import PdfReadError
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, NullObject
 
 MAX_BYTES_PDF = 5 * 1024 * 1024
 MAX_PAGINAS_PDF = 10
+MAX_TEXTO_PDF_EXTRAIDO = 20_000
 MAX_BYTES_AUDIO = 10 * 1024 * 1024
+MAX_DURACAO_AUDIO_SEGUNDOS = 60.0
 _MAX_OBJETOS_PDF = 5_000
 _MAX_PROFUNDIDADE_PDF = 12
 
@@ -169,6 +172,16 @@ def _nomes_proibidos_estruturais(reader: PdfReader) -> tuple[set[str], bool]:
     return encontrados, incompleta
 
 
+@apply_configuration(
+    maximum_declared_stream_length=262144,
+    zlib_maximum_output_length=262144,
+    lzw_maximum_output_length=262144,
+    run_length_maximum_output_length=262144,
+    brotli_maximum_output_length=262144,
+    array_based_stream_maximum_output_length=262144,
+    stream_decoding_work_maximum_length=524288,
+    stream_parsing_work_maximum_count=20000,
+)
 def validar_pdf(conteudo: bytes) -> ResultadoArquivo:
     if len(conteudo) > MAX_BYTES_PDF:
         return ResultadoArquivo(False, ("PDF_GRANDE_DEMAIS",))
@@ -230,10 +243,38 @@ def _formato_audio(conteudo: bytes) -> str | None:
     return None
 
 
+def estimar_duracao_wav(conteudo: bytes) -> float | None:
+    """Estima duração em segundos de um cabeçalho RIFF/WAVE sem gravar em disco."""
+    if len(conteudo) < 44 or conteudo[:4] != b"RIFF" or conteudo[8:12] != b"WAVE":
+        return None
+    pos = 12
+    byte_rate: int | None = None
+    data_bytes: int | None = None
+    while pos + 8 <= len(conteudo):
+        chunk_id = conteudo[pos : pos + 4]
+        chunk_size = struct.unpack_from("<I", conteudo, pos + 4)[0]
+        payload_start = pos + 8
+        if chunk_id == b"fmt " and payload_start + 12 <= len(conteudo):
+            byte_rate = struct.unpack_from("<I", conteudo, payload_start + 8)[0]
+        elif chunk_id == b"data":
+            data_bytes = chunk_size
+        pos = payload_start + chunk_size + (chunk_size % 2)
+        if byte_rate and data_bytes is not None:
+            return round(data_bytes / byte_rate, 3)
+    return None
+
+
 def validar_audio(conteudo: bytes) -> ResultadoArquivo:
+    if not conteudo:
+        return ResultadoArquivo(False, ("AUDIO_VAZIO",))
     if len(conteudo) > MAX_BYTES_AUDIO:
         return ResultadoArquivo(False, ("AUDIO_GRANDE_DEMAIS",))
     formato = _formato_audio(conteudo)
     if formato is None:
         return ResultadoArquivo(False, ("FORMATO_DE_AUDIO_DESCONHECIDO",))
-    return ResultadoArquivo(True, (), (f"AUDIO_{formato.upper()}",))
+    alerta = f"AUDIO_{formato.upper()}"
+    if formato == "wav":
+        duracao = estimar_duracao_wav(conteudo)
+        if duracao is not None and duracao > MAX_DURACAO_AUDIO_SEGUNDOS:
+            return ResultadoArquivo(False, ("AUDIO_LONGO_DEMAIS",), (alerta,))
+    return ResultadoArquivo(True, (), (alerta,))

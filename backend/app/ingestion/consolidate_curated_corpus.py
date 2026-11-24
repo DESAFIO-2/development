@@ -1,10 +1,10 @@
 """Pipeline determinístico de consolidação multi-fonte (RENAME + REME-DF + Farmácia Popular).
 
-Adapta o release aprovado v9 de Engenharia de Dados (`occurrences.jsonl` + `evidencias.jsonl`)
+Adapta o release aprovado v10 de Engenharia de Dados (`occurrences.jsonl` + `evidencias.jsonl`)
 e preserva as fontes complementares C01-C14 para os contratos da Clean Architecture:
 - `data/processed/medicamentos_sus_canonical.json`
 - `data/processed/normative_chunks.json`
-- `data/processed/evidence_chunks_v2.json` (`one-evidence-v2`)
+- `data/processed/evidence_chunks_v3.json` (`one-evidence-v3`)
 - `data/manifests/manifest.json`
 
 Garante:
@@ -12,7 +12,7 @@ Garante:
    `validate_evidencia_drift`);
 2. Normalização de unidades, separadores de milhar e concentrações entre F01, F03 e F04, sem
    itens sintéticos sem ocorrência (`occ == 0`);
-3. Geração determinística dos 2.114 chunks literais `one-evidence-v2` com proveniência completa.
+3. Geração determinística dos 2.114 chunks literais `one-evidence-v3` com proveniência completa.
 """
 
 from __future__ import annotations
@@ -32,6 +32,11 @@ CHUNK_RECIPE_V2 = (
     "one-evidence-v2:structured-fields;F03-description-cell;F04-indication;"
     "source-provenance;no-old-chunks"
 )
+CHUNK_RECIPE_V3 = (
+    "one-evidence-v3:normalized-fields;literal-spelling;F03-description-cell;F03-channel-code;"
+    "F01-component-atc;F04-indication;source-provenance;no-old-chunks"
+)
+CHUNK_NOTE_MAX_CHARS = 200
 
 EXPECTED_OCCURRENCE_KEYS: frozenset[str] = frozenset(
     {
@@ -61,7 +66,7 @@ EXPECTED_OCCURRENCE_KEYS: frozenset[str] = frozenset(
 
 VALID_SOURCES: frozenset[str] = frozenset({"F01", "F03", "F04"})
 
-OPTIONAL_OCCURRENCE_KEYS = {"medicine_id", "supply_id", "supply_name"}
+OPTIONAL_OCCURRENCE_KEYS = {"medicine_id", "supply_id", "supply_name", "normalized"}
 
 EXPECTED_EVIDENCIA_KEYS: frozenset[str] = frozenset(
     {
@@ -82,7 +87,21 @@ EXPECTED_EVIDENCIA_KEYS: frozenset[str] = frozenset(
     }
 )
 
-OPTIONAL_EVIDENCIA_KEYS = {"description_cell", "description_provenance", "indication", "supply_id"}
+OPTIONAL_EVIDENCIA_KEYS = {
+    "atc",
+    "channel",
+    "channel_codes",
+    "channel_note",
+    "channel_notes",
+    "channel_text",
+    "component",
+    "description_cell",
+    "description_provenance",
+    "indication",
+    "normalized",
+    "source_code",
+    "supply_id",
+}
 
 _CANONICAL_GROUP_KEY_ALIASES: dict[tuple[str, str, str, str], tuple[str, str, str, str]] = {
     ("dapagliflozina propanodiol", "10mg", "comprimido", ""): (
@@ -819,7 +838,7 @@ CURATED_COMPLEMENTARY_NORMATIVE_CHUNKS: list[dict[str, Any]] = [
         ),
         "page_number": 2,
         "text": (
-            "Pelo Programa Farmácia Popular do Brasil (Aqui Tem Farmácia Popular), além do "
+            "Pelo Programa Farmácia Popular do Brasil, além do "
             "elenco de medicamentos gratuitos para hipertensão, diabetes, asma, osteoporose, "
             "dislipidemia, rinite, doença de Parkinson, glaucoma e anticoncepção, são "
             "disponibilizadas fraldas geriátricas (para pessoas com idade igual ou superior a "
@@ -1149,6 +1168,7 @@ def validate_evidencia_drift(
             or ev.get("text") != occ.get("raw_text")
             or ev.get("medicine_id") != occ.get("medicine_id")
             or ev.get("source") != occ.get("source")
+            or ("normalized" in occ and ev.get("normalized") != occ.get("normalized"))
             or ev.get("review_status") != "approved"
             or not text_stripped
             or re.fullmatch(r"\d+\.?", text_stripped)
@@ -1532,29 +1552,80 @@ def consolidar_normative_chunks(
     return consolidados
 
 
-def gerar_evidence_chunks_v2(
+def _fold_chunk_text(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", value.casefold())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    folded = re.sub(r"(?<=\d)\s*(?=(?:mcg|mg|g|ml|meq|ui|u|l)\b|%)", " ", folded)
+    folded = re.sub(r"\s*/\s*", "/", folded)
+    return " ".join(folded.split())
+
+
+def gerar_evidence_chunks_v3(
     evidencias: list[dict[str, Any]],
     release_version: str,
 ) -> list[dict[str, Any]]:
-    """Portação da receita one-evidence-v2 de Engenharia de Dados (2.114 evidências literais)."""
+    """Portação da receita one-evidence-v3 de Engenharia de Dados (2.114 evidências)."""
     chunks: list[dict[str, Any]] = []
     for ev in evidencias:
-        form = ev["form"] if ev["form"] != "-" else "não informada"
-        strength = ev["strength"] if ev["strength"] != "-" else "não informada"
-        parts = [
-            f"Tipo: {'insumo' if ev['item_type'] == 'supply' else 'medicamento'}",
-            f"Princípio ativo ou item: {ev['active_ingredient']}",
-            f"Concentração ou apresentação: {strength}",
-            f"Forma: {form}",
-        ]
-        if ev.get("release_characteristic"):
-            parts.append(f"Liberação: {ev['release_characteristic']}")
-        if ev["source"]["source_id"] == "F03":
-            parts.append(f"Descrição na REME-DF: {ev['description_cell']}")
-        if ev["source"]["source_id"] == "F04":
-            parts.append(f"Indicação no elenco: {ev['indication']}")
-        parts.append(f"Consta na lista {ev['source']['source_id']} ({ev['source']['version']}).")
+        norm = ev.get("normalized") or {}
         src = ev["source"]
+        source_id = src["source_id"]
+        if norm:
+            form = (
+                norm.get("form")
+                or norm.get("package")
+                or norm.get("specification")
+                or "não informada"
+            )
+            parts = [
+                f"Tipo: {'insumo' if ev['item_type'] == 'supply' else 'medicamento'}",
+                f"Princípio ativo ou item: {norm['active_ingredient']}",
+            ]
+            if _fold_chunk_text(str(ev["active_ingredient"])) != _fold_chunk_text(
+                str(norm["active_ingredient"])
+            ):
+                parts.append(f"Grafia na fonte: {ev['active_ingredient']}")
+            parts.append(f"Concentração ou apresentação: {norm.get('strength') or 'não informada'}")
+            parts.append(f"Forma: {form}")
+            if norm.get("form") and norm.get("package"):
+                parts.append(f"Embalagem: {norm['package']}")
+            if norm.get("release"):
+                parts.append(f"Liberação: {norm['release']}")
+            if source_id == "F03":
+                parts.append(f"Descrição na REME-DF: {ev['description_cell']}")
+                if norm.get("channel_text"):
+                    parts.append(f"Onde é disponibilizado (REME-DF): {norm['channel_text']}")
+                if norm.get("channel_notes"):
+                    note = "; ".join(norm["channel_notes"])
+                    if len(note) > CHUNK_NOTE_MAX_CHARS:
+                        note = note[: CHUNK_NOTE_MAX_CHARS - 1].rstrip() + "…"
+                    parts.append(f"Observação da fonte: {note}")
+                if ev.get("source_code"):
+                    parts.append(f"Código REME-DF: {ev['source_code']}")
+            if source_id == "F01":
+                if ev.get("component"):
+                    parts.append(f"Componente RENAME: {ev['component']}")
+                atc_codes = (norm.get("atc") or {}).get("codes") or []
+                if atc_codes:
+                    parts.append(f"ATC: {', '.join(atc_codes)}")
+            if source_id == "F04":
+                parts.append(f"Indicação no elenco: {ev['indication']}")
+        else:
+            form = ev["form"] if ev["form"] != "-" else "não informada"
+            strength = ev["strength"] if ev["strength"] != "-" else "não informada"
+            parts = [
+                f"Tipo: {'insumo' if ev['item_type'] == 'supply' else 'medicamento'}",
+                f"Princípio ativo ou item: {ev['active_ingredient']}",
+                f"Concentração ou apresentação: {strength}",
+                f"Forma: {form}",
+            ]
+            if ev.get("release_characteristic"):
+                parts.append(f"Liberação: {ev['release_characteristic']}")
+            if source_id == "F03":
+                parts.append(f"Descrição na REME-DF: {ev['description_cell']}")
+            if source_id == "F04":
+                parts.append(f"Indicação no elenco: {ev['indication']}")
+        parts.append(f"Consta na lista {source_id} ({src['version']}).")
         loc_parts = [f"p. {src['page']}"]
         if ev.get("source_row_number") is not None:
             loc_parts.append(f"item {ev['source_row_number']}")
@@ -1564,19 +1635,20 @@ def gerar_evidence_chunks_v2(
             loc_parts.append(f"linhas {ls}-{le}" if le and le != ls else f"linha {ls}")
         else:
             loc_parts.append(ev["occurrence_id"])
-        parts.append(f"Proveniência: {src['source_id']} ({', '.join(loc_parts)}).")
+        parts.append(f"Proveniência: {source_id} ({', '.join(loc_parts)}).")
         chunks.append(
             {
+                "channel_codes": list(norm.get("channel_codes") or []),
                 "chunk_id": "chunk-" + str(ev["evidence_id"]).removeprefix("evidence-"),
                 "evidence_id": ev["evidence_id"],
-                "occurrence_id": ev["occurrence_id"],
-                "medicine_id": ev.get("medicine_id"),
-                "supply_id": ev.get("supply_id"),
                 "item_type": ev["item_type"],
-                "source": ev["source"],
-                "release_version": release_version,
-                "text": "\n".join(parts),
                 "literal_text": ev["text"],
+                "medicine_id": ev.get("medicine_id"),
+                "occurrence_id": ev["occurrence_id"],
+                "release_version": release_version,
+                "source": ev["source"],
+                "supply_id": ev.get("supply_id"),
+                "text": "\n".join(parts),
             }
         )
 
@@ -1585,8 +1657,11 @@ def gerar_evidence_chunks_v2(
         or len({c["text"] for c in chunks}) != len(chunks)
         or any(not str(c["text"]).strip() or not str(c["literal_text"]).strip() for c in chunks)
     ):
-        raise ValueError("evidence_chunks_v2 contém textos ou chunk_ids vazios/duplicados")
+        raise ValueError("evidence_chunks_v3 contém textos ou chunk_ids vazios/duplicados")
     return chunks
+
+
+gerar_evidence_chunks_v2 = gerar_evidence_chunks_v3
 
 
 def ler_bytes_lf(caminho: Path) -> bytes:
@@ -1618,23 +1693,24 @@ def atualizar_manifesto(
     ).hexdigest()
 
     manifest: dict[str, Any] = {
-        "manifest_version": "2026.4.0",
+        "manifest_version": "2026.5.0",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "engineering_source": origem["release_version"],
-        "engineering_source_commit": origem["commit"],
-        "engineering_source_manifest_sha256": origem["release_manifest_sha256"],
+        "engineering_source_commit": origem["origin_main_commit"],
+        "engineering_source_manifest_sha256": origem["published_release_manifest_sha256"],
+        "engineering_source_corpus_fingerprint": origem["corpus_fingerprint"],
         "canonical_medications_sha256": meds_sha,
         "normative_chunks_sha256": norm_sha,
-        "evidence_chunks_v2_sha256": ev_chunks_sha,
-        "evidence_chunks_v2_recipe": CHUNK_RECIPE_V2,
-        "evidence_chunks_v2_recipe_sha256": hashlib.sha256(CHUNK_RECIPE_V2.encode()).hexdigest(),
+        "evidence_chunks_v3_sha256": ev_chunks_sha,
+        "evidence_chunks_v3_recipe": CHUNK_RECIPE_V3,
+        "evidence_chunks_v3_recipe_sha256": hashlib.sha256(CHUNK_RECIPE_V3.encode()).hexdigest(),
         "curated_occurrences_sha256": occ_sha,
         "curated_evidencias_sha256": ev_staging_sha,
         "combined_sha256": combined,
         "record_counts": {
             "canonical_medications": total_meds,
             "normative_chunks": total_norm_chunks,
-            "evidence_chunks_v2": total_evidence_chunks,
+            "evidence_chunks_v3": total_evidence_chunks,
             "curated_occurrences_f01_f03_f04": total_occurrences,
             "curated_evidencias_f01_f03_f04": total_occurrences,
         },
@@ -1648,30 +1724,30 @@ def atualizar_manifesto(
 
 
 def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
-    """Executa o pipeline completo de consolidação v9 e geração de evidence_chunks_v2."""
-    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v9.jsonl"
-    caminho_ev = raiz / "data" / "staging" / "curated_evidencias_v9.jsonl"
-    caminho_origem = raiz / "data" / "manifests" / "corpus_v9_source.json"
+    """Executa o pipeline completo de consolidação v10 e geração de evidence_chunks_v3."""
+    caminho_occ = raiz / "data" / "staging" / "curated_occurrences_v10.jsonl"
+    caminho_ev = raiz / "data" / "staging" / "curated_evidencias_v10.jsonl"
+    caminho_origem = raiz / "data" / "manifests" / "corpus_v10_source.json"
     caminho_meds = raiz / "data" / "processed" / "medicamentos_sus_canonical.json"
     caminho_norm = raiz / "data" / "processed" / "normative_chunks.json"
-    caminho_evidence_chunks = raiz / "data" / "processed" / "evidence_chunks_v2.json"
+    caminho_evidence_chunks = raiz / "data" / "processed" / "evidence_chunks_v3.json"
     caminho_manifest = raiz / "data" / "manifests" / "manifest.json"
 
     origem = json.loads(caminho_origem.read_text(encoding="utf-8"))
     dados_occ = ler_bytes_lf(caminho_occ)
     dados_ev = ler_bytes_lf(caminho_ev)
     expected_hashes = origem["staging_files_sha256"]
-    if hashlib.sha256(dados_occ).hexdigest() != expected_hashes["curated_occurrences_v9.jsonl"]:
-        raise ValueError("Staging occurrences v9 diverge do SHA-256 registrado")
-    if hashlib.sha256(dados_ev).hexdigest() != expected_hashes["curated_evidencias_v9.jsonl"]:
-        raise ValueError("Staging evidencias v9 diverge do SHA-256 registrado")
+    if hashlib.sha256(dados_occ).hexdigest() != expected_hashes["curated_occurrences_v10.jsonl"]:
+        raise ValueError("Staging occurrences v10 diverge do SHA-256 registrado")
+    if hashlib.sha256(dados_ev).hexdigest() != expected_hashes["curated_evidencias_v10.jsonl"]:
+        raise ValueError("Staging evidencias v10 diverge do SHA-256 registrado")
 
     occurrences = [json.loads(line) for line in dados_occ.splitlines() if line.strip()]
     evidencias = [json.loads(line) for line in dados_ev.splitlines() if line.strip()]
     ev_drift = validate_evidencia_drift(evidencias, occurrences)
     if not ev_drift.is_valid:
         raise ValueError(
-            f"Drift de evidências v9: ausentes={ev_drift.missing_fields}, "
+            f"Drift de evidências v10: ausentes={ev_drift.missing_fields}, "
             f"extras={ev_drift.unexpected_fields}, erros={ev_drift.errors[:5]}"
         )
 
@@ -1686,7 +1762,7 @@ def executar_pipeline_consolidacao(raiz: Path = RAIZ_REPO) -> dict[str, Any]:
         newline="\n",
     )
 
-    evidence_chunks = gerar_evidence_chunks_v2(evidencias, str(origem["release_version"]))
+    evidence_chunks = gerar_evidence_chunks_v3(evidencias, str(origem["release_version"]))
     caminho_evidence_chunks.write_text(
         json.dumps(evidence_chunks, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

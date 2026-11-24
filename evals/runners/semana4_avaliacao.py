@@ -4,7 +4,7 @@ Nunca fabrica qualidade nem mascara revisão humana: distingue explicitamente co
 determinísticos, juiz LLM com rubrica estruturada em português e métricas RAGAS oficiais.
 Executar na raiz (com `evals` para incluir RAGAS 0.4.3):
   uv run --project evals python evals/runners/semana4_avaliacao.py \\
-    --resultado evals/reports/semana4_comparativo_v2/resultado.json
+    --resultado evals/reports/semana4_comparativo_v3/resultado.json
 """
 
 # ruff: noqa: E402
@@ -378,7 +378,7 @@ def load_chunk_index(root: Path = RAIZ) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     for rel in (
         "data/processed/normative_chunks.json",
-        "data/processed/evidence_chunks_v2.json",
+        "data/processed/evidence_chunks_v3.json",
     ):
         raw = read_json(root / rel)
         items = raw if isinstance(raw, list) else raw.get("chunks", [])

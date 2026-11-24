@@ -18,7 +18,7 @@ REGRA_CLINICA ?= v1_bloqueio
 QUATRO_DIR_V3 ?= evals/reports/quatro_bracos_v3
 HOLDOUT ?= evals/datasets/holdout_guardrail_v1.jsonl
 
-.PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
+.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -51,6 +51,8 @@ help:
 	@echo "  make semana4-pilot         - Piloto MacBook/Ollama (2 cenários, Qwen2.5 7B vs 14B)"
 	@echo "  make semana4-compare       - Comparativo completo Semana 4 no Ollama local"
 	@echo "  make semana4-eval          - Avaliação automatizada Semana 4 (controles + Juiz LLM + RAGAS)"
+	@echo "  make demo-multimodal       - Demonstração multimodal Semana 5 (PDF digital + texto/áudio)"
+	@echo "  make eval-multimodal       - Avaliação multimodal Semana 5 (--synthetic-smoke ou faster-whisper)"
 	@echo "  make registrar-avaliacoes  - Registra no MLflow os resultados de uma rodada (ROTULO=..., ARTEFATOS=...)"
 	@echo "  make mlflow-ui             - Abre o MLflow local em http://127.0.0.1:5050"
 	@echo "  make docker-build  - Constrói a imagem Docker do backend"
@@ -80,10 +82,10 @@ run-ui:
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear --min-recall 1.0 --max-falso-bloqueio 0.05
 
 eval-guardrail:
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear --min-recall 1.0 --max-falso-bloqueio 0.05
 
 demo:
 	uv run --project backend python evals/runners/demo_rag_runner.py --caso helena
@@ -181,8 +183,26 @@ semana4-compare:
 semana4-eval:
 	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)"
 
+STT_PROVIDER ?= disabled
+STT_MODEL ?= base
+
+.PHONY: demo-multimodal eval-multimodal
+demo-multimodal:
+ifeq ($(STT_PROVIDER),faster_whisper)
+	cd backend && uv run --with faster-whisper python -m app.agents.demo_multimodal --stt-provider "$(STT_PROVIDER)" --stt-model "$(STT_MODEL)" --summary
+else
+	cd backend && uv run python -m app.agents.demo_multimodal --stt-provider "$(STT_PROVIDER)" --stt-model "$(STT_MODEL)" --summary
+endif
+
+eval-multimodal:
+ifeq ($(STT_PROVIDER),disabled)
+	uv run --project backend python evals/runners/avaliar_multimodal.py --synthetic-smoke
+else
+	uv run --project backend --with faster-whisper python evals/runners/avaliar_multimodal.py --stt-provider "$(STT_PROVIDER)" --stt-model "$(STT_MODEL)"
+endif
+
 # Monitoramento: o MLflow fica fora do uv.lock (entra só nestes alvos, versão fixa).
-# Ex.: make registrar-avaliacoes ROTULO=semana4-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo/resultado.json"
+# Ex.: make registrar-avaliacoes ROTULO=semana4-v3-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo_v3/resultado.json"
 .PHONY: registrar-avaliacoes mlflow-ui
 registrar-avaliacoes:
 	@test -n "$(ROTULO)" || (echo "Defina ROTULO=, ex.: ROTULO=semana4-2026-11-19" && exit 1)

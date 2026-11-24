@@ -118,3 +118,27 @@ def test_associacao_tres_componentes_preserva_pares_e_ordem() -> None:
         with pytest.raises(ValueError, match="não confirmada"):
             matcher.doses_no_texto(text)
         assert not matcher.casar(text)
+
+
+def test_tabular_matcher_regressoes_v10_liberacao_unidades_e_forma_alternativa() -> None:
+    repo = LocalCanonicalMedicationRepository()
+    matcher = TabularDCBMatcher(repo.listar_todos())
+
+    # Rivastigmina 9 mg: aceita omissão ou sufixo exato de liberação; rejeita sufixo divergente
+    riva = matcher.casar("rivastigmina", concentracao="9 mg")
+    assert any(m.dispensation_route == "ALTO_CUSTO_CEAF" for _, m in riva)
+    assert matcher.casar("rivastigmina", concentracao="9 mg (liberação de 4,6 mg/24 h)")
+    assert matcher.casar("rivastigmina", concentracao="9 mg (liberação de 99 mg/24 h)") == []
+
+    # Forma alternativa ("cápsula ou comprimido") na REME-DF sem relaxar forma incompatível
+    amox = matcher.casar("amoxicilina", concentracao="500 mg", forma="comprimido")
+    assert amox and amox[0][1].dispensation_route == "UBS_ATENCAO_PRIMARIA"
+    bromo = matcher.casar("bromoprida", concentracao="10 mg", forma="comprimido")
+    assert bromo
+    assert matcher.casar("bromoprida", concentracao="10 mg", forma="xarope") == []
+
+    # Unidades U e %: reconhece unidade U (alfavelaglicerase 400 U) e abstém item ausente (%)
+    alfa = matcher.casar("alfavelaglicerase", concentracao="400 U")
+    assert alfa and alfa[0][1].dispensation_route == "ALTO_CUSTO_CEAF"
+    assert matcher.doses_no_texto("polidocanol 2%") == {"2%"}
+    assert matcher.casar("polidocanol", concentracao="2%") == []

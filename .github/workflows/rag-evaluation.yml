@@ -33,12 +33,14 @@ jobs:
         run: uv run --project backend python evals/runners/validar_datasets.py
       - name: Benchmark determinístico v1
         run: make benchmark DATASET=evals/datasets/golden_set_v1.jsonl
-      - name: Benchmark consolidado v2 (Corpus v5)
+      - name: Benchmark consolidado v2 (Corpus consolidado)
         run: make benchmark DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
       - name: Smoke sintético do protocolo Semana 3 (não mede LLM)
         run: make compare-smoke DATASET=evals/datasets/golden_set_v2_consolidado.jsonl
       - name: Smoke da suíte de segurança dos 4 braços (não mede LLM)
         run: make seguranca-smoke
+      - name: Smoke sintético do pipeline multimodal Semana 5 (não mede STT real)
+        run: make eval-multimodal
       - name: Guardar relatórios do benchmark
         if: always()
         uses: actions/upload-artifact@v7
@@ -48,3 +50,4 @@ jobs:
             evals/reports/rag_benchmark_golden_set_*.json
             evals/reports/smoke_sintetico_semana3_*/**
             evals/reports/seguranca_smoke/seguranca.*
+            evals/reports/semana5_multimodal/**

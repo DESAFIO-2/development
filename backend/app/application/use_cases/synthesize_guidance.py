@@ -12,8 +12,10 @@ from app.application.agents import (
     GenerationMetadata,
 )
 from app.application.ports import GeneratorPort, RetrievalHitDTO
+from app.application.use_cases.consult_norms import question_supports_item_fallback
 from app.domain.guidance import CitizenGuidanceCard
 from app.domain.medication import CoverageRoute
+from app.retrieval.text_normalizer import normalizar_texto_pt
 from app.seguranca.citacoes import expandir_citacoes, remover_citacoes
 from app.seguranca.contexto import PublicContextRegistry
 from app.seguranca.saida import validar_saida
@@ -63,22 +65,35 @@ def synthesize(
     # Evidência literal comprova presença documental, não benefício/estoque atual.
     citations = [citation(hit) for hit in hits]
     ids = [hit.chunk_id for hit in hits]
+    use_item_evidence = (
+        bool(request.pergunta_adicional)
+        and not normative_hits
+        and bool(audit_hits)
+        and question_supports_item_fallback(normalizar_texto_pt(request.pergunta_adicional or ""))
+        and any(it.via_retirada != CoverageRoute.NAO_PADRONIZADO for it in card.itens_auditados)
+    )
     additional = None
     if request.pergunta_adicional:
-        additional = (
-            (
-                "Trechos normativos recuperados para consulta:\n"
-                + "\n".join(f"{hit.text} {citation(hit)}" for hit in normative_hits)
+        if normative_hits:
+            additional = "Trechos normativos recuperados para consulta:\n" + "\n".join(
+                f"{hit.text} {citation(hit)}" for hit in normative_hits
             )
-            if normative_hits
-            else NO_EVIDENCE
-        )
+        elif use_item_evidence:
+            additional = "Evidências documentais dos itens consultados:\n" + "\n".join(
+                f"{hit.text} {citation(hit)}" for hit in audit_hits
+            )
+        else:
+            additional = NO_EVIDENCE
     metadata = GenerationMetadata()
     if not hits:
         metadata.status = "ABSTENCAO"
-    # Se há pergunta_adicional, foca o prompt apenas nos trechos normativos
-    # para não diluir o contexto da LLM com linhas literais de outros itens.
-    candidates = list(normative_hits) if request.pergunta_adicional else list(audit_hits)
+    # Se há pergunta_adicional, foca o prompt nos trechos normativos (ou evidências do item
+    # quando a dúvida trata diretamente do item confirmado e não há chunk normativo próprio).
+    candidates = (
+        list(normative_hits)
+        if (request.pergunta_adicional and not use_item_evidence)
+        else list(audit_hits)
+    )
     context: list[RetrievalHitDTO] = []
     budget = 6000
     for hit in {hit.chunk_id: hit for hit in candidates}.values():
@@ -87,7 +102,9 @@ def synthesize(
             context.append(hit)
             budget -= size
     context_truncated = len(context) < len({hit.chunk_id for hit in candidates})
-    can_generate = bool(context) and (not request.pergunta_adicional or bool(normative_hits))
+    can_generate = bool(context) and (
+        not request.pergunta_adicional or bool(normative_hits) or use_item_evidence
+    )
     prompt_version: str | None = getattr(generator, "prompt_version", None) if generator else None
     if generator and can_generate:
         start = time.perf_counter()

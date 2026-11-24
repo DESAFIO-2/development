@@ -21,12 +21,25 @@ from app.domain.medication import CoverageRoute
 from app.domain.prescription import PrescriptionAuditRequest
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.retrieval.text_normalizer import normalizar_texto_pt
+from app.seguranca.contexto import PublicContextRegistry, extract_public_processes
+from app.seguranca.saida import validar_saida
 
 
 def _default_guardrail() -> GuardrailPort:
     from app.guardrails.adapter import LocalGuardrailAdapter
 
     return LocalGuardrailAdapter()
+
+
+def _sanitize_blocked_card(card: CitizenGuidanceCard) -> CitizenGuidanceCard:
+    updates: dict[str, str] = {}
+    if not validar_saida(card.resumo_acolhedor).aprovada:
+        updates["resumo_acolhedor"] = (
+            "Não é possível orientar sobre essa solicitação. Procure atendimento de saúde."
+        )
+    if not validar_saida(card.regiao_administrativa).aprovada:
+        updates["regiao_administrativa"] = "Distrito Federal"
+    return card.model_copy(update=updates) if updates else card
 
 
 class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
@@ -39,12 +52,18 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         guardrail: GuardrailPort | None = None,
         tabular_matcher: TabularDCBMatcher | None = None,
         evidence_repo: EvidenceRepositoryPort | None = None,
+        public_context: PublicContextRegistry | None = None,
     ) -> None:
         self.evidence_repo = evidence_repo
         self.medication_repo = medication_repo
         self.retriever = retriever
         self.guardrail = guardrail or _default_guardrail()
         self.tabular_matcher = tabular_matcher or TabularDCBMatcher(medication_repo.listar_todos())
+        self.public_context = public_context or PublicContextRegistry(
+            public_processes=extract_public_processes(
+                channel for med in self.tabular_matcher.medications for channel in med.df_channels
+            )
+        )
 
     def executar(self, request: PrescriptionAuditRequest) -> CitizenGuidanceCard:
         return self.executar_com_evidencias(request).card
@@ -66,7 +85,7 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
         if not already_triaged:
             blocked = inspect_request(request, self.guardrail)
             if blocked:
-                return blocked
+                return _sanitize_blocked_card(blocked)
         regiao = (
             request.regiao_administrativa
             if already_triaged
@@ -241,61 +260,21 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 if dose:
                     # Evidência textual genérica não confirma uma concentração fora do catálogo.
                     hits = [hit for hit in hits if hit.route_category == "SISREG_EXAME_CONSULTA"]
-                if hits and hits[0].route_category in {
-                    "SISREG_EXAME_CONSULTA",
-                    "ALTO_CUSTO_CEAF",
-                    "FARMACIA_POPULAR",
-                    "UBS_ATENCAO_PRIMARIA",
-                }:
+                if hits and hits[0].route_category == "SISREG_EXAME_CONSULTA":
                     hit = hits[0]
                     evidences.append(hit)
-                    cat = hit.route_category
-                    if cat == "SISREG_EXAME_CONSULTA":
-                        via = CoverageRoute.SISREG_EXAME_CONSULTA
-                        local = (
-                            f"Regulação Ambulatorial / SISREG III na UBS ou "
-                            f"Policlínica Regional de {regiao}."
-                        )
-                        docs = [
-                            "Pedido médico com CID-10 e justificativa clínica",
-                            "Documento oficial com foto",
-                            "CPF e Cartão Nacional de Saúde (CNS)",
-                            "Exames complementares prévios exigidos pelo protocolo",
-                        ]
-                        val_dias = 90
-                    elif cat == "ALTO_CUSTO_CEAF":
-                        via = CoverageRoute.FARMACIA_ALTO_CUSTO
-                        local = (
-                            "Farmácia de Alto Custo (CEAF-DF): Polos Asa Sul, Ceilândia ou Gama."
-                        )
-                        docs = [
-                            "Laudo de Medicamento Especializado (LME) com CID-10",
-                            "Receita médica em 2 vias",
-                            "Cartão Nacional de Saúde (CNS)",
-                            "Documento oficial com foto e CPF",
-                            "Comprovante de residência no DF",
-                        ]
-                        val_dias = 90
-                    elif cat == "FARMACIA_POPULAR":
-                        via = CoverageRoute.FARMACIA_POPULAR
-                        local = f"Drogarias credenciadas ao Farmácia Popular em {regiao}."
-                        docs = [
-                            "Receita médica válida com CRM legível",
-                            "Documento oficial com foto",
-                            "CPF do paciente",
-                        ]
-                        val_dias = 180
-                    else:
-                        via = CoverageRoute.UBS_REME_DF
-                        local = (
-                            f"Farmácia da Unidade Básica de Saúde (UBS) de referência em {regiao}."
-                        )
-                        docs = [
-                            "Receita médica válida",
-                            "Cartão Nacional de Saúde (CNS)",
-                            "Documento oficial com foto e CPF",
-                        ]
-                        val_dias = 180
+                    via = CoverageRoute.SISREG_EXAME_CONSULTA
+                    local = (
+                        f"Regulação Ambulatorial / SISREG III na UBS ou "
+                        f"Policlínica Regional de {regiao}."
+                    )
+                    docs = [
+                        "Pedido médico com CID-10 e justificativa clínica",
+                        "Documento oficial com foto",
+                        "CPF e Cartão Nacional de Saúde (CNS)",
+                        "Exames complementares prévios exigidos pelo protocolo",
+                    ]
+                    val_dias = 90
 
                     dt_limite = data_base + timedelta(days=val_dias)
                     d_restantes = max(0, (dt_limite - hoje).days)
@@ -367,6 +346,12 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                 "e exigem abertura de processo com o laudo LME."
             )
 
+        total_hosp = sum(it.via_retirada == CoverageRoute.HOSPITALAR for it in itens_roteiro)
+        if total_hosp:
+            partes.append(
+                f"{total_hosp} medicamento(s) são de uso hospitalar; "
+                "consulte o serviço hospitalar responsável pelo atendimento."
+            )
         total_sisreg = sum(
             it.via_retirada == CoverageRoute.SISREG_EXAME_CONSULTA for it in itens_roteiro
         )
@@ -379,10 +364,34 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
             partes.append(f"Não confirmamos a cobertura de {total_outros} item(ns) no catálogo.")
         resumo = " ".join(partes)
 
-        return CitizenGuidanceCard(
+        card = CitizenGuidanceCard(
             sucesso=True,
             regiao_administrativa=regiao,
             itens_auditados=itens_roteiro,
             resumo_acolhedor=resumo,
             solicitou_automedicacao=False,
         )
+        if not already_triaged:
+            evidence_ids = [hit.chunk_id for hit in evidences]
+            texts = [card.resumo_acolhedor, card.regiao_administrativa]
+            for it in card.itens_auditados:
+                texts.extend(
+                    [
+                        it.medicamento_ou_exame,
+                        it.principio_ativo_dcb,
+                        self.public_context.scrub_approved_processes(it.local_sugerido),
+                        it.citacao_normativa,
+                        *it.o_que_levar,
+                    ]
+                )
+            if not all(validar_saida(text, evidence_ids).aprovada for text in texts):
+                evidences.clear()
+                return CitizenGuidanceCard(
+                    sucesso=False,
+                    regiao_administrativa="Distrito Federal",
+                    itens_auditados=[],
+                    resumo_acolhedor=(
+                        "Não foi possível apresentar uma orientação segura. Consulte sua UBS."
+                    ),
+                )
+        return card

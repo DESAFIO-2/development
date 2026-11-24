@@ -648,3 +648,30 @@ def test_demo_summary_flag_formats_agent_collaboration(capsys: pytest.CaptureFix
     assert "=== lucas_ceaf_sisreg ===" in out
     assert "Fluxo: triagem" in out
     assert "sintetizador_cidadao" in out
+
+
+def test_captopril_com_pergunta_nao_contradiz_cartao(client: TestClient) -> None:
+    data = client.post(
+        "/api/v1/agents/orchestrate",
+        json={
+            "itens": [{"nome_digitado": "captopril 25 mg"}],
+            "regiao_administrativa": "Ceilândia",
+            "pergunta_adicional": "Onde posso retirar esse medicamento?",
+        },
+    ).json()
+    assert data["primary_route"] == "FARMACIA_POPULAR"
+    assert "Não localizamos" not in (data["resposta_adicional"] or "")
+    assert "Farmácia Popular" in (data["resposta_adicional"] or "")
+
+
+def test_hospitalar_com_pergunta_usa_evidencia_do_item(client: TestClient) -> None:
+    data = client.post(
+        "/api/v1/agents/orchestrate",
+        json={
+            "itens": [{"nome_digitado": "abciximabe 2 mg/mL"}],
+            "pergunta_adicional": "Onde posso retirar esse medicamento?",
+        },
+    ).json()
+    assert data["primary_route"] == "HOSPITALAR"
+    assert "Não localizamos" not in (data["resposta_adicional"] or "")
+    assert "abciximabe" in (data["resposta_adicional"] or "").lower()

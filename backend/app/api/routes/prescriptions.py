@@ -92,8 +92,9 @@ def autocomplete_medications(
         for med in sugestoes
     ]
 
+    consulta_segura = services.guardrail.desidentificar_dados_pessoais(q).texto_sanitizado
     return MedicationAutocompleteResponseDTO(
-        consulta=q,
+        consulta=consulta_segura,
         total_encontrados=len(itens),
         resultados=itens,
     )

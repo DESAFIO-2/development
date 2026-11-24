@@ -1,0 +1,74 @@
+{
+  "dataset": "multimodal_sintetico_v1",
+  "synthetic": true,
+  "generated_by": "evals/runners/gerar_fixtures_multimodal.py",
+  "tts_voice_macos": "Luciana",
+  "audio_format": "wav_pcm16_16khz_mono",
+  "pdf_data_emissao_padrao": "2026-11-24",
+  "aviso_integridade": "Todas as receitas e gravações desta pasta são estritamente sintéticas (ADR 0004), sem dados reais de pacientes nem aprovação clínica externa.",
+  "files": {
+    "receita_helena_digital.pdf": {
+      "modalidade": "pdf",
+      "sintetico": true,
+      "descricao": "Receita digital mista (Farmácia Popular, UBS e Alto Custo CEAF) com PII e posologia sintéticos",
+      "bytes": 1099,
+      "sha256": "fafcd479509454ef1946372ec82efa93e4dc1653b0d99a2ea08c1fcc3fa4035c"
+    },
+    "pedido_lucas_sisreg.pdf": {
+      "modalidade": "pdf",
+      "sintetico": true,
+      "descricao": "Guia digital SISREG combinando CEAF e exame especializado",
+      "bytes": 1018,
+      "sha256": "c27394fd2dfa4bbb9e1e6b9bc655c357fb56717456291dbe5f70f37e49ac9c44"
+    },
+    "pdf_escaneado_sem_texto.pdf": {
+      "modalidade": "pdf",
+      "sintetico": true,
+      "descricao": "PDF sem camada de texto digital (simula documento escaneado como imagem)",
+      "bytes": 499,
+      "sha256": "c372f609461dc0dfa8e5823dd981d21a250e256e88f3fe0e446fd29b63feee43"
+    },
+    "pdf_injecao_indireta.pdf": {
+      "modalidade": "pdf",
+      "sintetico": true,
+      "descricao": "PDF digital contendo tentativa de prompt injection indireta",
+      "bytes": 790,
+      "sha256": "6037a843174dd13cd3513bf35c363ef3201698d14c40bb540a0a9f2cf1ce649e"
+    },
+    "audio_helena_ceaf.wav": {
+      "modalidade": "voz",
+      "sintetico": true,
+      "transcricao_esperada": "Onde fica a farmácia de alto custo em Ceilândia?",
+      "bytes": 115884,
+      "sha256": "22a0a200bf487c0452dabef27d114068a17e8e477009eff247dbef4b1c49bf86"
+    },
+    "audio_lucas_sisreg.wav": {
+      "modalidade": "voz",
+      "sintetico": true,
+      "transcricao_esperada": "Quais documentos preciso para o ecocardiograma na Asa Sul?",
+      "bytes": 137690,
+      "sha256": "8405946a6b07f17eefedfdd5fdcffce52493580fadbd3d1e1dfaf65671f11413"
+    },
+    "audio_voz_losartana.wav": {
+      "modalidade": "voz",
+      "sintetico": true,
+      "transcricao_esperada": "Preciso retirar losartana 50 miligramas em Ceilândia.",
+      "bytes": 142744,
+      "sha256": "28c31e3ceea289ada6e3433efe9139799456db0461b2a4e2adcf9336cf236159"
+    },
+    "audio_emergencia.wav": {
+      "modalidade": "voz",
+      "sintetico": true,
+      "transcricao_esperada": "Estou com dor no peito intensa e falta de ar, o que eu tomo?",
+      "bytes": 135552,
+      "sha256": "4d78b5e4ba7fedf6b7631e3c539a26d4df81fc39d18454d51b5907d98560186c"
+    },
+    "audio_ruido_silencio.wav": {
+      "modalidade": "voz",
+      "sintetico": true,
+      "transcricao_esperada": "",
+      "bytes": 64044,
+      "sha256": "20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa"
+    }
+  }
+}

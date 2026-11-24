@@ -5,7 +5,7 @@
     "document_title": "Portaria GM/MS nº 3.677/2024 — Programa Farmácia Popular do Brasil",
     "section": "Art. 5º — Elenco de Gratuidade Plena (Hipertensão e Diabetes)",
     "page_number": 11,
-    "text": "Os medicamentos destinados ao tratamento de hipertensão arterial (losartana potássica 50 mg, maleato de enalapril 10 mg, atenolol 25 mg, hidroclorotiazida 25 mg, besilato de anlodipino 5 mg) e diabetes mellitus (cloridrato de metformina 500 mg e 850 mg, glibenclamida 5 mg, insulina humana NPH 100 UI/mL e insulina humana regular) são dispensados com 100% de gratuidade nas drogarias privadas credenciadas ao Programa Farmácia Popular do Brasil (Aqui Tem Farmácia Popular). Para retirada, o paciente deve apresentar documento oficial com foto e número do CPF, acompanhado de receita médica válida emitida por médico do SUS ou particular, com validade de até 180 dias para uso contínuo.",
+    "text": "Os medicamentos destinados ao tratamento de hipertensão arterial (losartana potássica 50 mg, maleato de enalapril 10 mg, atenolol 25 mg, hidroclorotiazida 25 mg, besilato de anlodipino 5 mg) e diabetes mellitus (cloridrato de metformina 500 mg e 850 mg, glibenclamida 5 mg, insulina humana NPH 100 UI/mL e insulina humana regular) são dispensados com 100% de gratuidade nas drogarias privadas credenciadas ao Programa Farmácia Popular do Brasil. Para retirada, o paciente deve apresentar documento oficial com foto e número do CPF, acompanhado de receita médica válida emitida por médico do SUS ou particular, com validade de até 180 dias para uso contínuo.",
     "dcb_mentions": [
       "losartana potássica",
       "maleato de enalapril",
@@ -17,7 +17,7 @@
       "insulina humana nph"
     ],
     "route_category": "FARMACIA_POPULAR",
-    "sha256": "319a06cf37fe7199ccbb43556fc82cfc0d5d8c41dddb474933506713da27d718"
+    "sha256": "0590d24b8e79e12b72e65e5aa5d0143a2ce364d6e7e68bad740791bed52e2903"
   },
   {
     "chunk_id": "CHK-PFPB-002",
@@ -152,7 +152,7 @@
     "document_title": "Portaria GM/MS nº 3.677/2024 — Manual de Operações do Programa Farmácia Popular",
     "section": "Regras de Acesso Nacional, Receitas Particulares e Retirada por Terceiros",
     "page_number": 8,
-    "text": "No Programa Farmácia Popular do Brasil, não há exigência de vinculação territorial: o cidadão pode retirar medicamentos gratuitos (hipertensão, diabetes, asma, osteoporose, dislipidemia) em qualquer drogaria privada credenciada ('Aqui Tem Farmácia Popular') em qualquer Região Administrativa do DF ou município brasileiro. São aceitas receitas emitidas tanto pelo SUS quanto por clínicas privadas e convênios, com validade de até 180 dias. A retirada exige a presença do titular com CPF, RG e receita. Caso o paciente seja idoso, enfermo ou esteja impossibilitado de locomoção, a retirada por terceiros exige procuração pública ou procuração particular com firma reconhecida em cartório, laudo médico atestando a impossibilidade e documentos de identificação com foto do paciente e do procurador.",
+    "text": "No Programa Farmácia Popular do Brasil, não há exigência de vinculação territorial: o cidadão pode retirar medicamentos gratuitos (hipertensão, diabetes, asma, osteoporose, dislipidemia) em qualquer drogaria privada credenciada em qualquer Região Administrativa do DF ou município brasileiro. São aceitas receitas emitidas tanto pelo SUS quanto por clínicas privadas e convênios, com validade de até 180 dias. A retirada exige a presença do titular com CPF, RG e receita. Caso o paciente seja idoso, enfermo ou esteja impossibilitado de locomoção, a retirada por terceiros exige procuração pública ou procuração particular com firma reconhecida em cartório, laudo médico atestando a impossibilidade e documentos de identificação com foto do paciente e do procurador.",
     "dcb_mentions": [
       "losartana potássica",
       "cloridrato de metformina",
@@ -160,7 +160,7 @@
       "alendronato de sódio"
     ],
     "route_category": "FARMACIA_POPULAR",
-    "sha256": "efacbbb0a69374ac9b98a0f2d7f6e514a1fed55f486cfa3ab11034b412099c2b"
+    "sha256": "63ee5848240582767e66427430b800992d5d1fefa59fb2fb48af5b1424f60c4d"
   },
   {
     "chunk_id": "CHK-REGRA-CEAF-001",
@@ -168,14 +168,14 @@
     "document_title": "Manual do Componente Especializado da Assistência Farmacêutica (CEAF) — SES-DF",
     "section": "Polos Regionais de Alto Custo no DF e Abertura de Processo LME",
     "page_number": 19,
-    "text": "No Distrito Federal, os medicamentos do Componente Especializado (Alto Custo / CEAF) são dispensados exclusivamente em três polos centrais da Diretoria de Assistência Farmacêutica (DIASF): (1) Polo Asa Sul, localizado no subsolo da Estação 102 Sul do Metrô; (2) Polo Ceilândia, na Praça do Cidadão ao lado do Hospital Regional de Ceilândia (HRC); e (3) Polo Gama, na Praça 1, Entrequadra 1/2, Setor Sul. A obtenção exige abertura de processo administrativo com Laudo de Solicitação, Avaliação e Autorização de Medicamento(s) (LME) assinado pelo médico especialista (validade de 90 dias a contar da emissão), receita médica em 2 vias com a Denominação Comum Brasileira (DCB), Termo de Esclarecimento e Responsabilidade (TER), exames exigidos pelo PCDT do Ministério da Saúde para o CID-10, Cartão SUS, CPF, RG e comprovante de residência no DF. Recomenda-se conferência prévia da disponibilidade no painel InfoSaúde antes do deslocamento.",
+    "text": "No Distrito Federal, os medicamentos do Componente Especializado (Alto Custo / CEAF) são dispensados exclusivamente em três polos centrais da Diretoria de Assistência Farmacêutica (DIASF): (1) Polo Asa Sul, localizado no subsolo da Estação 102 Sul do Metrô; (2) Polo Ceilândia, na Praça do Cidadão ao lado do Hospital Regional de Ceilândia (HRC); e (3) Polo Gama, na Praça 1, Setor Leste. A obtenção exige abertura de processo administrativo com Laudo de Solicitação, Avaliação e Autorização de Medicamento(s) (LME) assinado pelo médico especialista (validade de 90 dias a contar da emissão), receita médica em 2 vias com a Denominação Comum Brasileira (DCB), Termo de Esclarecimento e Responsabilidade (TER), exames exigidos pelo PCDT do Ministério da Saúde para o CID-10, Cartão SUS, CPF, RG e comprovante de residência no DF. Recomenda-se conferência prévia da disponibilidade no painel InfoSaúde antes do deslocamento.",
     "dcb_mentions": [
       "adalimumabe",
       "sacubitril valsartana sódica hidratada",
       "insulina glargina"
     ],
     "route_category": "ALTO_CUSTO_CEAF",
-    "sha256": "2e2b0bc8429b4b9e4b4dc832683a6b0029bb6fa57d01350dd668d0dd74dd80cf"
+    "sha256": "b9da82843ad8b8eff47e1c57d98c4c54a1e3aa065c30e7048d945b4b8f80ca4a"
   },
   {
     "chunk_id": "CHK-REGRA-CONTROLE-001",
@@ -198,13 +198,13 @@
     "document_title": "Diretrizes Operacionais do Programa Farmácia Popular e Dignidade Menstrual (Fonte C01)",
     "section": "Seção 2 — Fraldas Geriátricas, Dignidade Menstrual e Procuração com Assinatura Eletrônica",
     "page_number": 2,
-    "text": "Pelo Programa Farmácia Popular do Brasil (Aqui Tem Farmácia Popular), além do elenco de medicamentos gratuitos para hipertensão, diabetes, asma, osteoporose, dislipidemia, rinite, doença de Parkinson, glaucoma e anticoncepção, são disponibilizadas fraldas geriátricas (para pessoas com idade igual ou superior a 60 anos ou pessoas com deficiência, mediante prescrição ou laudo médico indicando incontinência) e absorventes higiênicos gratuitos pelo Programa Dignidade Menstrual. Para pacientes acamados ou impossibilitados de comparecer, é aceita procuração particular com firma reconhecida ou assinatura eletrônica qualificada (Gov.br), acompanhada dos documentos oficiais com CPF do titular e do representante legal.",
+    "text": "Pelo Programa Farmácia Popular do Brasil, além do elenco de medicamentos gratuitos para hipertensão, diabetes, asma, osteoporose, dislipidemia, rinite, doença de Parkinson, glaucoma e anticoncepção, são disponibilizadas fraldas geriátricas (para pessoas com idade igual ou superior a 60 anos ou pessoas com deficiência, mediante prescrição ou laudo médico indicando incontinência) e absorventes higiênicos gratuitos pelo Programa Dignidade Menstrual. Para pacientes acamados ou impossibilitados de comparecer, é aceita procuração particular com firma reconhecida ou assinatura eletrônica qualificada (Gov.br), acompanhada dos documentos oficiais com CPF do titular e do representante legal.",
     "dcb_mentions": [
       "fralda geriátrica",
       "absorvente higiênico"
     ],
     "route_category": "FARMACIA_POPULAR",
-    "sha256": "15bc0c916adfbe67069300adad73afe7093b2fbbf1c09b43a87998f7d575b6a1"
+    "sha256": "86922c4eea21a21edfc1a634146ce52e38f67a03ee1ae256c00aada84b76c6a6"
   },
   {
     "chunk_id": "CHK-COMP-UBS-002",
