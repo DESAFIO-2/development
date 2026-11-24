@@ -125,7 +125,7 @@ def _parsear_itens_json(itens_json: str | None) -> list[MedicationItemInput]:
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=exc.errors(),
+                detail=exc.errors(include_input=False, include_context=False, include_url=False),
             ) from exc
         itens.append(MedicationItemInput.model_validate(dto.model_dump()))
     return itens
@@ -210,7 +210,7 @@ async def orchestrate_multimodal(request: Request) -> MultimodalResponse:
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=exc.errors(),
+                detail=exc.errors(include_input=False, include_context=False, include_url=False),
             ) from exc
 
         itens = _parsear_itens_json(campos.itens_json)
@@ -229,7 +229,7 @@ async def orchestrate_multimodal(request: Request) -> MultimodalResponse:
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=exc.errors(),
+                detail=exc.errors(include_input=False, include_context=False, include_url=False),
             ) from exc
 
         services = get_services()

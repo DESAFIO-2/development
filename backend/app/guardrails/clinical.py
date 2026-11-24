@@ -308,9 +308,10 @@ class ClinicalGuardrail:
                     return True
         return False
 
-    def inspecionar(self, pergunta: str) -> ClinicalCheckDTO:
-        """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
-        check_injecao = inspecionar_entrada(pergunta, Canal.TEXTO)
+    def inspecionar_clinico(
+        self, pergunta: str, *, injection_blocked: bool = False
+    ) -> ClinicalCheckDTO:
+        """Avalia apenas regras de emergência e Ato Médico, sem re-inspecionar entrada."""
         norm = _normalizar(pergunta)
         if self._tem_emergencia_ativa(norm):
             return ClinicalCheckDTO(
@@ -322,9 +323,7 @@ class ClinicalGuardrail:
 
         # Um rótulo integral do catálogo não é pedido de troca de tratamento.
         # A exceção não cobre prefixos/sufixos e nunca precede emergência/injeção.
-        documentary = (
-            not check_injecao.bloqueado and label_key(pergunta) in self._documentary_labels
-        )
+        documentary = not injection_blocked and label_key(pergunta) in self._documentary_labels
         clausulas = [] if documentary else self._subclausulas_clinicas(norm)
 
         todas_as_regras = (
@@ -345,6 +344,20 @@ class ClinicalGuardrail:
                         mensagem_acolhedora=self._MSG_ATO_MEDICO,
                     )
 
+        return ClinicalCheckDTO(
+            bloqueado=False,
+            motivo="PERMITIDO",
+            alerta_emergencia=False,
+            mensagem_acolhedora="",
+        )
+
+    def inspecionar(self, pergunta: str, *, canal: Canal = Canal.TEXTO) -> ClinicalCheckDTO:
+        """Avalia se a pergunta do usuário deve ser bloqueada (Ato Médico + Anti-Injeção)."""
+        check_injecao = inspecionar_entrada(pergunta, canal)
+        clinico = self.inspecionar_clinico(pergunta, injection_blocked=check_injecao.bloqueado)
+        if clinico.bloqueado:
+            return clinico
+
         if check_injecao.bloqueado:
             return ClinicalCheckDTO(
                 bloqueado=True,
@@ -358,12 +371,7 @@ class ClinicalGuardrail:
                 ),
             )
 
-        return ClinicalCheckDTO(
-            bloqueado=False,
-            motivo="PERMITIDO",
-            alerta_emergencia=False,
-            mensagem_acolhedora="",
-        )
+        return clinico
 
 
 _GUARDRAIL_GLOBAL = ClinicalGuardrail()

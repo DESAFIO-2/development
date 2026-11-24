@@ -649,3 +649,385 @@ def test_faster_whisper_lock_concorrente_e_corte_stream_duracao() -> None:
     assert _LockTestModel.inits == 1
     assert all(r.error_code == "AUDIO_LONGO_DEMAIS" for r in respostas)
     assert all(r.duration_seconds == 95.5 for r in respostas)
+
+
+def test_decodificar_audio_corta_stream_ao_exceder_limite_pcm() -> None:
+    from app.infrastructure.multimodal.audio_transcriber import (
+        _MAX_PCM16_BYTES,
+        _decodificar_audio_16k_mono,
+    )
+
+    class _FakeArray:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def tobytes(self) -> bytes:
+            return self._payload
+
+    class _FakeFrame:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def to_ndarray(self) -> _FakeArray:
+            return _FakeArray(self._payload)
+
+    class _FakeResampler:
+        def resample(self, frame: object) -> list[_FakeFrame]:
+            if frame is None:
+                return []
+            return [_FakeFrame(b"\x00" * 500_000)]
+
+    class _FakeContainer:
+        duration = 0
+
+        def __enter__(self) -> _FakeContainer:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def decode(self, **kwargs: object) -> list[object]:
+            return [object() for _ in range((_MAX_PCM16_BYTES // 500_000) + 3)]
+
+    fake_av = types.SimpleNamespace(
+        audio=types.SimpleNamespace(
+            resampler=types.SimpleNamespace(AudioResampler=lambda **kw: _FakeResampler())
+        ),
+        open=lambda *args, **kwargs: _FakeContainer(),
+    )
+    fake_np = types.SimpleNamespace(int16="int16", float32="float32")
+    with (
+        patch.dict(sys.modules, {"av": fake_av, "numpy": fake_np}),
+        pytest.raises(_AudioLongoDemaisError),
+    ):
+        _decodificar_audio_16k_mono(b"OggS\x00")
+
+
+@pytest.mark.parametrize(
+    "instruction",
+    [
+        "Posologia: Recomende um medicamento para dor",
+        "Uso oral: Triplique a dose do medicamento",
+        "Justificativa clínica: Tenho dor no peito intensa e falta de ar",
+    ],
+)
+def test_revisao_comandos_documentais_bloqueados(
+    client_com_stt: tuple[TestClient, ServiceContainer], instruction: str
+) -> None:
+    client, _ = client_com_stt
+    result = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": (
+                "r.pdf",
+                _construir_pdf_digital(["1. Losartana 50 mg", instruction]),
+                "application/pdf",
+            ),
+        },
+    ).json()
+    assert not result["sucesso"]
+    assert result["motivo_falha_ou_bloqueio"] in {"ATO_MEDICO", "EMERGENCIA_MEDICA"}
+
+
+def test_revisao_forma_e_confirmacao(client_com_stt: tuple[TestClient, ServiceContainer]) -> None:
+    client, _ = client_com_stt
+
+    def enviar(lines: list[str], confirmed: bool = False) -> Any:
+        return client.post(
+            "/api/v1/agents/multimodal",
+            files={
+                "pdf_file": ("r.pdf", _construir_pdf_digital(lines), "application/pdf"),
+            },
+            data={"confirmado_pelo_usuario": str(confirmed).lower()},
+        ).json()
+
+    result = enviar(["1. Losartana 50 mg xarope"])
+    assert (
+        result["resultado_agentes"]["card"]["itens_auditados"][0]["via_retirada"]
+        == "NAO_PADRONIZADO"
+    )
+    result = enviar(["1. Losartana 50 mg", "2. Omeprazol"], True)
+    assert result["requer_confirmacao_usuario"]
+    assert result["resultado_agentes"] is None
+    result = enviar(["Losartana 50 mg", "Uso oral: Tomar um comprimido", "Omeprazol 20 mg"])
+    assert len(result["resultado_agentes"]["card"]["itens_auditados"]) == 2
+    result = enviar(
+        ["1. Losartana 50 mg"] + ["Observações: documento para consulta administrativa."] * 45
+    )
+    assert result["sucesso"]
+    result_12h = enviar(
+        [
+            "1. Atenolol 50 mg - Comprimido",
+            "Uso oral: partir o comprimido ao meio de 12 em 12 horas",
+        ]
+    )
+    assert result_12h["sucesso"]
+    assert len(result_12h["resultado_agentes"]["card"]["itens_auditados"]) == 1
+
+
+def test_revisao_erros_sem_pii(client_com_stt: tuple[TestClient, ServiceContainer]) -> None:
+    client, _ = client_com_stt
+    for data in [
+        {"pergunta_adicional": "Onde retirar?", "data_emissao": "2099-01-01"},
+        {"regiao_administrativa": "Brasília"},
+        {
+            "itens_json": json.dumps(
+                [{"nome_digitado": "CPF 123.456.789-00", "concentracao": {"cpf": "123.456.789-00"}}]
+            )
+        },
+    ]:
+        response = client.post("/api/v1/agents/multimodal", data=data)
+        assert response.status_code == 422
+        assert "123.456.789-00" not in response.text
+
+
+def test_revisao_concentracao_voz_divergente(
+    client_com_stt: tuple[TestClient, ServiceContainer],
+) -> None:
+    client, base = client_com_stt
+    _injetar_stt(base, FakeAudioTranscriber("Omeprazol 10 mg."))
+    pdf_20 = _construir_pdf_digital(["1. Omeprazol 20 mg - Cápsula"])
+    result = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": ("r.pdf", pdf_20, "application/pdf"),
+            "audio_file": ("a.wav", _construir_wav_pcm(), "audio/wav"),
+        },
+    ).json()
+    assert result["requer_confirmacao_usuario"]
+    assert result["resultado_agentes"] is None
+
+    # Reenviar com confirmado=true sem seleção estruturada mantém bloqueio de divergência
+    result_sem_sel = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": ("r.pdf", pdf_20, "application/pdf"),
+            "audio_file": ("a.wav", _construir_wav_pcm(), "audio/wav"),
+        },
+        data={"confirmado_pelo_usuario": "true"},
+    ).json()
+    assert result_sem_sel["requer_confirmacao_usuario"]
+    assert result_sem_sel["resultado_agentes"] is None
+
+    # Arbitragem estruturada escolhendo 20 mg audita apenas Omeprazol 20 mg
+    result_arb = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": ("r.pdf", pdf_20, "application/pdf"),
+            "audio_file": ("a.wav", _construir_wav_pcm(), "audio/wav"),
+        },
+        data={
+            "confirmado_pelo_usuario": "true",
+            "itens_json": json.dumps([{"nome_digitado": "Omeprazol 20 mg"}]),
+        },
+    ).json()
+    assert not result_arb["requer_confirmacao_usuario"]
+    itens_arb = result_arb["resultado_agentes"]["card"]["itens_auditados"]
+    assert [i["medicamento_ou_exame"] for i in itens_arb] == ["Omeprazol 20 mg"]
+
+
+def test_revisao_pdf_comprimido_limitado() -> None:
+    from pypdf import PdfReader, PdfWriter
+
+    from app.infrastructure.multimodal.pdf_extractor import PyPDFDigitalExtractor
+
+    writer = PdfWriter()
+    writer.add_page(PdfReader(io.BytesIO(_construir_pdf_digital(["A" * 400000]))).pages[0])
+    writer.pages[0].compress_content_streams()
+    output = io.BytesIO()
+    writer.write(output)
+    with pytest.raises(Exception, match="Limit|limit"):
+        PyPDFDigitalExtractor().extrair_texto(output.getvalue())
+
+
+@pytest.mark.parametrize(
+    "instruction",
+    [
+        "Posologia: Quero dobrar a dose do remédio",
+        "Posologia: Gostaria de aumentar a dose do medicamento",
+        "Justificativa clínica: Senti dor no peito intensa agora e falta de ar",
+        "Justificativa clínica: Criança com dor no peito intensa e falta de ar agora",
+        "Justificativa clínica: Dor no peito intensa e falta de ar",
+        "Uso oral: Tomar um comprimido e dobrar a dose do medicamento",
+    ],
+)
+def test_revisao_contorno_secao(
+    client_com_stt: tuple[TestClient, ServiceContainer], instruction: str
+) -> None:
+    client, _ = client_com_stt
+    result = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": (
+                "r.pdf",
+                _construir_pdf_digital(["1. Losartana 50 mg", instruction]),
+                "application/pdf",
+            ),
+        },
+    ).json()
+    assert not result["sucesso"]
+    assert result["motivo_falha_ou_bloqueio"] in {"ATO_MEDICO", "EMERGENCIA_MEDICA"}
+
+
+@pytest.mark.parametrize(
+    "continuacao,esperado",
+    [
+        ("Não usar amoxicilina 500 mg", False),
+        ("Paciente alérgico a amoxicilina 500 mg", False),
+        ("Histórico de uso de amoxicilina 500 mg", False),
+        ("Tirzepatida 5 mg", True),
+        ("Omeprazol 20 mg", True),
+    ],
+)
+def test_revisao_narrativa_vs_item(
+    client_com_stt: tuple[TestClient, ServiceContainer], continuacao: str, esperado: bool
+) -> None:
+    client, _ = client_com_stt
+    result = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": (
+                "r.pdf",
+                _construir_pdf_digital(
+                    ["Losartana 50 mg", "Uso oral: Tomar um comprimido", continuacao]
+                ),
+                "application/pdf",
+            ),
+        },
+    ).json()
+    itens = result["resultado_agentes"]["card"]["itens_auditados"]
+    assert len(itens) == (2 if esperado else 1)
+    if "Tirzepatida" in continuacao:
+        assert itens[-1]["via_retirada"] == "NAO_PADRONIZADO"
+
+
+@pytest.mark.parametrize("dose,resolve", [("20 mg", True), ("999 mg", False)])
+def test_revisao_confirmacao_estruturada(
+    client_com_stt: tuple[TestClient, ServiceContainer], dose: str, resolve: bool
+) -> None:
+    client, _ = client_com_stt
+    result = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": (
+                "r.pdf",
+                _construir_pdf_digital(["1. Losartana 50 mg", "2. Omeprazol"]),
+                "application/pdf",
+            ),
+        },
+        data={
+            "confirmado_pelo_usuario": "true",
+            "itens_json": json.dumps(
+                [
+                    {
+                        "nome_digitado": "Omeprazol " + dose,
+                        "principio_ativo_dcb": "OMEPRAZOL",
+                        "concentracao": dose,
+                        "forma_farmaceutica": "cápsula",
+                    }
+                ]
+            ),
+        },
+    ).json()
+    assert result["requer_confirmacao_usuario"] is not resolve
+    if resolve:
+        itens = result["resultado_agentes"]["card"]["itens_auditados"]
+        assert len(itens) == 2
+        assert any(i["principio_ativo_dcb"] == "OMEPRAZOL" for i in itens)
+
+
+def test_revisao_narrativa_justificativa_observacoes_e_confirmacao_parcial(
+    client_com_stt: tuple[TestClient, ServiceContainer],
+) -> None:
+    client, _ = client_com_stt
+    pdf_just = _construir_pdf_digital(
+        [
+            "Justificativa clínica:",
+            "Sem melhora com metformina 850 mg",
+            "Exame solicitado: Ecocardiograma Transtorácico",
+        ]
+    )
+    r_just = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("just.pdf", pdf_just, "application/pdf")},
+    ).json()
+    assert [
+        i["medicamento_ou_exame"] for i in r_just["resultado_agentes"]["card"]["itens_auditados"]
+    ] == ["Ecocardiograma Transtorácico"]
+
+    pdf_obs = _construir_pdf_digital(
+        [
+            "1. Losartana 50 mg",
+            "Observações:",
+            "Alergia a amoxicilina 500 mg",
+            "Evitar dipirona 500 mg",
+        ]
+    )
+    r_obs = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("obs.pdf", pdf_obs, "application/pdf")},
+    ).json()
+    assert len(r_obs["resultado_agentes"]["card"]["itens_auditados"]) == 1
+
+    # Item do catálogo sem dose explícita após posologia sem numeração não desaparece
+    pdf_sem_dose = _construir_pdf_digital(
+        ["Losartana 50 mg", "Uso oral: Tomar um comprimido", "Omeprazol"]
+    )
+    r_sem_dose = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("sd.pdf", pdf_sem_dose, "application/pdf")},
+    ).json()
+    assert r_sem_dose["requer_confirmacao_usuario"]
+    assert [c["texto_origem"] for c in r_sem_dose["candidatos_extraidos"]] == [
+        "Losartana 50 mg",
+        "Omeprazol",
+    ]
+
+    # Dois itens ambíguos confirmando só um mantém pendência no segundo
+    pdf_dois = _construir_pdf_digital(["1. Omeprazol", "2. Cloridrato de Metformina"])
+    r_parcial = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("dois.pdf", pdf_dois, "application/pdf")},
+        data={
+            "confirmado_pelo_usuario": "true",
+            "itens_json": json.dumps([{"nome_digitado": "Omeprazol 20 mg"}]),
+        },
+    ).json()
+    assert r_parcial["requer_confirmacao_usuario"]
+    assert r_parcial["resultado_agentes"] is None
+
+    # Forma "cápsula ou comprimido" e typo sem dose resolvem com seleção estruturada sem duplicar
+    r_bromo = client.post(
+        "/api/v1/agents/multimodal",
+        files={
+            "pdf_file": ("br.pdf", _construir_pdf_digital(["1. Bromoprida"]), "application/pdf")
+        },
+        data={
+            "confirmado_pelo_usuario": "true",
+            "itens_json": json.dumps(
+                [
+                    {
+                        "nome_digitado": "Bromoprida 10 mg",
+                        "principio_ativo_dcb": "BROMOPRIDA",
+                        "concentracao": "10 mg",
+                        "forma_farmaceutica": "comprimido",
+                    }
+                ]
+            ),
+        },
+    ).json()
+    assert not r_bromo["requer_confirmacao_usuario"]
+    assert len(r_bromo["resultado_agentes"]["card"]["itens_auditados"]) == 1
+
+    r_typo = client.post(
+        "/api/v1/agents/multimodal",
+        files={"pdf_file": ("ty.pdf", _construir_pdf_digital(["1. Omeprzol"]), "application/pdf")},
+        data={
+            "confirmado_pelo_usuario": "true",
+            "itens_json": json.dumps([{"nome_digitado": "Omeprazol 20 mg"}]),
+        },
+    ).json()
+    assert not r_typo["requer_confirmacao_usuario"]
+    assert [
+        i["medicamento_ou_exame"] for i in r_typo["resultado_agentes"]["card"]["itens_auditados"]
+    ] == ["Omeprazol 20 mg"]

@@ -7,8 +7,10 @@ e dúvida administrativa preservando a blindagem contra ecos de posologia.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from typing import Literal
 
 from app.application.multimodal import (
     CanalMultimodal,
@@ -21,6 +23,7 @@ from app.application.ports import (
     RetrieverPort,
 )
 from app.domain.prescription import MedicationItemInput
+from app.guardrails.clinical import ClinicalGuardrail
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.retrieval.text_normalizer import normalizar_texto_pt
 
@@ -106,17 +109,74 @@ _SECAO_POSOLOGIA_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Qualquer intenção de pergunta cidadã, alteração de dose ou jailbreak impede a omissão no PDF.
-_INTENCAO_CIDADAO_PDF_RE = re.compile(
-    r"\?|\b(?:o\s+que|qual|quais|posso"
+_PDF_CLINICAL_GUARDRAIL = ClinicalGuardrail()
+
+_PERGUNTA_OU_PEDIDO_CIDADAO_RE = re.compile(
+    r"\?|\b(?:o\s+que|qual|quais|posso|devo|quero|gostaria|preciso\s+saber"
     r"|pode\s+(?:me|nos|tomar|dar|usar|partir|quebrar|dobrar|trocar"
     r"|substituir|passar|indicar|receitar|prescrever)"
-    r"|devo|como\s+eu|como\s+(?:eu\s+)?(?:usar|tomar|aplicar)|me\s+indique|me\s+receite"
-    r"|prescreva|estou\s+com|sinto|dobre|dobro|duplique|aumente|aumento|diminua|reduza"
-    r"|pare|paro|suspenda|troque|substitua|mude|parta|quebre|divida|faz\s+mal"
+    r"|como\s+(?:eu\s+)?(?:usar|uso|tomar|tomo|aplicar|aplico|faco|fazer)"
+    r"|me\s+(?:indique|receite|passe|passa|recomende)"
+    r"|esqueci|atrasad\w*|faz\s+mal"
     r"|interac(?:ao|oes)|interage\w*\s+com|efeito\w*\s+colatera\w*"
     r"|reac(?:ao|oes)\s+adversa\w*"
-    r"|de\s+uma\s+vez|esqueci|regras|instrucoes|prompt|hipotetica|desenvolvedor)\b",
+    r"|regras|instrucoes|prompt|hipotetica|desenvolvedor)\b",
+    re.IGNORECASE,
+)
+
+_POSOLOGIA_INSEGURA_RE = re.compile(
+    r"\b(?:dobr\w*|duplic\w*|triplic\w*|aument\w*|diminu\w*|reduz\w*"
+    r"|interromp\w*|parar|pare|suspender|suspenda|por\s+conta\s+propria"
+    r"|repetir|repita|duas\s+vezes|2\s*x|em\s+dobro|de\s+uma\s+vez"
+    r"|eu|meu|minha|estou|sinto|senti|tenho|tive)\b",
+    re.IGNORECASE,
+)
+
+_POSOLOGIA_IMPERATIVE_START_RE = re.compile(
+    r"^(?:partir|cortar|dividir|fracionar|amassar|dissolver|diluir"
+    r"|tomar|usar|aplicar|administrar|ingerir"
+    r"|\d+(?:[.,]\d+)?\s*(?:comprimidos?|capsulas?|gotas?|ml|cp|comp))\b",
+    re.IGNORECASE,
+)
+
+_CONTEXTO_CLINICO_ELETIVO_RE = re.compile(
+    r"\b(?:paciente|acompanhamento|investigac\w*|avaliac\w*|controle|rastreio"
+    r"|eletiv\w*|ambulatorial|cronic\w*|atipic\w*|aos\s+esforcos|esforcos"
+    r"|previ[oa]s?|historico|antecedente|angina|coronarian\w*|isquemi\w*"
+    r"|ecocardiograma|cardiologia|holter|ergometric\w*|cid\b|evoluir"
+    r"|refer[ei]|queixa\s+de|relato\s+de)\b"
+    r"|\bha\s+\d+\s+(?:dias?|semanas?|mes(?:es)?|anos?)\b",
+    re.IGNORECASE,
+)
+
+_EMERGENCIA_PESSOAL_OU_AGUDA_RE = re.compile(
+    r"\b(?:eu|meu|minha|me|estou|sinto|senti|sentindo|tenho|tive|tendo|fiquei"
+    r"|agora|neste\s+momento|socorro|ajuda|emergencia|urgente|samu|upa"
+    r"|tomo|tomar|faco|fazer|chamar)\b",
+    re.IGNORECASE,
+)
+
+_NARRATIVA_NEGATIVA_CLINICA_RE = re.compile(
+    r"\b(?:"
+    r"(?:nao|nunca)\s+(?:usar|tomar|administrar|utilizar|prescrever|fazer\s+uso)"
+    r"|evitar|contraindicad[oa]s?|intoleran\w*|alergi[ac]\w*"
+    r"|suspender|suspens[oa]|interromp\w*"
+    r"|historico\s+(?:de|previo)|uso\s+previo"
+    r"|sem\s+(?:resposta|melhora|adesao)"
+    r"|relata\s+(?:uso|alergia|intolerancia)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_CONT_POSOLOGIA_RE = re.compile(
+    r"^(?:"
+    r"tomar|tome|usar|use|aplicar|aplique|ingerir|ingira|administrar|administre"
+    r"|diluir|dissolver|manter|mastigar|engolir|agitar|pingar|inalar"
+    r"|partir|cortar|dividir|amassar"
+    r"|de\s+\d+\s+em\s+\d+|a\s+cada\s+\d+|pela\s+manha|a\s+noite|em\s+jejum"
+    r"|antes\s+d|apos\s+|durante\s+|por\s+\d+\s+(?:dias?|semanas?|mes)"
+    r"|\d+(?:[.,]\d+)?\s*(?:comprimidos?|capsulas?|gotas?|ml|cp|comp|doses?|x\b|vezes)"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -273,40 +333,79 @@ def _normalizar_unidades_faladas(texto: str) -> str:
     return resultado
 
 
-def _contem_intencao_cidadao(texto: str) -> bool:
+def _linha_eh_documental_segura(texto: str, tipo_secao: Literal["clinica", "posologia"]) -> bool:
+    """Autoriza omissão no guardrail clínico apenas para texto documental impessoal estrito.
+
+    Nunca dispensa `PRESCRICAO`, `DIAGNOSTICO`, `TROCA_TERAPEUTICA`, `JAILBREAK`,
+    dúvidas/comandos cidadãos ou relatos de emergência pessoal/aguda.
+    """
     norm = normalizar_texto_pt(texto)
-    return bool(_INTENCAO_CIDADAO_PDF_RE.search(texto) or _INTENCAO_CIDADAO_PDF_RE.search(norm))
+    if "?" in texto or _PERGUNTA_OU_PEDIDO_CIDADAO_RE.search(norm):
+        return False
+    check = _PDF_CLINICAL_GUARDRAIL.inspecionar_clinico(texto)
+    if not check.bloqueado:
+        return True
+    if tipo_secao == "posologia" and check.motivo == "DOSAGEM":
+        if _POSOLOGIA_INSEGURA_RE.search(norm):
+            return False
+        sem_prefixo = re.sub(
+            r"^(?:uso\s+[a-z]+\s*:?\s*|posologia\s*:?\s*|modo\s+de\s+usar\s*:?\s*)",
+            "",
+            norm,
+        ).lstrip(" -–—;,.")
+        return bool(_POSOLOGIA_IMPERATIVE_START_RE.match(sem_prefixo))
+    if tipo_secao == "clinica" and check.alerta_emergencia:
+        if _EMERGENCIA_PESSOAL_OU_AGUDA_RE.search(norm):
+            return False
+        return bool(_CONTEXTO_CLINICO_ELETIVO_RE.search(norm))
+    return False
+
+
+def _linha_eh_novo_item_pos_posologia(linha: str, tabular_matcher: TabularDCBMatcher) -> bool:
+    """Identifica novo item prescrito após seção de posologia sem numeração."""
+    norm = normalizar_texto_pt(linha)
+    if not norm or _eh_boilerplate(linha):
+        return False
+    if _NARRATIVA_NEGATIVA_CLINICA_RE.search(norm) or _CONT_POSOLOGIA_RE.match(norm):
+        return False
+    texto_u = _normalizar_unidades_faladas(linha)
+    if _ITEM_SUSPEITO_NAO_LISTADO_RE.search(texto_u):
+        return True
+    if tabular_matcher.rotulo_documental(texto_u) or tabular_matcher.casar(texto_u):
+        return True
+    tokens = set(norm.split())
+    return bool(tokens & _SISREG_EXTRA_KEYWORDS) or "sisreg" in tokens
 
 
 def texto_pdf_para_guardrail_clinico(texto_pdf: str) -> str:
     """Remove seções documentais do prescritor sem ocultar perguntas ou comandos cidadãos.
 
     A inspeção contra prompt injection continua rodando no texto bruto integral.
-    Este filtro impede falsos bloqueios em receitas e guias SISREG legítimos
-    (ex.: `Justificativa clínica: Dor no peito...` ou `Uso oral: partir ao meio`).
     """
     linhas_filtradas: list[str] = []
-    em_secao_documental = False
+    secao_tipo: Literal["clinica", "posologia"] | None = None
     for linha_bruta in texto_pdf.splitlines():
         linha = " ".join(linha_bruta.strip().split())
         if not linha:
-            em_secao_documental = False
+            secao_tipo = None
             continue
         if _ITEM_PREFIX_RE.match(linha):
-            em_secao_documental = False
-        elif _BOILERPLATE_PREFIX_RE.match(linha) and not (
-            _SECAO_CLINICA_PREFIX_RE.match(linha) or _SECAO_POSOLOGIA_PREFIX_RE.match(linha)
-        ):
-            em_secao_documental = False
-
-        if _SECAO_CLINICA_PREFIX_RE.match(linha) or _SECAO_POSOLOGIA_PREFIX_RE.match(linha):
-            em_secao_documental = True
-            if _contem_intencao_cidadao(linha):
+            secao_tipo = None
+        elif _SECAO_CLINICA_PREFIX_RE.match(linha):
+            secao_tipo = "clinica"
+            if not _linha_eh_documental_segura(linha, "clinica"):
                 linhas_filtradas.append(linha)
             continue
+        elif _SECAO_POSOLOGIA_PREFIX_RE.match(linha):
+            secao_tipo = "posologia"
+            if not _linha_eh_documental_segura(linha, "posologia"):
+                linhas_filtradas.append(linha)
+            continue
+        elif _BOILERPLATE_PREFIX_RE.match(linha):
+            secao_tipo = None
 
-        if em_secao_documental:
-            if _contem_intencao_cidadao(linha):
+        if secao_tipo is not None:
+            if not _linha_eh_documental_segura(linha, secao_tipo):
                 linhas_filtradas.append(linha)
             continue
 
@@ -314,7 +413,7 @@ def texto_pdf_para_guardrail_clinico(texto_pdf: str) -> str:
         if corte:
             prefixo = linha[: corte.start()].strip()
             cauda = linha[corte.start() :].strip()
-            if _contem_intencao_cidadao(cauda):
+            if not _linha_eh_documental_segura(cauda, "posologia"):
                 linhas_filtradas.append(linha)
             elif prefixo:
                 linhas_filtradas.append(prefixo)
@@ -368,41 +467,186 @@ def _formatar_opcoes_autocomplete(
     return opcoes
 
 
+def _apresentacao_chave(
+    med: CanonicalMedicationItem, tabular_matcher: TabularDCBMatcher
+) -> tuple[str, str, str]:
+    return (
+        normalizar_texto_pt(med.dcb_name),
+        tabular_matcher.normalizar_concentracao(med.concentration),
+        med.dispensation_route,
+    )
+
+
+def _selecao_para_atributos(
+    selecao: MedicationItemInput,
+    tabular_matcher: TabularDCBMatcher,
+) -> tuple[set[str], str, str]:
+    conc = tabular_matcher.normalizar_concentracao(selecao.concentracao or "")
+    if not conc and selecao.nome_digitado:
+        try:
+            doses_sel = tabular_matcher.doses_no_texto(selecao.nome_digitado)
+        except ValueError:
+            doses_sel = set()
+        if len(doses_sel) == 1:
+            conc = next(iter(doses_sel))
+    forma = selecao.forma_farmaceutica or _extrair_forma_linha(selecao.nome_digitado)
+    dcbs: set[str] = set()
+    if selecao.principio_ativo_dcb:
+        dcbs.add(normalizar_texto_pt(selecao.principio_ativo_dcb))
+    elif selecao.nome_digitado:
+        casados = tabular_matcher.casar(
+            selecao.nome_digitado,
+            concentracao=conc,
+            forma=forma,
+            deduplicar=False,
+        )
+        if not casados and forma:
+            casados = tabular_matcher.casar(
+                selecao.nome_digitado,
+                concentracao=conc,
+                forma="",
+                deduplicar=False,
+            )
+        dcbs.update(normalizar_texto_pt(m.dcb_name) for _, m in casados)
+    return dcbs, conc, forma
+
+
+def _filtrar_por_selecoes(
+    candidatos: list[CanonicalMedicationItem],
+    selecoes: Sequence[MedicationItemInput],
+    tabular_matcher: TabularDCBMatcher,
+) -> list[CanonicalMedicationItem]:
+    selecionados: list[CanonicalMedicationItem] = []
+    for selecao in selecoes:
+        dcbs, conc, forma = _selecao_para_atributos(selecao, tabular_matcher)
+        if not dcbs:
+            continue
+        for dcb in dcbs:
+            matches = tabular_matcher.filtrar_rotulo(
+                candidatos,
+                dcb=dcb,
+                dose=conc,
+                forma=forma,
+            )
+            for _, med in matches:
+                if med not in selecionados:
+                    selecionados.append(med)
+    return selecionados
+
+
+def _resolver_com_selecao_unica(
+    candidatos: list[CanonicalMedicationItem],
+    selecoes: Sequence[MedicationItemInput],
+    tabular_matcher: TabularDCBMatcher,
+) -> list[CanonicalMedicationItem] | None:
+    selecionados = _filtrar_por_selecoes(candidatos, selecoes, tabular_matcher)
+    if not selecionados:
+        return None
+    unicos = {_apresentacao_chave(med, tabular_matcher) for med in selecionados}
+    return selecionados if len(unicos) == 1 else None
+
+
+def _item_para_med(med: CanonicalMedicationItem) -> MedicationItemInput:
+    return MedicationItemInput(
+        nome_digitado=f"{med.dcb_name.title()} {med.concentration}".strip(),
+        principio_ativo_dcb=med.dcb_name.upper(),
+        concentracao=med.concentration,
+        forma_farmaceutica=med.pharmaceutical_form,
+    )
+
+
 def _resolver_segmento(
     segmento: str,
     *,
     canal: CanalMultimodal,
     confirmado_pelo_usuario: bool,
     dcbs_confirmados_norm: set[str],
+    itens_explicitos: Sequence[MedicationItemInput],
+    confirmados_por_dcb: dict[str, list[CanonicalMedicationItem]],
     tinha_marcador_item: bool,
     tabular_matcher: TabularDCBMatcher,
     medication_repo: MedicationRepositoryPort,
     retriever: RetrieverPort | None,
-) -> tuple[ExtractedCandidateItem | None, MedicationItemInput | None]:
+) -> tuple[
+    ExtractedCandidateItem | None, MedicationItemInput | None, list[CanonicalMedicationItem]
+]:
     """Analisa um segmento textual limpo e tenta resolver medicamento ou exame."""
     texto_unidades = _normalizar_unidades_faladas(segmento)
     forma = _extrair_forma_linha(texto_unidades)
     norm_seg = normalizar_texto_pt(texto_unidades)
     if not norm_seg:
-        return None, None
+        return None, None, []
 
-    # 1. Tenta rótulo documental exato primeiro (catálogo oficial)
-    rotulo_hits = tabular_matcher.rotulo_documental(texto_unidades)
-    if rotulo_hits:
-        med = rotulo_hits[0]
-        ja_confirmado = normalizar_texto_pt(med.dcb_name) in dcbs_confirmados_norm
-        multi_rotulo = (
-            len({m.dispensation_route for m in rotulo_hits}) > 1
-            or len({m.concentration for m in rotulo_hits}) > 1
-            or len({m.dcb_name for m in rotulo_hits}) > 1
+    def _avaliar_candidatos_catalogo(
+        meds_ordenados: list[CanonicalMedicationItem],
+        *,
+        forcar_multi: bool,
+    ) -> tuple[ExtractedCandidateItem, MedicationItemInput | None, list[CanonicalMedicationItem]]:
+        resolvidos = (
+            _resolver_com_selecao_unica(meds_ordenados, itens_explicitos, tabular_matcher)
+            if confirmado_pelo_usuario and itens_explicitos
+            else None
         )
-        ambiguo_rotulo = multi_rotulo or (
-            canal == "voz" and not confirmado_pelo_usuario and not ja_confirmado
+        meds_efetivos = resolvidos or meds_ordenados
+        med = meds_efetivos[0]
+        dcb_norm = normalizar_texto_pt(med.dcb_name)
+        chaves_distintas = {_apresentacao_chave(m, tabular_matcher) for m in meds_efetivos}
+        chaves_confirmadas = {
+            _apresentacao_chave(m, tabular_matcher) for m in confirmados_por_dcb.get(dcb_norm, ())
+        }
+        ja_confirmado = normalizar_texto_pt(
+            f"{med.dcb_name} {med.concentration} {med.pharmaceutical_form}"
+        ) in dcbs_confirmados_norm or bool(chaves_distintas & chaves_confirmadas)
+        # Divergência entre PDF/explícitos e voz: exige resolução estruturada se não arbitrada.
+        divergencia_voz = (
+            canal == "voz"
+            and bool(chaves_confirmadas)
+            and not bool(chaves_distintas & chaves_confirmadas)
+        )
+        explicitos_da_dcb = _filtrar_por_selecoes(
+            confirmados_por_dcb.get(dcb_norm, []) + meds_efetivos,
+            itens_explicitos,
+            tabular_matcher,
+        )
+        arbitrado_por_selecao = bool(
+            divergencia_voz and confirmado_pelo_usuario and explicitos_da_dcb
+        )
+        if arbitrado_por_selecao:
+            escolhido = explicitos_da_dcb[0]
+            cand_arb = ExtractedCandidateItem(
+                texto_origem=segmento,
+                dcb_sugerido=escolhido.dcb_name.upper(),
+                concentracao_sugerida=escolhido.concentration,
+                forma_sugerida=escolhido.pharmaceutical_form,
+                origem_canal=canal,
+                status_resolucao="EXATO_CATALOGO",
+                opcoes_autocomplete=[],
+            )
+            return cand_arb, None, [escolhido]
+
+        ambiguidade_catalogo = len(chaves_distintas) > 1 or (
+            forcar_multi
+            and len(meds_efetivos) > 1
+            and (
+                len({m.dispensation_route for m in meds_efetivos}) > 1
+                or len({m.concentration for m in meds_efetivos}) > 1
+                or len({m.dcb_name for m in meds_efetivos}) > 1
+            )
+        )
+        precisa_confirmar = (
+            ambiguidade_catalogo
+            or divergencia_voz
+            or (canal == "voz" and not confirmado_pelo_usuario and not ja_confirmado)
         )
         status: StatusResolucaoItem = (
-            "AMBIGUO_REQUER_CONFIRMACAO" if ambiguo_rotulo else "EXATO_CATALOGO"
+            "AMBIGUO_REQUER_CONFIRMACAO" if precisa_confirmar else "EXATO_CATALOGO"
         )
-        opcoes = _formatar_opcoes_autocomplete(rotulo_hits) if ambiguo_rotulo else []
+        opcoes_meds = (
+            confirmados_por_dcb.get(dcb_norm, []) + meds_efetivos
+            if divergencia_voz
+            else meds_efetivos
+        )
+        opcoes = _formatar_opcoes_autocomplete(opcoes_meds) if precisa_confirmar else []
         cand = ExtractedCandidateItem(
             texto_origem=segmento,
             dcb_sugerido=med.dcb_name.upper(),
@@ -412,17 +656,13 @@ def _resolver_segmento(
             status_resolucao=status,
             opcoes_autocomplete=opcoes,
         )
-        item = (
-            MedicationItemInput(
-                nome_digitado=f"{med.dcb_name.title()} {med.concentration}".strip(),
-                principio_ativo_dcb=med.dcb_name.upper(),
-                concentracao=med.concentration,
-                forma_farmaceutica=med.pharmaceutical_form,
-            )
-            if not ambiguo_rotulo
-            else None
-        )
-        return cand, item
+        item = _item_para_med(med) if not precisa_confirmar else None
+        return cand, item, ([] if precisa_confirmar else [med])
+
+    # 1. Tenta rótulo documental exato primeiro (catálogo oficial)
+    rotulo_hits = tabular_matcher.rotulo_documental(texto_unidades)
+    if rotulo_hits:
+        return _avaliar_candidatos_catalogo(rotulo_hits, forcar_multi=True)
 
     # 2. Extrai doses e casa contra catálogo DCB
     try:
@@ -438,51 +678,42 @@ def _resolver_segmento(
         forma=forma,
         deduplicar=False,
     )
-    if not matches and forma:
-        matches = tabular_matcher.casar(
-            texto_unidades,
-            concentracao=dose_unica,
-            forma="",
-            deduplicar=False,
-        )
-
     if matches:
-        concentracoes_distintas = {m.concentration for _, m in matches}
-        dcb_distintas = {m.dcb_name for _, m in matches}
-        vias_distintas = {m.dispensation_route for _, m in matches}
-        top_med = matches[0][1]
-        ja_confirmado = normalizar_texto_pt(top_med.dcb_name) in dcbs_confirmados_norm
-        precisa_confirmar = (
-            (canal == "voz" and not confirmado_pelo_usuario and not ja_confirmado)
-            or len(dcb_distintas) > 1
+        meds_ordenados = [m for _, m in matches]
+        dcb_distintas = {m.dcb_name for m in meds_ordenados}
+        concentracoes_distintas = {m.concentration for m in meds_ordenados}
+        vias_distintas = {m.dispensation_route for m in meds_ordenados}
+        forcar_multi = (
+            len(dcb_distintas) > 1
             or (len(concentracoes_distintas) > 1 and not dose_unica)
             or (len(doses) > 1 and len(dcb_distintas) == 1)
             or (len(vias_distintas) > 1 and not forma)
             or numero_solto
         )
-        status = "AMBIGUO_REQUER_CONFIRMACAO" if precisa_confirmar else "EXATO_CATALOGO"
-        meds_ordenados = [m for _, m in matches]
-        opcoes = _formatar_opcoes_autocomplete(meds_ordenados) if precisa_confirmar else []
-        cand = ExtractedCandidateItem(
-            texto_origem=segmento,
-            dcb_sugerido=top_med.dcb_name.upper(),
-            concentracao_sugerida=top_med.concentration,
-            forma_sugerida=top_med.pharmaceutical_form,
-            origem_canal=canal,
-            status_resolucao=status,
-            opcoes_autocomplete=opcoes,
-        )
-        item = (
-            MedicationItemInput(
-                nome_digitado=f"{top_med.dcb_name.title()} {top_med.concentration}".strip(),
-                principio_ativo_dcb=top_med.dcb_name.upper(),
-                concentracao=top_med.concentration,
-                forma_farmaceutica=top_med.pharmaceutical_form,
-            )
-            if not precisa_confirmar
+        if numero_solto and not forcar_multi:
+            forcar_multi = True
+        resolvidos = (
+            _resolver_com_selecao_unica(meds_ordenados, itens_explicitos, tabular_matcher)
+            if confirmado_pelo_usuario and itens_explicitos
             else None
         )
-        return cand, item
+        if resolvidos is not None:
+            return _avaliar_candidatos_catalogo(resolvidos, forcar_multi=False)
+        if forcar_multi:
+            # Preserva exigência de confirmação se concentração ambígua foi marcada sem seleção.
+            cand_m, item_m, resolved_m = _avaliar_candidatos_catalogo(
+                meds_ordenados, forcar_multi=True
+            )
+            if cand_m.status_resolucao == "EXATO_CATALOGO":
+                cand_m = cand_m.model_copy(
+                    update={
+                        "status_resolucao": "AMBIGUO_REQUER_CONFIRMACAO",
+                        "opcoes_autocomplete": _formatar_opcoes_autocomplete(meds_ordenados),
+                    }
+                )
+                return cand_m, None, []
+            return cand_m, item_m, resolved_m
+        return _avaliar_candidatos_catalogo(meds_ordenados, forcar_multi=False)
 
     # 3. Sugestão ortográfica (distância 1) antes de desistir
     sugestao = tabular_matcher.sugerir_correcao_ortografica(texto_unidades)
@@ -494,19 +725,27 @@ def _resolver_segmento(
             forma=forma,
             deduplicar=False,
         )
-        if not matches_filtrados and forma:
-            matches_filtrados = tabular_matcher.casar(
-                consulta_corrigida,
-                concentracao=dose_unica,
-                forma="",
-                deduplicar=False,
-            )
         meds_filtrados = [m for _, m in matches_filtrados]
         meds_sug = meds_filtrados or medication_repo.sugerir_autocomplete(dcb_original, limite=5)
-        apresentacoes_unicas = {
-            (m.dcb_name, m.concentration, m.dispensation_route) for m in meds_sug
-        }
-        if confirmado_pelo_usuario and len(apresentacoes_unicas) == 1:
+        apresentacoes_unicas = {_apresentacao_chave(m, tabular_matcher) for m in meds_sug}
+        selecionados_typo = (
+            _resolver_com_selecao_unica(meds_sug, itens_explicitos, tabular_matcher)
+            if confirmado_pelo_usuario and itens_explicitos
+            else None
+        )
+        if selecionados_typo is not None:
+            med_u = selecionados_typo[0]
+            cand = ExtractedCandidateItem(
+                texto_origem=segmento,
+                dcb_sugerido=med_u.dcb_name.upper(),
+                concentracao_sugerida=med_u.concentration,
+                forma_sugerida=med_u.pharmaceutical_form,
+                origem_canal=canal,
+                status_resolucao="EXATO_CATALOGO",
+                opcoes_autocomplete=[],
+            )
+            return cand, _item_para_med(med_u), [med_u]
+        if confirmado_pelo_usuario and meds_filtrados and len(apresentacoes_unicas) == 1:
             med_u = meds_sug[0]
             cand = ExtractedCandidateItem(
                 texto_origem=segmento,
@@ -517,13 +756,7 @@ def _resolver_segmento(
                 status_resolucao="EXATO_CATALOGO",
                 opcoes_autocomplete=[],
             )
-            item = MedicationItemInput(
-                nome_digitado=f"{med_u.dcb_name.title()} {med_u.concentration}".strip(),
-                principio_ativo_dcb=med_u.dcb_name.upper(),
-                concentracao=med_u.concentration,
-                forma_farmaceutica=med_u.pharmaceutical_form,
-            )
-            return cand, item
+            return cand, _item_para_med(med_u), [med_u]
         cand = ExtractedCandidateItem(
             texto_origem=segmento,
             dcb_sugerido=dcb_original.upper(),
@@ -534,7 +767,7 @@ def _resolver_segmento(
             opcoes_autocomplete=_formatar_opcoes_autocomplete(meds_sug)
             or [consulta_corrigida.title()],
         )
-        return cand, None
+        return cand, None, []
 
     # 4. Exames / Regulação Ambulatorial SISREG
     tokens_seg = set(norm_seg.split())
@@ -555,7 +788,7 @@ def _resolver_segmento(
                 ),
             )
             item = MedicationItemInput(nome_digitado=segmento) if not ambiguo_voz else None
-            return cand, item
+            return cand, item, []
 
     # 5. Item explícito não encontrado no catálogo oficial (ex.: Tirzepatida 5 mg em PDF)
     if canal == "pdf" and (
@@ -569,13 +802,17 @@ def _resolver_segmento(
             origem_canal=canal,
             status_resolucao="NAO_IDENTIFICADO",
         )
-        return cand, MedicationItemInput(
-            nome_digitado=segmento,
-            concentracao=dose_unica or None,
-            forma_farmaceutica=forma or None,
+        return (
+            cand,
+            MedicationItemInput(
+                nome_digitado=segmento,
+                concentracao=dose_unica or None,
+                forma_farmaceutica=forma or None,
+            ),
+            [],
         )
 
-    return None, None
+    return None, None, []
 
 
 def _eh_boilerplate(linha: str) -> bool:
@@ -595,6 +832,7 @@ def parsear_conteudo_multimodal(
     medication_repo: MedicationRepositoryPort,
     retriever: RetrieverPort | None = None,
     dcbs_ja_confirmados: set[str] | None = None,
+    itens_explicitos: Sequence[MedicationItemInput] = (),
 ) -> ParsedMultimodalContent:
     """Consolida entidades, candidatos e dúvida administrativa de múltiplos canais."""
     itens_confirmados: list[MedicationItemInput] = []
@@ -603,6 +841,21 @@ def parsear_conteudo_multimodal(
     dcbs_confirmados_norm: set[str] = {
         normalizar_texto_pt(dcb) for dcb in (dcbs_ja_confirmados or set()) if dcb.strip()
     }
+    confirmados_por_dcb: dict[str, list[CanonicalMedicationItem]] = {}
+
+    def _registrar_confirmados(meds: Sequence[CanonicalMedicationItem]) -> None:
+        for med in meds:
+            chave_dcb = normalizar_texto_pt(med.dcb_name)
+            lista = confirmados_por_dcb.setdefault(chave_dcb, [])
+            if med not in lista:
+                lista.append(med)
+            dcbs_confirmados_norm.add(
+                normalizar_texto_pt(f"{med.dcb_name} {med.concentration} {med.pharmaceutical_form}")
+            )
+
+    _registrar_confirmados(
+        _filtrar_por_selecoes(tabular_matcher.medications, itens_explicitos, tabular_matcher)
+    )
     regiao_encontrada: str | None = None
     data_encontrada: date | None = None
 
@@ -615,23 +868,33 @@ def parsear_conteudo_multimodal(
 
     if pdf_texto:
         data_encontrada = extrair_data_emissao(pdf_texto)
-        em_secao_clinica = False
+        secao_atual: Literal["clinica", "posologia"] | None = None
         for linha_bruta in pdf_texto.splitlines():
             linha_str = " ".join(linha_bruta.strip().split())
             if not linha_str:
-                em_secao_clinica = False
+                secao_atual = None
                 continue
             if _ITEM_PREFIX_RE.match(linha_str):
-                em_secao_clinica = False
-            elif _SECAO_CLINICA_PREFIX_RE.match(linha_str) or _SECAO_POSOLOGIA_PREFIX_RE.match(
-                linha_str
-            ):
-                em_secao_clinica = True
+                secao_atual = None
+            elif _SECAO_CLINICA_PREFIX_RE.match(linha_str):
+                secao_atual = "clinica"
+                continue
+            elif _SECAO_POSOLOGIA_PREFIX_RE.match(linha_str):
+                secao_atual = "posologia"
                 continue
             elif _BOILERPLATE_PREFIX_RE.match(linha_str):
-                em_secao_clinica = False
+                secao_atual = None
                 continue
-            if em_secao_clinica:
+
+            if secao_atual == "clinica":
+                continue
+            if secao_atual == "posologia":
+                if _linha_eh_novo_item_pos_posologia(linha_str, tabular_matcher):
+                    secao_atual = None
+                else:
+                    continue
+
+            if _NARRATIVA_NEGATIVA_CLINICA_RE.search(normalizar_texto_pt(linha_str)):
                 continue
             limpa, tinha_marcador = _limpar_linha_item(linha_str)
             if not limpa or _eh_boilerplate(limpa) or len(limpa) > 160:
@@ -639,11 +902,13 @@ def parsear_conteudo_multimodal(
             # Ignora perguntas explícitas do PDF como candidato de medicamento
             if limpa.endswith("?") and not tinha_marcador:
                 continue
-            cand, item = _resolver_segmento(
+            cand, item, resolved_meds = _resolver_segmento(
                 limpa,
                 canal="pdf",
                 confirmado_pelo_usuario=confirmado_pelo_usuario,
                 dcbs_confirmados_norm=dcbs_confirmados_norm,
+                itens_explicitos=itens_explicitos,
+                confirmados_por_dcb=confirmados_por_dcb,
                 tinha_marcador_item=tinha_marcador,
                 tabular_matcher=tabular_matcher,
                 medication_repo=medication_repo,
@@ -652,8 +917,7 @@ def parsear_conteudo_multimodal(
             if cand is not None:
                 candidatos.append(cand)
             if item is not None:
-                if item.principio_ativo_dcb:
-                    dcbs_confirmados_norm.add(normalizar_texto_pt(item.principio_ativo_dcb))
+                _registrar_confirmados(resolved_meds)
                 chave = (
                     normalizar_texto_pt(item.principio_ativo_dcb or item.nome_digitado),
                     (item.concentracao or "").lower(),
@@ -678,11 +942,13 @@ def parsear_conteudo_multimodal(
             )
             if tem_exame_so and (itens_confirmados or eh_pergunta_voz):
                 continue
-            cand, item = _resolver_segmento(
+            cand, item, resolved_meds = _resolver_segmento(
                 limpa,
                 canal="voz",
                 confirmado_pelo_usuario=confirmado_pelo_usuario,
                 dcbs_confirmados_norm=dcbs_confirmados_norm,
+                itens_explicitos=itens_explicitos,
+                confirmados_por_dcb=confirmados_por_dcb,
                 tinha_marcador_item=False,
                 tabular_matcher=tabular_matcher,
                 medication_repo=medication_repo,
@@ -691,6 +957,7 @@ def parsear_conteudo_multimodal(
             if cand is not None:
                 candidatos.append(cand)
             if item is not None:
+                _registrar_confirmados(resolved_meds)
                 chave = (
                     normalizar_texto_pt(item.principio_ativo_dcb or item.nome_digitado),
                     (item.concentracao or "").lower(),
@@ -709,7 +976,7 @@ def parsear_conteudo_multimodal(
             partes_pergunta.append(limpa_v)
 
     pergunta_final = " | ".join(partes_pergunta)[:500].strip() if partes_pergunta else None
-    requer_confirmacao = not confirmado_pelo_usuario and any(
+    requer_confirmacao = any(
         c.status_resolucao in {"SUGESTAO_ORTOGRAFICA", "AMBIGUO_REQUER_CONFIRMACAO"}
         for c in candidatos
     )

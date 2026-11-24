@@ -14,7 +14,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-from pypdf import PdfReader
+from pypdf import PdfReader, apply_configuration
 from pypdf.errors import PdfReadError
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, NullObject
 
@@ -172,6 +172,16 @@ def _nomes_proibidos_estruturais(reader: PdfReader) -> tuple[set[str], bool]:
     return encontrados, incompleta
 
 
+@apply_configuration(
+    maximum_declared_stream_length=262144,
+    zlib_maximum_output_length=262144,
+    lzw_maximum_output_length=262144,
+    run_length_maximum_output_length=262144,
+    brotli_maximum_output_length=262144,
+    array_based_stream_maximum_output_length=262144,
+    stream_decoding_work_maximum_length=524288,
+    stream_parsing_work_maximum_count=20000,
+)
 def validar_pdf(conteudo: bytes) -> ResultadoArquivo:
     if len(conteudo) > MAX_BYTES_PDF:
         return ResultadoArquivo(False, ("PDF_GRANDE_DEMAIS",))

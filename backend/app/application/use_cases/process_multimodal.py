@@ -22,6 +22,7 @@ from app.application.use_cases.multimodal_parser import (
 )
 from app.core.telemetry import trace_operation
 from app.domain.prescription import MedicationItemInput
+from app.guardrails.clinical import ClinicalGuardrail
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.retrieval.text_normalizer import normalizar_texto_pt
 from app.seguranca.arquivos import (
@@ -39,6 +40,8 @@ _MSG_BLOQUEIO_INJECAO = (
     "administrativa do SUS Cidadão. Envie apenas a receita digital oficial, nome "
     "do medicamento ou dúvida administrativa para consultar as rotas gratuitas."
 )
+
+_FALLBACK_CLINICAL_GUARDRAIL = ClinicalGuardrail()
 
 _MSG_PDF_ESCANEADO = (
     "Não identificamos camada de texto digital legível neste PDF (documento provavelmente "
@@ -141,12 +144,22 @@ class ProcessMultimodalUseCase:
                 if motivo not in FORTES:
                     weak_families.add(motivo)
             texto_clinico = texto_pdf_para_guardrail_clinico(texto) if canal == Canal.PDF else texto
+            clin_inst = getattr(self.guardrail, "_clinical", None)
+            pdf_clinico = (
+                clin_inst
+                if isinstance(clin_inst, ClinicalGuardrail)
+                else _FALLBACK_CLINICAL_GUARDRAIL
+            )
             if canal == Canal.PDF and texto_clinico != texto:
-                check_raw = self.guardrail.verificar_ato_medico(texto)
+                check_raw = pdf_clinico.inspecionar_clinico(texto, injection_blocked=inj.bloqueado)
                 if check_raw.bloqueado and check_raw.motivo in {"PROMPT_INJECTION", "JAILBREAK"}:
                     injection_hit = True
             check = (
-                self.guardrail.verificar_ato_medico(texto_clinico)
+                (
+                    pdf_clinico.inspecionar_clinico(texto_clinico, injection_blocked=inj.bloqueado)
+                    if canal == Canal.PDF
+                    else self.guardrail.verificar_ato_medico(texto_clinico)
+                )
                 if texto_clinico.strip()
                 else None
             )
@@ -186,6 +199,36 @@ class ProcessMultimodalUseCase:
         updates["posologia"] = None
         return item.model_copy(update=updates)
 
+    def _chave_item_canonica(self, item: MedicationItemInput) -> tuple[str, str]:
+        conc_item = self.tabular_matcher.normalizar_concentracao(item.concentracao or "")
+        if item.principio_ativo_dcb:
+            return normalizar_texto_pt(item.principio_ativo_dcb), conc_item
+        if not conc_item and item.nome_digitado:
+            try:
+                doses = self.tabular_matcher.doses_no_texto(item.nome_digitado)
+            except ValueError:
+                doses = set()
+            if len(doses) == 1:
+                conc_item = next(iter(doses))
+        if item.nome_digitado:
+            forma = item.forma_farmaceutica or ""
+            casados = self.tabular_matcher.casar(
+                item.nome_digitado,
+                concentracao=conc_item,
+                forma=forma,
+                deduplicar=False,
+            )
+            chaves = {
+                (
+                    normalizar_texto_pt(m.dcb_name),
+                    self.tabular_matcher.normalizar_concentracao(m.concentration),
+                )
+                for _, m in casados
+            }
+            if len(chaves) == 1:
+                return next(iter(chaves))
+        return normalizar_texto_pt(item.nome_digitado), conc_item
+
     def _mesclar_itens(
         self,
         itens_explicitos: list[MedicationItemInput],
@@ -194,10 +237,7 @@ class ProcessMultimodalUseCase:
         mesclados: list[MedicationItemInput] = []
         vistos: set[tuple[str, str]] = set()
         for item in (*itens_explicitos, *itens_extraidos):
-            chave = (
-                normalizar_texto_pt(item.principio_ativo_dcb or item.nome_digitado),
-                (item.concentracao or "").lower(),
-            )
+            chave = self._chave_item_canonica(item)
             if chave not in vistos:
                 vistos.add(chave)
                 mesclados.append(item)
@@ -279,7 +319,14 @@ class ProcessMultimodalUseCase:
             pdf_raw_text = pdf_dto.text
             alertas_pdf = list(res_pdf.alertas)
             if pdf_dto.truncated:
-                alertas_pdf.append("PDF_TEXTO_TRUNCADO")
+                return MultimodalResponse(
+                    sucesso=False,
+                    modalidades_recebidas=modalidades,
+                    motivo_falha_ou_bloqueio="PDF_TEXTO_TRUNCADO",
+                    mensagem_orientacao=(
+                        "Documento excede o limite de texto. Use o preenchimento assistido."
+                    ),
+                )
             relatorios.append(
                 ExtractedFileReport(
                     canal="pdf",
@@ -485,9 +532,6 @@ class ProcessMultimodalUseCase:
             request.tipo_prescritor
         ).texto_sanitizado
         itens_explicitos_limpos = [self._mascarar_item(item) for item in request.itens]
-        dcbs_confirmados = {
-            item.principio_ativo_dcb or item.nome_digitado for item in itens_explicitos_limpos
-        }
 
         # 5. Parser multimodal e checagem de confirmação humana obrigatória
         parsed = parsear_conteudo_multimodal(
@@ -498,7 +542,7 @@ class ProcessMultimodalUseCase:
             tabular_matcher=self.tabular_matcher,
             medication_repo=self.medication_repo,
             retriever=self.retriever,
-            dcbs_ja_confirmados=dcbs_confirmados,
+            itens_explicitos=itens_explicitos_limpos,
         )
         candidatos_seguros = _sanitizar_candidatos(parsed.candidatos)
         itens_finais = self._mesclar_itens(itens_explicitos_limpos, parsed.itens_confirmados)

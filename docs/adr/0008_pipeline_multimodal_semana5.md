@@ -35,3 +35,40 @@ No projeto **SUS Cidadão (NavegaSUS)** existem duas restrições prévias de se
 - **Dependências:** `pypdf` já integra o lockfile principal. `faster-whisper` entra apenas como extra opcional (`[project.optional-dependencies] stt`) para manter a imagem Docker padrão leve.
 - **Limites conhecidos:** PDFs escaneados sem texto são recusados com abstenção segura; ruído/sotaque severo em áudio pode exigir confirmação ou nova gravação; em CPU local, a transcrição Whisper soma latência variável que precisa ser medida explicitamente frente à meta `RNF04` (`p95 <= 8 s`).
 - **Reversão:** Reverter os commits da feature multimodal (`git revert`) remove a rota `/api/v1/agents/multimodal`, casos de uso e adaptadores novos sem impactar `/prescriptions/audit`, `/agents/orchestrate` ou o corpus `v10`.
+
+## Endurecimento após revisão independente (2026-11-24)
+
+- Forma farmacêutica explícita incompatível não é descartada para obter cobertura.
+- Confirmação entre PDF e voz exige a mesma apresentação (DCB, concentração e forma).
+  O booleano de confirmação não resolve ambiguidade de catálogo: o cliente deve enviar
+  a apresentação escolhida em `itens_json`. Ao reenviar o PDF, uma seleção única
+  compatível com os candidatos do catálogo resolve a pendência; uma concentração
+  inexistente não resolve a ambiguidade.
+- Novos medicamentos sem numeração encerram a seção de posologia quando reconhecidos
+  pelo catálogo. Comandos imperativos e relatos pessoais de emergência permanecem
+  inspecionáveis nas seções documentais. A classificação é heurística, não universal.
+- Inspeção clínica de PDF usa o limite do canal PDF, sem reaplicar o teto de texto.
+- Erros 422 excluem entrada bruta e contexto de exceção, evitando eco de PII e erros 500.
+- pypdf >= 7 aplica limites contextuais de 256 KiB por stream, 512 KiB de trabalho de
+  decodificação e 20.000 unidades de parsing. Extrações são serializadas por processo;
+  PDFs truncados são recusados. Isso reduz amplificação e pode recusar PDFs legítimos
+  complexos; não constitui sandbox de CPU/RAM nem limite global de memória do servidor.
+- O runner multimodal retorna falha quando o gate funcional ou RNF04 reprova.
+
+Validação local: 518 testes backend aprovados offline (incluindo regressões
+adversariais, parser, confirmação estruturada e runner multimodal), Ruff, Mypy e
+Bandit (`-ll`) aprovados. Smoke sintético permanece teste de protocolo. Whisper
+`base` continua sujeito à limitação de reconhecimento de losartana descrita no
+entregável; estas correções não constituem melhoria medida de ASR nem validação
+com fala humana.
+
+O fechamento pós-revisão substituiu o filtro textual simples por separação entre
+seção narrativa clínica (`clinica`) e instrução posológica (`posologia`), restringiu
+exceções documentais a fracionamento posológico impessoal sem escalonamento e a
+justificativas eletivas sem relato pessoal ou urgência aguda, bloqueou menções
+negadas/alérgicas fora e dentro de seções, preservou itens catalogados ou com
+concentração explícita após posologia sem numeração, vinculou `itens_json` à
+apresentação completa (inclusive por `nome_digitado`, forma alternativa e erro
+ortográfico) com bloqueio de divergências de dose entre PDF e voz não arbitradas,
+e adicionou deduplicação canônica no merge final. A classificação continua
+heurística: os testes não certificam compreensão de toda linguagem clínica.

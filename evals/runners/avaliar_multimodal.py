@@ -437,7 +437,7 @@ def main() -> int:
     atomic_json(out_dir / "resultado.json", relatorio)
     atomic_text(out_dir / "resumo.md", "\n".join(resumo_linhas) + "\n")
     print(json.dumps(relatorio, ensure_ascii=False, indent=2))
-    return 0 if gate_funcional_ok else 1
+    return 0 if gate_funcional_ok and gate_rnf04_ok else 1
 
 
 if __name__ == "__main__":

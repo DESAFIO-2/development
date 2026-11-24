@@ -2150,7 +2150,7 @@ requires-dist = [
     { name = "langsmith", specifier = ">=0.15,<1" },
     { name = "opentelemetry-api", specifier = ">=1.45.2" },
     { name = "pydantic-settings", specifier = ">=2.16.2" },
-    { name = "pypdf", specifier = ">=6.21.4" },
+    { name = "pypdf", specifier = ">=7.0.0" },
 ]
 provides-extras = ["stt"]
 

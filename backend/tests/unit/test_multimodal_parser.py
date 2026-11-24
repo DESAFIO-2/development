@@ -242,3 +242,13 @@ def test_texto_pdf_para_guardrail_clinico_poupa_secoes_medicas_e_mantem_ataques(
     filtrado_continuacao = texto_pdf_para_guardrail_clinico(disfarce_continuacao)
     assert "como usar paracetamol" in filtrado_continuacao.lower()
     assert "interage com alcool" in filtrado_continuacao.lower()
+
+    posologia_real_12h = (
+        "1. Atenolol 50 mg - Comprimido\nUso oral: partir o comprimido ao meio de 12 em 12 horas\n"
+    )
+    assert "partir o comprimido" not in texto_pdf_para_guardrail_clinico(posologia_real_12h).lower()
+
+    emergencia_sem_pronome = (
+        "1. Losartana 50 mg\nJustificativa clínica: Criança com dor no peito intensa agora.\n"
+    )
+    assert "dor no peito" in texto_pdf_para_guardrail_clinico(emergencia_sem_pronome).lower()
