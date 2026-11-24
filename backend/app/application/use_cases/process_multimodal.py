@@ -16,7 +16,10 @@ from app.application.multimodal import (
     PDFExtractorPort,
 )
 from app.application.ports import GuardrailPort, MedicationRepositoryPort, RetrieverPort
-from app.application.use_cases.multimodal_parser import parsear_conteudo_multimodal
+from app.application.use_cases.multimodal_parser import (
+    parsear_conteudo_multimodal,
+    texto_pdf_para_guardrail_clinico,
+)
 from app.core.telemetry import trace_operation
 from app.domain.prescription import MedicationItemInput
 from app.retrieval.tabular_matcher import TabularDCBMatcher
@@ -137,8 +140,17 @@ class ProcessMultimodalUseCase:
             for motivo in detectar(texto).motivos:
                 if motivo not in FORTES:
                     weak_families.add(motivo)
-            check = self.guardrail.verificar_ato_medico(texto)
-            if check.bloqueado:
+            texto_clinico = texto_pdf_para_guardrail_clinico(texto) if canal == Canal.PDF else texto
+            if canal == Canal.PDF and texto_clinico != texto:
+                check_raw = self.guardrail.verificar_ato_medico(texto)
+                if check_raw.bloqueado and check_raw.motivo in {"PROMPT_INJECTION", "JAILBREAK"}:
+                    injection_hit = True
+            check = (
+                self.guardrail.verificar_ato_medico(texto_clinico)
+                if texto_clinico.strip()
+                else None
+            )
+            if check is not None and check.bloqueado:
                 if check.alerta_emergencia and emergencia_msg is None:
                     emergencia_msg = check.mensagem_acolhedora
                 elif check.motivo not in {"PROMPT_INJECTION", "JAILBREAK"} and clinico_msg is None:

@@ -6,6 +6,7 @@ import importlib
 import io
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -18,12 +19,20 @@ from app.seguranca.arquivos import MAX_DURACAO_AUDIO_SEGUNDOS
 logger = logging.getLogger("app.multimodal.stt")
 
 STTProviderName = Literal["disabled", "faster_whisper", "whisper_http"]
+_MAX_PCM16_BYTES = int((MAX_DURACAO_AUDIO_SEGUNDOS + 0.05) * 16_000) * 2
+
+
+class _AudioLongoDemaisError(ValueError):
+    def __init__(self, duracao_segundos: float) -> None:
+        super().__init__("AUDIO_LONGO_DEMAIS")
+        self.duracao_segundos = duracao_segundos
 
 
 def _decodificar_audio_16k_mono(conteudo: bytes) -> tuple[Any, float] | None:
-    """Decodifica áudio via PyAV + NumPy em 16 kHz mono float32 sem `metadata_errors`.
+    """Decodifica áudio via PyAV + NumPy em 16 kHz mono float32 com corte de duração em stream.
 
-    Evita incompatibilidade do `faster-whisper` com `PyAV >= 19` e retorna `None`
+    Evita incompatibilidade do `faster-whisper` com `PyAV >= 19`, interrompe a decodificação
+    assim que ultrapassar `MAX_DURACAO_AUDIO_SEGUNDOS` (~1,9 MB de PCM) e retorna `None`
     quando as dependências opcionais (`av`, `numpy`) não estão presentes no ambiente.
     """
     try:
@@ -34,12 +43,26 @@ def _decodificar_audio_16k_mono(conteudo: bytes) -> tuple[Any, float] | None:
 
     resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16_000)
     raw_buffer = io.BytesIO()
+    bytes_acumulados = 0
     with av.open(io.BytesIO(conteudo), mode="r") as container:
+        duracao_container = getattr(container, "duration", None)
+        if isinstance(duracao_container, int | float) and duracao_container > 0:
+            duracao_seg = duracao_container / 1_000_000.0
+            if duracao_seg > MAX_DURACAO_AUDIO_SEGUNDOS:
+                raise _AudioLongoDemaisError(round(duracao_seg, 3))
         for frame in container.decode(audio=0):
             for rframe in resampler.resample(frame):
-                raw_buffer.write(rframe.to_ndarray())
+                bloco = rframe.to_ndarray().tobytes()
+                bytes_acumulados += len(bloco)
+                if bytes_acumulados > _MAX_PCM16_BYTES:
+                    raise _AudioLongoDemaisError(round(bytes_acumulados / (16_000 * 2), 3))
+                raw_buffer.write(bloco)
         for rframe in resampler.resample(None):
-            raw_buffer.write(rframe.to_ndarray())
+            bloco = rframe.to_ndarray().tobytes()
+            bytes_acumulados += len(bloco)
+            if bytes_acumulados > _MAX_PCM16_BYTES:
+                raise _AudioLongoDemaisError(round(bytes_acumulados / (16_000 * 2), 3))
+            raw_buffer.write(bloco)
 
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=np.int16).astype(np.float32) / 32768.0
     duracao = round(len(audio) / 16_000.0, 3)
@@ -64,25 +87,29 @@ class FasterWhisperTranscriberAdapter(AudioTranscriberPort):
         self.beam_size = beam_size
         self.language = language
         self._modelo: Any | None = None
+        self._lock = threading.Lock()
 
     def _carregar_modelo(self) -> Any:
-        if self._modelo is None:
-            modulo = importlib.import_module("faster_whisper")
-            whisper_cls = modulo.WhisperModel
-            try:
-                self._modelo = whisper_cls(
-                    self.model_name,
-                    device=self.device,
-                    compute_type=self.compute_type,
-                    local_files_only=True,
-                )
-            except Exception:
-                self._modelo = whisper_cls(
-                    self.model_name,
-                    device=self.device,
-                    compute_type=self.compute_type,
-                    local_files_only=False,
-                )
+        if self._modelo is not None:
+            return self._modelo
+        with self._lock:
+            if self._modelo is None:
+                modulo = importlib.import_module("faster_whisper")
+                whisper_cls = modulo.WhisperModel
+                try:
+                    self._modelo = whisper_cls(
+                        self.model_name,
+                        device=self.device,
+                        compute_type=self.compute_type,
+                        local_files_only=True,
+                    )
+                except Exception:
+                    self._modelo = whisper_cls(
+                        self.model_name,
+                        device=self.device,
+                        compute_type=self.compute_type,
+                        local_files_only=False,
+                    )
         return self._modelo
 
     def transcrever(self, conteudo: bytes, *, formato: str) -> AudioTranscriptionDTO:
@@ -114,7 +141,19 @@ class FasterWhisperTranscriberAdapter(AudioTranscriberPort):
             )
 
         try:
-            decodificado = _decodificar_audio_16k_mono(conteudo)
+            try:
+                decodificado = _decodificar_audio_16k_mono(conteudo)
+            except _AudioLongoDemaisError as exc:
+                latencia_ms = round((time.perf_counter() - inicio) * 1000, 2)
+                return AudioTranscriptionDTO(
+                    text="",
+                    language=self.language,
+                    duration_seconds=exc.duracao_segundos,
+                    provider="faster_whisper",
+                    model_name=self.model_name,
+                    latency_ms=latencia_ms,
+                    error_code="AUDIO_LONGO_DEMAIS",
+                )
             entrada_modelo: Any
             duracao_decodificada: float | None = None
             if decodificado is not None:

@@ -122,23 +122,39 @@ def _verificar_cenario(
     card = agentes.get("card") or {}
     itens = card.get("itens_auditados") or []
     vias = {it.get("via_retirada") for it in itens}
+    citacoes = agentes.get("citacoes") or []
+    resposta = str(agentes.get("resposta_adicional") or "")
+    resp_norm = resposta.lower()
+    tem_evidencia_valida = bool(citacoes) and not resposta.startswith("Não localizamos evidência")
 
     if cenario == "dona_helena_pdf_e_voz":
+        tem_ceaf = any(k in resp_norm for k in ("alto custo", "ceaf", "eqnn"))
         ok = (
             body.get("sucesso") is True
             and not body.get("requer_confirmacao_usuario")
             and card.get("regiao_administrativa") == "Ceilândia"
             and vias == {"FARMACIA_POPULAR", "UBS_REME_DF", "FARMACIA_ALTO_CUSTO"}
+            and tem_evidencia_valida
+            and tem_ceaf
         )
-        return ok, f"vias={sorted(vias)} ra={card.get('regiao_administrativa')}"
+        return ok, (
+            f"vias={sorted(vias)} ra={card.get('regiao_administrativa')} "
+            f"citacoes={len(citacoes)} ceaf_resp={tem_ceaf}"
+        )
     if cenario == "lucas_sisreg_pdf_e_voz":
+        tem_sisreg = "sisreg" in resp_norm and "ecocardiograma" in resp_norm
         ok = (
             body.get("sucesso") is True
             and not body.get("requer_confirmacao_usuario")
             and card.get("regiao_administrativa") == "Asa Sul"
             and vias == {"FARMACIA_ALTO_CUSTO", "SISREG_EXAME_CONSULTA"}
+            and tem_evidencia_valida
+            and tem_sisreg
         )
-        return ok, f"vias={sorted(vias)} ra={card.get('regiao_administrativa')}"
+        return ok, (
+            f"vias={sorted(vias)} ra={card.get('regiao_administrativa')} "
+            f"citacoes={len(citacoes)} sisreg_resp={tem_sisreg}"
+        )
     if cenario == "voz_medicamento_confirmacao_etapa1":
         cands = body.get("candidatos_extraidos") or []
         ok = (

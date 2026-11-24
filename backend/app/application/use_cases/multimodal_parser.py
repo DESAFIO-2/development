@@ -87,7 +87,31 @@ _BOILERPLATE_PREFIX_RE = re.compile(
     r"|cpf|cns|cart[aã]o\s+sus|rg\b|crm|cid-?10|cep|endere[cç]o|telefone|e-?mail"
     r"|data\s+de\s+nascimento|nascimento|assinad[oa]|icp-?brasil|carimbo|validade"
     r"|observa[cç][oõ]es|justificativa(?:\s+cl[ií]nica)?|hip[oó]tese\s+diagn[oó]stica"
+    r"|indica[cç][aã]o\s+cl[ií]nica|hist[oó]rico\s+cl[ií]nico|quadro\s+cl[ií]nico"
+    r"|anamnese|motivo\s+do\s+exame|sinais?\s+e\s+sintomas?|modo\s+de\s+usar"
     r"|data(?:\s+de\s+emiss[aã]o)?|emiss[aã]o|local\s+de\s+atendimento)\b",
+    re.IGNORECASE,
+)
+
+_SECAO_CLINICA_PREFIX_RE = re.compile(
+    r"^(?:justificativa(?:\s+cl[ií]nica)?|hip[oó]tese\s+diagn[oó]stica"
+    r"|indica[cç][aã]o\s+cl[ií]nica|hist[oó]rico\s+cl[ií]nico|quadro\s+cl[ií]nico"
+    r"|anamnese|motivo\s+do\s+exame|sinais?\s+e\s+sintomas?|cid-?10)\s*:",
+    re.IGNORECASE,
+)
+
+_SECAO_POSOLOGIA_PREFIX_RE = re.compile(
+    r"^(?:uso\s+(?:oral|t[oó]pico|nasal|retal|oft[aá]lmico|subcut[aâ]neo|injet[aá]vel"
+    r"|externo|cont[ií]nuo)|posologia|modo\s+de\s+usar)\s*:",
+    re.IGNORECASE,
+)
+
+# Qualquer intenção de pergunta cidadã, alteração de dose ou jailbreak impede a omissão no PDF.
+_INTENCAO_CIDADAO_PDF_RE = re.compile(
+    r"\?|\b(?:o\s+que|qual|quais|posso|pode|devo|como\s+eu|me\s+indique|me\s+receite"
+    r"|prescreva|estou\s+com|sinto|dobre|dobro|duplique|aumente|aumento|diminua|reduza"
+    r"|pare|paro|suspenda|troque|substitua|mude|parta|quebre|divida|faz\s+mal"
+    r"|de\s+uma\s+vez|esqueci|regras|instrucoes|prompt|hipotetica|desenvolvedor)\b",
     re.IGNORECASE,
 )
 
@@ -242,6 +266,57 @@ def _normalizar_unidades_faladas(texto: str) -> str:
     for regex, subst in _UNIDADES_FALADAS_RE:
         resultado = regex.sub(subst, resultado)
     return resultado
+
+
+def _contem_intencao_cidadao(texto: str) -> bool:
+    norm = normalizar_texto_pt(texto)
+    return bool(_INTENCAO_CIDADAO_PDF_RE.search(texto) or _INTENCAO_CIDADAO_PDF_RE.search(norm))
+
+
+def texto_pdf_para_guardrail_clinico(texto_pdf: str) -> str:
+    """Remove seções documentais do prescritor sem ocultar perguntas ou comandos cidadãos.
+
+    A inspeção contra prompt injection continua rodando no texto bruto integral.
+    Este filtro impede falsos bloqueios em receitas e guias SISREG legítimos
+    (ex.: `Justificativa clínica: Dor no peito...` ou `Uso oral: partir ao meio`).
+    """
+    linhas_filtradas: list[str] = []
+    em_secao_documental = False
+    for linha_bruta in texto_pdf.splitlines():
+        linha = " ".join(linha_bruta.strip().split())
+        if not linha:
+            em_secao_documental = False
+            continue
+        if _ITEM_PREFIX_RE.match(linha):
+            em_secao_documental = False
+        elif _BOILERPLATE_PREFIX_RE.match(linha) and not (
+            _SECAO_CLINICA_PREFIX_RE.match(linha) or _SECAO_POSOLOGIA_PREFIX_RE.match(linha)
+        ):
+            em_secao_documental = False
+
+        if _SECAO_CLINICA_PREFIX_RE.match(linha) or _SECAO_POSOLOGIA_PREFIX_RE.match(linha):
+            em_secao_documental = True
+            if _contem_intencao_cidadao(linha):
+                linhas_filtradas.append(linha)
+            continue
+
+        if em_secao_documental:
+            if _contem_intencao_cidadao(linha):
+                linhas_filtradas.append(linha)
+            continue
+
+        corte = _POSOLOGIA_CORTE_RE.search(linha)
+        if corte:
+            prefixo = linha[: corte.start()].strip()
+            cauda = linha[corte.start() :].strip()
+            if _contem_intencao_cidadao(cauda):
+                linhas_filtradas.append(linha)
+            elif prefixo:
+                linhas_filtradas.append(prefixo)
+            continue
+
+        linhas_filtradas.append(linha)
+    return "\n".join(linhas_filtradas)
 
 
 def _cortar_posologia(texto: str) -> str:
@@ -408,8 +483,25 @@ def _resolver_segmento(
     sugestao = tabular_matcher.sugerir_correcao_ortografica(texto_unidades)
     if sugestao is not None:
         dcb_original, consulta_corrigida = sugestao
-        meds_sug = medication_repo.sugerir_autocomplete(dcb_original, limite=5)
-        if confirmado_pelo_usuario and len(meds_sug) == 1:
+        matches_filtrados = tabular_matcher.casar(
+            consulta_corrigida,
+            concentracao=dose_unica,
+            forma=forma,
+            deduplicar=False,
+        )
+        if not matches_filtrados and forma:
+            matches_filtrados = tabular_matcher.casar(
+                consulta_corrigida,
+                concentracao=dose_unica,
+                forma="",
+                deduplicar=False,
+            )
+        meds_filtrados = [m for _, m in matches_filtrados]
+        meds_sug = meds_filtrados or medication_repo.sugerir_autocomplete(dcb_original, limite=5)
+        apresentacoes_unicas = {
+            (m.dcb_name, m.concentration, m.dispensation_route) for m in meds_sug
+        }
+        if confirmado_pelo_usuario and len(apresentacoes_unicas) == 1:
             med_u = meds_sug[0]
             cand = ExtractedCandidateItem(
                 texto_origem=segmento,
@@ -518,9 +610,23 @@ def parsear_conteudo_multimodal(
 
     if pdf_texto:
         data_encontrada = extrair_data_emissao(pdf_texto)
+        em_secao_clinica = False
         for linha_bruta in pdf_texto.splitlines():
             linha_str = " ".join(linha_bruta.strip().split())
-            if not linha_str or _eh_boilerplate(linha_str):
+            if not linha_str:
+                em_secao_clinica = False
+                continue
+            if _ITEM_PREFIX_RE.match(linha_str):
+                em_secao_clinica = False
+            elif _SECAO_CLINICA_PREFIX_RE.match(linha_str) or _SECAO_POSOLOGIA_PREFIX_RE.match(
+                linha_str
+            ):
+                em_secao_clinica = True
+                continue
+            elif _BOILERPLATE_PREFIX_RE.match(linha_str):
+                em_secao_clinica = False
+                continue
+            if em_secao_clinica:
                 continue
             limpa, tinha_marcador = _limpar_linha_item(linha_str)
             if not limpa or _eh_boilerplate(limpa) or len(limpa) > 160:

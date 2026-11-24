@@ -27,7 +27,7 @@ Fotos e PDFs puramente escaneados (sem camada textual nativa) **não** são subm
 
 ```text
 [multipart/form-data: pdf_file, audio_file, itens_json, pergunta_adicional, confirmado_pelo_usuario]
-        │  (leitura em chunks limitada a 5 MB + 1 B / 10 MB + 1 B em RAM; limpeza em `finally`)
+        │  (_InMemoryMultiPartParser: spool_max_size = 10 MB + 64 KB -> zero /tmp; HTTP 413/415; limpeza em `finally`)
         ▼
 [1. Portão Binário — backend/app/seguranca/arquivos.py]
    ├── validar_pdf   ──> rejeita não-PDF, >5 MB, >10 páginas, /JavaScript, /Encrypt, /OpenAction ativo
@@ -36,12 +36,12 @@ Fotos e PDFs puramente escaneados (sem camada textual nativa) **não** são subm
         ▼
 [2. Extração / Transcrição em Memória — backend/app/infrastructure/multimodal/]
    ├── PDFExtractorPort (pypdf) ─────────> < 10 chars úteis => PDF_SEM_TEXTO_DIGITAL
-   └── AudioTranscriberPort (Whisper) ───> disabled => STT_NAO_CONFIGURADO; vazio => AUDIO_SEM_FALA_IDENTIFICADA
+   └── AudioTranscriberPort (Whisper) ───> corte em stream <= 60 s (~1,9 MB PCM), lock thread-safe; vazio => AUDIO_SEM_FALA_IDENTIFICADA
         │
         ▼
 [3. Segurança Textual & LGPD — esteira.py, ClinicalGuardrail, PIIMasker]
-   ├── inspecionar_entrada por canal + agregação cross-channel de sinais fracos (>= 2)
-   ├── ClinicalGuardrail com prioridade absoluta para alerta_emergencia (SAMU 192)
+   ├── inspecionar_entrada + JAILBREAK no texto bruto integral por canal + agregação cross-channel (>= 2)
+   ├── ClinicalGuardrail com prioridade SAMU 192; `texto_pdf_para_guardrail_clinico` poupa justificativa/posologia do médico sem perguntas/alteração
    └── PIIMasker antes de parser/RAG/LLM (relatórios registram apenas `pii_tipos_mascarados`, nunca o valor)
         │
         ▼
@@ -67,40 +67,40 @@ Seguindo o [ADR 0004](adr/0004_integridade_comparativo_semana3.md) e as [Diretri
 
 ### (a) Implementado e Validado Determinística/Offline (`pytest` e `smoke_http.py`)
 
-- **Suíte offline completa (`pytest` com sockets externos bloqueados):** `486` testes aprovados, incluindo:
-  - `backend/tests/unit/test_multimodal_parser.py`: extração de RA do DF, data de emissão ignorando nascimento, supressão de posologia, sugestão ortográfica (`Omeprzol` -> `OMEPRAZOL`), confirmação humana para voz e desambiguação entre múltiplas vias SUS.
-  - `backend/tests/integration/test_multimodal_api.py`: fluxo PDF + texto, fluxo PDF + voz combinados, recusa `PDF_SEM_TEXTO_DIGITAL`, bloqueios binários (`PDF_JAVASCRIPT`, `PDF_ENCRYPT`), prompt injection indireta no PDF (`PROMPT_INJECTION`), emergência em voz (`EMERGENCIA_MEDICA` com SAMU `192`), erro `STT_NAO_CONFIGURADO`, confirmação em duas etapas para áudio, ausência de PII em resposta e `caplog`, adaptador `WhisperHTTPTranscriberAdapter` mockado e `FasterWhisperTranscriberAdapter` com fallback offline.
+- **Suíte offline completa (`pytest` com sockets externos bloqueados):** `493` testes aprovados, incluindo:
+  - `backend/tests/unit/test_multimodal_parser.py`: extração de RA do DF, data de emissão ignorando nascimento, supressão de posologia, sugestão ortográfica com confirmação + filtragem de dose (`Omeprzol 20 mg` -> `OMEPRAZOL 20 mg`), preservação de justificativas/posologias médicas no `texto_pdf_para_guardrail_clinico` sem poupar ataques, confirmação humana para voz e desambiguação entre múltiplas vias SUS.
+  - `backend/tests/integration/test_multimodal_api.py`: fluxo PDF + texto, fluxo PDF + voz combinados, receituário/guia SISREG clínicos legítimos com *"dor no peito aos esforços"* / *"partir o comprimido ao meio"*, upload acima de `1 MB` (`2 MB`) com zero chamadas a `rollover()` em disco, HTTP `413`/`415`/`422`, recusa `PDF_SEM_TEXTO_DIGITAL`, bloqueios binários (`PDF_JAVASCRIPT`, `PDF_ENCRYPT`), prompt injection indireta no PDF (inclusive dentro de `Justificativa clínica:`), emergência em voz (`EMERGENCIA_MEDICA` com SAMU `192`), erro `STT_NAO_CONFIGURADO`, confirmação em duas etapas para áudio e erro ortográfico, ausência de PII em resposta e `caplog`, adaptador `WhisperHTTPTranscriberAdapter` mockado e `FasterWhisperTranscriberAdapter` thread-safe com corte de stream `> 60 s`.
 - **Smoke HTTP real contra servidor `uvicorn` (`backend/tests/smoke_http.py`):** valida `POST /api/v1/agents/multimodal` enviando `receita_helena_digital.pdf` + dúvida em texto via `multipart/form-data`, confirmando `sucesso=True`, `modalidades_recebidas=["texto", "pdf"]` e ausência do CPF sintético na resposta.
 
 ### (b) Coleta de Encanamento Sintético (`--synthetic-smoke` / `SYNTHETIC_SMOKE`)
 
-Execução via `evals/runners/avaliar_multimodal.py --synthetic-smoke` (usa `pypdf` real no PDF e `SyntheticManifestTranscriber` — **não mede qualidade de ASR**):
+Execução via `evals/runners/avaliar_multimodal.py --synthetic-smoke` (integrada ao workflow `.github/workflows/rag-evaluation.yml`; usa `pypdf` real no PDF e `SyntheticManifestTranscriber` — **não mede qualidade de ASR**):
 
-- **Aprovação funcional + LGPD:** `8/8` cenários (`APROVADO`), `0` vazamentos de PII nos logs e respostas.
-- **Latência de encanamento (sem modelo STT):** mediana `6,05 ms`, `p95 = 49,62 ms` (`<= 8.000 ms`, `APROVADO`).
+- **Aprovação funcional + LGPD + evidências citadas:** `8/8` cenários (`APROVADO`), `0` vazamentos de PII nos logs e respostas.
+- **Latência de encanamento (sem modelo STT):** mediana `5,99 ms`, `p95 = 48,69 ms` (`<= 8.000 ms`, `APROVADO`).
 - Relatório local: `evals/reports/semana5_multimodal/synthetic_smoke/resumo.md`.
 
 ### (c) Coleta Empírica Real com `pypdf` + `faster-whisper` (`base`, CPU `int8`)
 
 Execução real via `HF_HUB_OFFLINE=1 uv run --with faster-whisper python evals/runners/avaliar_multimodal.py --stt-provider faster_whisper --stt-model base` (retorna código de saída `1` por conta das 2 falhas funcionais de reconhecimento isolado de fármaco descritas abaixo):
 
-- **Warmup do modelo em cache local (`stt_warmup_ms`):** `226,61 ms` (primeiro download frio anterior levou `93.475,97 ms` com `HF_HUB_DISABLE_XET=1`).
+- **Warmup do modelo em cache local (`stt_warmup_ms`):** `224,81 ms` (primeiro download frio anterior levou `93.475,97 ms` com `HF_HUB_DISABLE_XET=1`).
 - **PII em logs e respostas:** `0` vazamentos.
-- **Latência ponta a ponta (`wall_ms`):** mediana `335,43 ms`, `p95 = 401,72 ms` (**APROVADO** frente ao gate `RNF04 <= 8.000 ms`). Latência isolada do `pypdf`: `0,16 ms` a `0,56 ms`. Latência isolada do `faster-whisper base`: mediana `321,41 ms`, `p95 = 375,79 ms` (`6,00 ms` no silêncio com `vad_filter=True`).
+- **Latência ponta a ponta (`wall_ms`):** mediana `330,12 ms`, `p95 = 386,12 ms` (**APROVADO** frente ao gate `RNF04 <= 8.000 ms`). Latência isolada do `pypdf`: `0,16 ms` a `0,66 ms`. Latência isolada do `faster-whisper base`: mediana `313,80 ms`, `p95 = 341,14 ms` (`6,10 ms` no silêncio com `vad_filter=True`).
 - **Aprovação funcional real:** `6/8` cenários (**REPROVADO** no critério completo de fala isolada); cobertura média de palavras nas falas sintéticas PT-BR: `0,6461`.
 
 | Cenário (`multimodal_sintetico_v1`) | Resultado | Wall (ms) | STT (ms) | Transcrição Real (`faster-whisper base`) vs Esperada | Observação |
 | :--- | :---: | ---: | ---: | :--- | :--- |
-| `dona_helena_pdf_e_voz` | **PASSOU** | `391,86` | `344,74` | *"onde fica a farmácia de autocosto e cilandia?"* (`cob=0,5556`) | PDF digital garantiu os 3 fármacos e a RA `Ceilândia` (`FARMACIA_POPULAR`, `UBS_REME_DF`, `FARMACIA_ALTO_CUSTO`) mesmo com ruído ASR na voz |
-| `lucas_sisreg_pdf_e_voz` | **PASSOU** | `361,53` | `309,72` | *"quais documentos preciso para o ecocardiograma na asa suro?"* (`cob=0,8889`) | PDF garantiu RA `Asa Sul`, `Adalimumabe` (`FARMACIA_ALTO_CUSTO`) e `Ecocardiograma Transtorácico` (`SISREG_EXAME_CONSULTA`) |
-| `pdf_escaneado_sem_texto` | **PASSOU** | `1,76` | `—` | `—` | Recusado no gate com `PDF_SEM_TEXTO_DIGITAL` |
-| `pdf_injecao_indireta` | **PASSOU** | `2,19` | `—` | `—` | Bloqueado antes do parser/orquestrador com `PROMPT_INJECTION` |
-| `audio_emergencia_samu_192` | **PASSOU** | `324,29` | `321,54` | *"Estou com dor no peito intensa e falta de ar, ou que eu tomo?"* (`cob=0,9286`) | Guardrail clínico interceptou os sinais de alarme e retornou orientação SAMU `192` |
-| `audio_silencio_sem_fala` | **PASSOU** | `7,82` | `6,00` | `""` | Gate pós-STT rejeitou com `AUDIO_SEM_FALA_IDENTIFICADA` |
-| `voz_medicamento_confirmacao_etapa1` | **FALHOU** | `401,72` | `375,79` | *"Preciso retirar losartã na 50 miligranmas e esse ilândia."* (`cob=0,4286`) | `base` fragmentou `"losartana"` em `"losartã na"`; parser não identificou o fármaco sem auxílio de PDF ou autocomplete |
-| `voz_medicamento_confirmacao_etapa2` | **FALHOU** | `346,56` | `321,28` | *"Preciso retirar losartã na 50 miligranmas e esse ilândia."* (`cob=0,4286`) | Sem reconhecimento do nome corrompido pelo ASR, a rota retornou `NAO_PADRONIZADO` em vez de `FARMACIA_POPULAR` |
+| `dona_helena_pdf_e_voz` | **PASSOU** | `386,12` | `341,14` | *"onde fica a farmácia de autocosto e cilandia?"* (`cob=0,5556`) | PDF digital garantiu os 3 fármacos e a RA `Ceilândia`; fallback por item trouxe `citacoes=9` e endereço CEAF de Ceilândia (`ceaf_resp=True`) |
+| `lucas_sisreg_pdf_e_voz` | **PASSOU** | `357,86` | `305,99` | *"quais documentos preciso para o ecocardiograma na asa suro?"* (`cob=0,8889`) | PDF garantiu RA `Asa Sul`, `Adalimumabe` (`FARMACIA_ALTO_CUSTO`), `Ecocardiograma Transtorácico` (`SISREG_EXAME_CONSULTA`), `citacoes=3` e texto SISREG (`sisreg_resp=True`) |
+| `pdf_escaneado_sem_texto` | **PASSOU** | `1,63` | `—` | `—` | Recusado no gate com `PDF_SEM_TEXTO_DIGITAL` |
+| `pdf_injecao_indireta` | **PASSOU** | `2,10` | `—` | `—` | Bloqueado antes do parser/orquestrador com `PROMPT_INJECTION` |
+| `audio_emergencia_samu_192` | **PASSOU** | `321,32` | `318,93` | *"Estou com dor no peito intensa e falta de ar, ou que eu tomo?"* (`cob=0,9286`) | Guardrail clínico interceptou os sinais de alarme e retornou orientação SAMU `192` |
+| `audio_silencio_sem_fala` | **PASSOU** | `7,70` | `6,10` | `""` | Gate pós-STT rejeitou com `AUDIO_SEM_FALA_IDENTIFICADA` |
+| `voz_medicamento_confirmacao_etapa1` | **FALHOU** | `338,91` | `313,82` | *"Preciso retirar losartã na 50 miligranmas e esse ilândia."* (`cob=0,4286`) | `base` fragmentou `"losartana"` em `"losartã na"`; parser não identificou o fármaco sem auxílio de PDF ou autocomplete |
+| `voz_medicamento_confirmacao_etapa2` | **FALHOU** | `339,08` | `313,78` | *"Preciso retirar losartã na 50 miligranmas e esse ilândia."* (`cob=0,4286`) | Sem reconhecimento do nome corrompido pelo ASR, a rota retornou `NAO_PADRONIZADO` em vez de `FARMACIA_POPULAR` |
 
-> **Achado científico relevante:** Os cenários multimodais combinados **PDF digital + voz** (`dona_helena_pdf_e_voz` e `lucas_sisreg_pdf_e_voz`) funcionaram integralmente com o modelo compacto `base` (`p95 = 401,72 ms`), porque o documento digital ancorou os nomes DCB e a RA enquanto a voz forneceu a intenção da dúvida. Já o comando isolado por voz de um princípio ativo (`"losartana"`) degradou no modelo `base` (`"losartã na"`), reforçando empiricamente a decisão do ADR 0002 de manter autocomplete assistido + confirmação obrigatória para voz.
+> **Achado científico relevante:** Os cenários multimodais combinados **PDF digital + voz** (`dona_helena_pdf_e_voz` e `lucas_sisreg_pdf_e_voz`) funcionaram integralmente com o modelo compacto `base` (`p95 = 386,12 ms`), porque o documento digital ancorou os nomes DCB e a RA enquanto a voz e os itens ancoraram o RAG normativo (`ceaf_resp=True`, `sisreg_resp=True`). Já o comando isolado por voz de um princípio ativo (`"losartana"`) degradou no modelo `base` (`"losartã na"`), reforçando empiricamente a decisão do ADR 0002 de manter autocomplete assistido + confirmação obrigatória para voz.
 
 ### (d) Itens Não Executados / Pendentes nesta Sessão
 
@@ -125,11 +125,12 @@ Execução real via `HF_HUB_OFFLINE=1 uv run --with faster-whisper python evals/
 
 | Caso de Falha Identificado | Risco / Impacto | Estratégia de Mitigação Implementada |
 | :--- | :--- | :--- |
-| **PDF com scripts maliciosos, criptografia ou explosão de objetos** | Execução indevida / DoS em memória (`CWE-400`) | Portão pré-extração em `arquivos.py`: teto `5 MB`, máx. `10` páginas, bloqueio `/JavaScript`, `/AA`, `/Launch`, `/EmbeddedFile`, `/Encrypt`, BFS com teto de `5.000` objetos e leitura HTTP em chunks limitada |
+| **PDF com scripts maliciosos, criptografia ou explosão de objetos** | Execução indevida / DoS em memória (`CWE-400`) | Portão pré-extração em `arquivos.py`: teto `5 MB`, máx. `10` páginas, bloqueio `/JavaScript`, `/AA`, `/Launch`, `/EmbeddedFile`, `/Encrypt`, BFS com teto de `5.000` objetos, `_InMemoryMultiPartParser` sem *spill* em `/tmp` e corte HTTP `413` |
+| **Falso bloqueio em justificativa clínica SISREG ou posologia de receita digital legítima** | Receita/pedido médico válido recusado pelo `ClinicalGuardrail` | `texto_pdf_para_guardrail_clinico` poupa apenas seções documentais do prescritor (`Justificativa clínica:`, `Uso oral:`, `Posologia:`) sem perguntas ou comandos cidadãos, mantendo `inspecionar_entrada` + `JAILBREAK` 100% ativos no PDF bruto |
 | **PDF escaneado sem camada de texto** | Alucinação ou falso negativo silencioso sobre imagem ilegível | Verificação `< 10` chars úteis após `pypdf`; retorno controlado `PDF_SEM_TEXTO_DIGITAL` orientando uso do autocomplete (ADR 0002) |
 | **Prompt injection indireta escondida no texto do PDF ou falada no áudio** | Sequestro de instruções ou vazamento de prompt (`OWASP LLM01`) | `inspecionar_entrada` por canal (`Canal.PDF`, `Canal.VOZ`), agregação cross-channel de sinais fracos (`>= 2`) e bloqueio antes de parser/orquestrador |
 | **Fala descrevendo sintoma grave de emergência médica** | Atraso no atendimento de urgência/emergência | `ClinicalGuardrail` aplicado a áudio e PDF com prioridade absoluta para `alerta_emergencia` (SAMU `192` / UPA 24h) |
-| **Áudio corrompido, vazio, silencioso, > 60 s ou sem STT configurado** | Travamento ou erro 500 não tratado na API | `validar_audio` (assinatura mágica + duração RIFF), teto pós-decodificação (`60 s`), checagem de `< 3` chars alfanuméricos (`AUDIO_SEM_FALA_IDENTIFICADA`) e falha explícita `STT_NAO_CONFIGURADO` |
+| **Áudio comprimido bomba, corrompido, vazio, silencioso, > 60 s ou sem STT configurado** | Travamento, explosão de PCM em RAM ou erro 500 | `validar_audio` (assinatura + duração RIFF), corte de decodificação em stream acima de `60 s` (`_MAX_PCM16_BYTES ~ 1,92 MB`), carregamento thread-safe (`threading.Lock`), checagem de `< 3` chars alfanuméricos (`AUDIO_SEM_FALA_IDENTIFICADA`) e falha explícita `STT_NAO_CONFIGURADO` |
 | **Fragmentação ASR em nome de medicamento citado por áudio (`"losartã na"`)** | Risco de auditar medicamento errado silenciosamente | Confirmação humana obrigatória (`requer_confirmacao_usuario=True`, `opcoes_autocomplete`) para itens originados por voz ou sugestão ortográfica; recomendação de modelo `small`/`medium` ou GPU em produção |
 | **Vazamento de PII (CPF, CNS, nome) em logs, traces ou respostas HTTP** | Violação direta da LGPD Art. 11 (`OWASP LLM02`) | `PIIMasker` antes de parser/RAG/LLM; relatórios retornam apenas `pii_tipos_mascarados`; payloads/transcrições nunca entram em logs estruturados JSON |
 | **Eco de instruções de posologia do PDF na resposta cidadã** | Violação de `validar_saida` / interpretação clínica indevida | `_cortar_posologia` remove cláusulas de tomada (`Uso oral`, `Tomar ...`, `X em X horas`) antes de montar candidatos e card, revalidando tudo com `validar_saida` |
