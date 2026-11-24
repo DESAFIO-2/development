@@ -36,15 +36,16 @@ class TabularDCBMatcher:
     )
 
     _DOSE_PART = (
-        r"\b\d+(?:[.,]\d+)*(?:/\d+(?:[.,]\d+)*)*\s*"
-        r"(?:mcg|mg|g|ui|ml|%)(?!\w)"
-        r"(?:\s*/\s*(?:\d+(?:[.,]\d+)*\s*)?(?:ml|g|dose)\b)?"
+        r"(?<!\()\b\d+(?:[.,]\d+)*(?:/\d+(?:[.,]\d+)*)*\s*"
+        r"(?:mcg|mg|g|ui|ml|meq|u|l|%)(?!\w)"
+        r"(?:\s*/\s*(?:\d+(?:[.,]\d+)*\s*)?(?:ml|g|l|dose)\b)?"
+        r"(?:\s*\((?:libera[cç][aã]o\s+de|\d+(?:[.,]\d+)?%)[^)]*\))?"
     )
     _DOSE = re.compile(_DOSE_PART + r"(?:\s*\+\s*" + _DOSE_PART + r")*", re.IGNORECASE)
     _INTERLEAVED_DOSE = re.compile(rf"{_DOSE_PART}\s*\+\s*[a-zA-ZÀ-ÿ]", re.IGNORECASE)
     _PACKAGE_SUFFIX_RE = re.compile(
         r"\((?:sistemadeaplicacao|apresentacoes?de|frasco|ampola|caneta|seringa|dispositivo"
-        r"|tubo|bisnaga|bolsa|\d+(?:\.\d+)?%)[^)]*\)$"
+        r"|tubo|bisnaga|bolsa|liberacaode|\d+(?:\.\d+)?%)[^)]*\)$"
     )
     _EQUIVALENCIAS_CONCENTRACAO_SCOPED: dict[str, tuple[frozenset[str], ...]] = {
         "sacubitril valsartana sodica hidratada": (
@@ -187,6 +188,19 @@ class TabularDCBMatcher:
         """Reconhece inclusive números da DCB e descrições compostas literais."""
         return self._labels.get(label_key(texto), [])
 
+    @staticmethod
+    def _forma_compativel(forma_consulta: str, forma_catalogo: str) -> bool:
+        consulta_norm = normalizar_texto_pt(forma_consulta)
+        if not consulta_norm:
+            return True
+        catalogo_norm = normalizar_texto_pt(forma_catalogo)
+        if consulta_norm == catalogo_norm:
+            return True
+        alternativas = {
+            parte.strip() for parte in re.split(r"\s+ou\s+", catalogo_norm) if parte.strip()
+        }
+        return consulta_norm in alternativas
+
     def filtrar_rotulo(
         self, candidatos: list[CanonicalMedicationItem], *, dcb: str, dose: str, forma: str
     ) -> list[tuple[float, CanonicalMedicationItem]]:
@@ -199,7 +213,7 @@ class TabularDCBMatcher:
                 self.normalizar_concentracao(dose),
                 self.normalizar_concentracao(med.concentration),
             )
-            and (not forma or label_key(forma) == label_key(med.pharmaceutical_form))
+            and self._forma_compativel(forma, med.pharmaceutical_form)
         ]
 
     def casar(
@@ -211,7 +225,6 @@ class TabularDCBMatcher:
         matches: list[tuple[float, CanonicalMedicationItem]] = []
 
         dose = self.normalizar_concentracao(concentracao)
-        forma_norm = normalizar_texto_pt(forma)
 
         candidatos = (
             self._associacoes_intercaladas(consulta)
@@ -224,7 +237,7 @@ class TabularDCBMatcher:
                 norm_dcb, dose, self.normalizar_concentracao(med.concentration)
             ):
                 continue
-            if forma_norm and normalizar_texto_pt(med.pharmaceutical_form) != forma_norm:
+            if not self._forma_compativel(forma, med.pharmaceutical_form):
                 continue
             dcb_tokens = [t for t in norm_dcb.split() if len(t) > 2]
             core_tokens = [t for t in dcb_tokens if t not in self._IGNORED_SALTS] or dcb_tokens

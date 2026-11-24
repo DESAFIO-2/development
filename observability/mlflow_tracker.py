@@ -74,11 +74,15 @@ class MLflowExperimentTracker:
             ),
             "canonical_medications_sha256": str(dados.get("canonical_medications_sha256", "")),
             "normative_chunks_sha256": str(dados.get("normative_chunks_sha256", "")),
-            "evidence_chunks_v2_sha256": str(dados.get("evidence_chunks_v2_sha256", "")),
+            "evidence_chunks_sha256": str(
+                dados.get("evidence_chunks_v3_sha256") or dados.get("evidence_chunks_v2_sha256", "")
+            ),
             "combined_sha256": str(dados.get("combined_sha256", "")),
             "canonical_medications_count": str(counts.get("canonical_medications", 0)),
             "normative_chunks_count": str(counts.get("normative_chunks", 0)),
-            "evidence_chunks_v2_count": str(counts.get("evidence_chunks_v2", 0)),
+            "evidence_chunks_count": str(
+                counts.get("evidence_chunks_v3") or counts.get("evidence_chunks_v2", 0)
+            ),
         }
 
     def _montar_tags(

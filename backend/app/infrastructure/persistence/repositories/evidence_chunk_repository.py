@@ -1,4 +1,4 @@
-"""Repositório de chunks literais de evidência aprovada (one-evidence-v2: 2.114 chunks)."""
+"""Repositório de chunks literais de evidência aprovada (one-evidence-v3: 2.114 chunks)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class LocalEvidenceChunkRepository(EvidenceRepositoryPort):
         path = (
             json_path
             if json_path is not None
-            else settings.data_processed_dir / "evidence_chunks_v2.json"
+            else settings.data_processed_dir / "evidence_chunks_v3.json"
         )
         conteudo = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(conteudo, list) or not conteudo:

@@ -47,8 +47,8 @@ def test_normalizar_concentracao_unifica_f01_f03_f04() -> None:
 
 
 def test_schema_drift_validation_curated_occurrences() -> None:
-    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v9.jsonl"
-    caminho_ev = RAIZ_REPO / "data" / "staging" / "curated_evidencias_v9.jsonl"
+    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v10.jsonl"
+    caminho_ev = RAIZ_REPO / "data" / "staging" / "curated_evidencias_v10.jsonl"
     occurrences = [
         json.loads(line) for line in ler_bytes_lf(caminho_occ).splitlines() if line.strip()
     ]
@@ -68,26 +68,32 @@ def test_schema_drift_validation_curated_occurrences() -> None:
     assert ev_report.total_records == 2114
     assert ev_report.valid_records == 2114
 
-    upstream = json.loads(ler_bytes_lf(RAIZ_REPO / "data/manifests/corpus_v9_source.json"))
+    upstream = json.loads(ler_bytes_lf(RAIZ_REPO / "data/manifests/corpus_v10_source.json"))
     expected = upstream["staging_files_sha256"]
     assert (
         hashlib.sha256(ler_bytes_lf(caminho_occ)).hexdigest()
-        == expected["curated_occurrences_v9.jsonl"]
+        == expected["curated_occurrences_v10.jsonl"]
     )
     assert (
         hashlib.sha256(ler_bytes_lf(caminho_ev)).hexdigest()
-        == expected["curated_evidencias_v9.jsonl"]
+        == expected["curated_evidencias_v10.jsonl"]
     )
     excluido = upstream["excluded_occurrences"][0]["occurrence_id"]
     assert all(row["occurrence_id"] != excluido for row in occurrences)
 
-    # Correções v6-v9 portadas de engenharia de dados (OCR, C-F03-003 e claritromicina)
+    # Correções v6-v10 portadas de engenharia de dados (OCR, C-F03-003, claritromicina e F01 p. 41)
     assert any(r["active_ingredient"] == "fenoximetilpenicilina potássica" for r in occurrences)
     assert any(
         r["occurrence_id"] == "occ-bc5acf38f4260802e843100c"
         and r["strength"] == "equivalente a 500 ou 600 mg de cálcio + colecalciferol 400 UI"
         for r in occurrences
     )
+    assert any(
+        r["occurrence_id"] == "occ-3c800a169e894016ada0a5c0" and "0,3 mg/mL" in r["strength"]
+        for r in occurrences
+    )
+    # Os 53 componentes F01 ausentes na v9 passaram a estar preenchidos na v10
+    assert all(r.get("component") for r in occurrences if r["source"]["source_id"] == "F01")
 
     canonico = RAIZ_REPO / "data/processed/medicamentos_sus_canonical.json"
     consolidado = consolidar_catalogo_medicamentos(occurrences)
@@ -211,17 +217,18 @@ def test_evidence_chunk_repository_e_ceaf_live_stock() -> None:
 def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
     caminho_meds = RAIZ_REPO / "data" / "processed" / "medicamentos_sus_canonical.json"
     caminho_norm = RAIZ_REPO / "data" / "processed" / "normative_chunks.json"
-    caminho_ev_chunks = RAIZ_REPO / "data" / "processed" / "evidence_chunks_v2.json"
-    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v9.jsonl"
-    caminho_ev = RAIZ_REPO / "data" / "staging" / "curated_evidencias_v9.jsonl"
+    caminho_ev_chunks = RAIZ_REPO / "data" / "processed" / "evidence_chunks_v3.json"
+    caminho_occ = RAIZ_REPO / "data" / "staging" / "curated_occurrences_v10.jsonl"
+    caminho_ev = RAIZ_REPO / "data" / "staging" / "curated_evidencias_v10.jsonl"
     caminho_manifest = RAIZ_REPO / "data" / "manifests" / "manifest.json"
 
     assert not (RAIZ_REPO / "data" / "processed" / "unified_pdf_chunks.json").exists()
     assert not (RAIZ_REPO / "data" / "processed" / "medicamentos_sus_canonical_full.json").exists()
+    assert not (RAIZ_REPO / "data" / "processed" / "evidence_chunks_v2.json").exists()
 
     manifest = json.loads(caminho_manifest.read_text(encoding="utf-8"))
-    assert manifest["manifest_version"] == "2026.4.0"
-    assert manifest["engineering_source"] == "corpus-consolidado-v9-aprovado-2026-11-12"
+    assert manifest["manifest_version"] == "2026.5.0"
+    assert manifest["engineering_source"] == "corpus-consolidado-v10-aprovado-2026-11-17"
 
     assert (
         hashlib.sha256(ler_bytes_lf(caminho_meds)).hexdigest()
@@ -233,7 +240,7 @@ def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
     )
     assert (
         hashlib.sha256(ler_bytes_lf(caminho_ev_chunks)).hexdigest()
-        == manifest["evidence_chunks_v2_sha256"]
+        == manifest["evidence_chunks_v3_sha256"]
     )
     assert (
         hashlib.sha256(ler_bytes_lf(caminho_occ)).hexdigest()
@@ -255,6 +262,22 @@ def test_chunks_sincronizados_com_base_consolidada_e_manifesto() -> None:
     assert len({str(c["chunk_id"]) for c in ev_chunks}) == 2114
     assert len({str(c["text"]) for c in ev_chunks}) == 2114
     assert all(str(c["literal_text"]).strip() for c in ev_chunks)
+
+    # Regressão v10: componentes F01 preenchidos corrigem roteamento CEAF e componente Estratégico
+    catalogo_bruto = json.loads(caminho_meds.read_text(encoding="utf-8"))
+    for dcb_ceaf in ("somatropina", "acetato de octreotida"):
+        itens_ceaf = [m for m in catalogo_bruto if m["dcb_name"] == dcb_ceaf]
+        assert itens_ceaf and all(
+            m["dispensation_route"] == "ALTO_CUSTO_CEAF" for m in itens_ceaf
+        ), dcb_ceaf
+    desmo = {
+        m["concentration"]: m for m in catalogo_bruto if m["dcb_name"] == "acetato de desmopressina"
+    }
+    assert desmo["0,1 mg"]["dispensation_route"] == "ALTO_CUSTO_CEAF"
+    assert desmo["0,1 mg/mL"]["dispensation_route"] == "ALTO_CUSTO_CEAF"
+    assert desmo["0,2 mg"]["dispensation_route"] == "ALTO_CUSTO_CEAF"
+    assert desmo["4 mcg/mL"]["rename_component"] == "Estratégico"
+    assert desmo["15 mcg/mL"]["rename_component"] == "Estratégico"
 
 
 def test_hybrid_retriever_recupera_fontes_complementares_consolidada() -> None:
@@ -286,9 +309,9 @@ def test_mlflow_experiment_tracker_registra_linhagem(tmp_path: Path) -> None:
         metrics={"hit_rate_at_3": 1.0, "mrr": 1.0},
     )
     assert rec.status == "FINISHED"
-    assert rec.tags["manifest_version"] == "2026.4.0"
-    assert len(rec.tags["evidence_chunks_v2_sha256"]) == 64
-    assert rec.tags["evidence_chunks_v2_count"] == "2114"
+    assert rec.tags["manifest_version"] == "2026.5.0"
+    assert len(rec.tags["evidence_chunks_sha256"]) == 64
+    assert rec.tags["evidence_chunks_count"] == "2114"
     assert len(rec.tags["combined_sha256"]) == 64
 
 
@@ -303,7 +326,7 @@ def test_evidencias_rejeitam_duplicatas_e_vinculos_ausentes(tmp_path: Path) -> N
     with pytest.raises(ValueError, match="sem evidência"):
         repo.buscar_por_occurrence_ids([repo.listar_todos()[0].occurrence_id, "inexistente"])
     raw = json.loads(
-        (RAIZ_REPO / "data/processed/evidence_chunks_v2.json").read_text(encoding="utf-8")
+        (RAIZ_REPO / "data/processed/evidence_chunks_v3.json").read_text(encoding="utf-8")
     )
     path = tmp_path / "evidence.json"
     path.write_text(json.dumps([raw[0], raw[0]]))
@@ -317,7 +340,7 @@ def test_reconciliacao_preserva_ocorrencias_e_nao_inventa_identidade() -> None:
     )
     occurrences = [
         json.loads(line)
-        for line in (RAIZ_REPO / "data/staging/curated_occurrences_v9.jsonl")
+        for line in (RAIZ_REPO / "data/staging/curated_occurrences_v10.jsonl")
         .read_text(encoding="utf-8")
         .splitlines()
     ]

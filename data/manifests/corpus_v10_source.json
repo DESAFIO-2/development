@@ -1,0 +1,51 @@
+{
+  "repository": "https://github.com/DESAFIO-2/data-engineering.git",
+  "origin_main_commit": "8b9f15ac6c1f8a3685ce8ab8a139ffac0857f6cc",
+  "candidate_git_commit": "b63618ea8b855b7a6815c2086a0c3f0eda216936",
+  "base_tracked_candidate_path": "data/releases/corpus-consolidado-v10-normalizada-2026-11-17",
+  "base_tracked_candidate_manifest_sha256": "d99e26e52eca0c3b115c9f7d93fa600b2ca4fe39a885cc268c10ff88252e5921",
+  "release_path": "data/releases/corpus-consolidado-v10-aprovado-2026-11-17",
+  "release_version": "corpus-consolidado-v10-aprovado-2026-11-17",
+  "schema_version": "consolidated-release-v2",
+  "release_status_origin": "approved",
+  "approval_reproduction_script": "scripts/archive/releases/v10/approve_v10_release.py",
+  "published_release_manifest_sha256": "7e93955247de1ded77121a00bf1b14c320d782cf21c4d9e9464d4e8f3e24d179",
+  "corpus_fingerprint": "b7c41f04be50102ee4550647f8d9109af42c2cd1d07ef9cbeb78d608c240ac92",
+  "chunks_v3_sha256": "d2f415af483ea6700266f8a255db1880d159e0cc140723dbadc7f87f1cb21570",
+  "approval_scope": "Indexação e recuperação de presença documental de medicamentos, apresentações e insumos nas edições congeladas F01 (RENAME 2024), F03 (REME-DF 2026) e F04 (Farmácia Popular 2026), com normalização aditiva, 1727 apresentações e chunks one-evidence-v3.",
+  "review_reference": {
+    "path": "docs/reports/v10/revisao-v10-normalizada-jhiovana.md",
+    "scope": "Aprovação humana da normalização aditiva, vocabulários, reconciliação de catálogo e correções de parser F01; gate RAG separado.",
+    "sha256": "e4ac6812d3ee2e86caf82fdec25607b74d725baa36792d9d370f6db9458c4c9c"
+  },
+  "source_files_sha256": {
+    "audit_log.jsonl": "cf8b917a1e50c8ec2a474e205c11b4f69e479ec2a8a5b8025c3a14c7b72e4fb9",
+    "catalog.jsonl": "5bf2a31475266cc117b2bf576bb53b4fc66e931686a03234f66161e2da22ba4c",
+    "evidencias.jsonl": "13d1f2ebc2a659c11aa028fecd966c7888db5396fccd8280f934c500d01b30e2",
+    "exclusions.jsonl": "fcd2fa50a461109fc4759fa2bbe4f7f51b4e652c166f6cdec4439b7efe225383",
+    "f03_descriptions.json": "6959c908e0fc21a96b31f965eb156f7b1503c8b5a3bfbdbe118285ce7932cec4",
+    "id_map_v9_v10.json": "f7f630d2f4026fd9029dfdcbf5442fdf056d68f28d3bba5b09feb7dd4eaee0cd",
+    "normalization.json": "9542b4e1588f69b0d094580566d26aee7a273814132a925f9e273f053f445124",
+    "occurrences.jsonl": "54d9ac62959797d1a3560201f468694fe56fd2d59863990fc201352811798f34",
+    "quality_report.json": "5a140a756ed1bfd7e3a94340c77d06213657030ef868f0c7611e407b1d5fcf5a"
+  },
+  "staging_files_sha256": {
+    "curated_occurrences_v10.jsonl": "54d9ac62959797d1a3560201f468694fe56fd2d59863990fc201352811798f34",
+    "curated_evidencias_v10.jsonl": "13d1f2ebc2a659c11aa028fecd966c7888db5396fccd8280f934c500d01b30e2"
+  },
+  "excluded_occurrences": [
+    {
+      "occurrence_id": "occ-dd3666cce6867d6246aae72f",
+      "raw_text": "987.",
+      "reason": "Linha numerada sem item na célula DESCRIÇÃO; excluída da publicação",
+      "source": {
+        "page": 55,
+        "sha256": "299ff632a4e55d1dabbc953dc9c9e09f1cf6bbe2cabef8bf45fec5fbd5139fb6",
+        "source_id": "F03",
+        "url": "https://www.saude.df.gov.br/documents/d/saude/reme_df___29_10_2026___final-pdf",
+        "version": "REME-DF 2026-10-29"
+      },
+      "source_row_number": 987
+    }
+  ]
+}

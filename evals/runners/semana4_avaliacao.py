@@ -378,7 +378,7 @@ def load_chunk_index(root: Path = RAIZ) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     for rel in (
         "data/processed/normative_chunks.json",
-        "data/processed/evidence_chunks_v2.json",
+        "data/processed/evidence_chunks_v3.json",
     ):
         raw = read_json(root / rel)
         items = raw if isinstance(raw, list) else raw.get("chunks", [])
