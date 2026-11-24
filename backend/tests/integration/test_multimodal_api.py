@@ -373,6 +373,9 @@ def test_whisper_http_transcriber_adapter_mockado_e_erro() -> None:
         err = adapter.transcrever(_construir_wav_pcm(1.0), formato="wav")
     assert err.error_code == "STT_INDISPONIVEL"
 
+    with pytest.raises(ValueError, match="Esquema de URL inválido"):
+        WhisperHTTPTranscriberAdapter(base_url="file:///etc/passwd")
+
 
 def test_faster_whisper_adapter_dependencia_ausente_e_duracao_excedida() -> None:
     adapter = FasterWhisperTranscriberAdapter(model_name="tiny")

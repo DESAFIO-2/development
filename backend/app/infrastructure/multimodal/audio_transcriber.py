@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from typing import Any, Literal
@@ -244,6 +245,15 @@ def _montar_multipart(
     return b"".join(partes), f"multipart/form-data; boundary={boundary}"
 
 
+def _validar_base_url(base_url: str) -> str:
+    """Permite apenas URLs HTTP/HTTPS com host válido (previne `file://` / CWE-22)."""
+    limpa = base_url.strip().rstrip("/")
+    parsed = urllib.parse.urlparse(limpa)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Esquema de URL inválido para provedor Whisper HTTP")
+    return limpa
+
+
 class WhisperHTTPTranscriberAdapter(AudioTranscriberPort):
     """Cliente HTTP compatível com OpenAI Whisper (/v1/audio/transcriptions)."""
 
@@ -255,13 +265,14 @@ class WhisperHTTPTranscriberAdapter(AudioTranscriberPort):
         timeout_seconds: float = 30.0,
         language: str = "pt",
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _validar_base_url(base_url)
         self.model_name = model_name
         self.timeout_seconds = timeout_seconds
         self.language = language
 
     def transcrever(self, conteudo: bytes, *, formato: str) -> AudioTranscriptionDTO:
         inicio = time.perf_counter()
+        base_url = _validar_base_url(self.base_url)
         ext = "".join(ch for ch in formato.lower() if ch.isalnum()) or "wav"
         body, content_type = _montar_multipart(
             conteudo,
@@ -273,13 +284,15 @@ class WhisperHTTPTranscriberAdapter(AudioTranscriberPort):
             },
         )
         req = urllib.request.Request(
-            f"{self.base_url}/v1/audio/transcriptions",
+            f"{base_url}/v1/audio/transcriptions",
             data=body,
             headers={"Content-Type": content_type},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+            with urllib.request.urlopen(  # nosec B310
+                req, timeout=self.timeout_seconds
+            ) as resp:
                 raw_payload = resp.read().decode("utf-8")
             parsed = json.loads(raw_payload)
             if not isinstance(parsed, dict) or "text" not in parsed:
