@@ -20,6 +20,32 @@ logger = logging.getLogger("app.multimodal.stt")
 STTProviderName = Literal["disabled", "faster_whisper", "whisper_http"]
 
 
+def _decodificar_audio_16k_mono(conteudo: bytes) -> tuple[Any, float] | None:
+    """Decodifica áudio via PyAV + NumPy em 16 kHz mono float32 sem `metadata_errors`.
+
+    Evita incompatibilidade do `faster-whisper` com `PyAV >= 19` e retorna `None`
+    quando as dependências opcionais (`av`, `numpy`) não estão presentes no ambiente.
+    """
+    try:
+        av = importlib.import_module("av")
+        np = importlib.import_module("numpy")
+    except ImportError:
+        return None
+
+    resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16_000)
+    raw_buffer = io.BytesIO()
+    with av.open(io.BytesIO(conteudo), mode="r") as container:
+        for frame in container.decode(audio=0):
+            for rframe in resampler.resample(frame):
+                raw_buffer.write(rframe.to_ndarray())
+        for rframe in resampler.resample(None):
+            raw_buffer.write(rframe.to_ndarray())
+
+    audio = np.frombuffer(raw_buffer.getbuffer(), dtype=np.int16).astype(np.float32) / 32768.0
+    duracao = round(len(audio) / 16_000.0, 3)
+    return audio, duracao
+
+
 class FasterWhisperTranscriberAdapter(AudioTranscriberPort):
     """Transcrição local em CPU via faster-whisper (extra opcional `stt`)."""
 
@@ -43,11 +69,20 @@ class FasterWhisperTranscriberAdapter(AudioTranscriberPort):
         if self._modelo is None:
             modulo = importlib.import_module("faster_whisper")
             whisper_cls = modulo.WhisperModel
-            self._modelo = whisper_cls(
-                self.model_name,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
+            try:
+                self._modelo = whisper_cls(
+                    self.model_name,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    local_files_only=True,
+                )
+            except Exception:
+                self._modelo = whisper_cls(
+                    self.model_name,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    local_files_only=False,
+                )
         return self._modelo
 
     def transcrever(self, conteudo: bytes, *, formato: str) -> AudioTranscriptionDTO:
@@ -79,14 +114,37 @@ class FasterWhisperTranscriberAdapter(AudioTranscriberPort):
             )
 
         try:
+            decodificado = _decodificar_audio_16k_mono(conteudo)
+            entrada_modelo: Any
+            duracao_decodificada: float | None = None
+            if decodificado is not None:
+                entrada_modelo, duracao_decodificada = decodificado
+                if duracao_decodificada > MAX_DURACAO_AUDIO_SEGUNDOS:
+                    latencia_ms = round((time.perf_counter() - inicio) * 1000, 2)
+                    return AudioTranscriptionDTO(
+                        text="",
+                        language=self.language,
+                        duration_seconds=duracao_decodificada,
+                        provider="faster_whisper",
+                        model_name=self.model_name,
+                        latency_ms=latencia_ms,
+                        error_code="AUDIO_LONGO_DEMAIS",
+                    )
+            else:
+                entrada_modelo = io.BytesIO(conteudo)
+
             segmentos, info = modelo.transcribe(
-                io.BytesIO(conteudo),
+                entrada_modelo,
                 language=self.language,
                 beam_size=self.beam_size,
                 vad_filter=True,
             )
-            duracao_bruta = getattr(info, "duration", None)
-            duracao = round(float(duracao_bruta), 3) if duracao_bruta is not None else None
+            duracao_bruta = getattr(info, "duration", duracao_decodificada)
+            duracao = (
+                round(float(duracao_bruta), 3)
+                if duracao_bruta is not None
+                else duracao_decodificada
+            )
             if duracao is not None and duracao > MAX_DURACAO_AUDIO_SEGUNDOS:
                 latencia_ms = round((time.perf_counter() - inicio) * 1000, 2)
                 return AudioTranscriptionDTO(

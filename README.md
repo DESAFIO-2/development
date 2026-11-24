@@ -39,7 +39,7 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 * **Semana 2:** Base de Conhecimento e Recuperação (RAG Híbrido: CSV tabular + Chunks vetoriais de portarias).
 * **Semana 3:** Avaliação Experimental Científica (LLM pura vs. RAG com framework RAGAS).
 * **Semana 4:** Sistema Multiagentes Colaborativo (LangGraph / CrewAI).
-* **Semana 5:** Pipeline Multimodal (PDFs digitais padrão CFM/ICP-Brasil + OCR + Transcrição Whisper).
+* **Semana 5:** Pipeline Multimodal (Texto + PDF digital nativo sem OCR em imagens + Transcrição Whisper opcional, corpus v10).
 * **Semana 6:** Integração Sistêmica Ponta a Ponta (API FastAPI + Interface).
 * **Semana 7:** Bateria de Testes com Usuários, Métricas DCS e Demonstração Final.
 
@@ -53,12 +53,13 @@ O **SUS Cidadão** é uma solução de Inteligência Artificial desenhada para e
 | **Decisão sobre cliente mobile & carteira digital** | Semana 1 | ✅ Documentada | [ADR 0002](docs/adr/0002_mobile_first_react_native_client.md) |
 | **Estratégia de Avaliação & Métricas** | Semanas 1-2 | ✅ Concluído | [ADR 0003](docs/adr/0003_estrategia_avaliacao_metricas_ragas.md) e [Matriz de Métricas](docs/architecture/matriz_metricas_avaliacao.md) |
 | **Dataset de Guardrails Clínicos** | Semana 2 | ✅ Concluído | `evals/datasets/guardrail_clinico_v1.jsonl` (Recall: 100%, Falso Bloqueio: 0%) |
-| **Ingestão Tabular RENAME / PFPB / REME-DF** | Semanas 2–3 | ✅ Concluído | Consolidação rastreável com proveniência (`data/staging/` e `data/processed/`) |
+| **Ingestão Tabular RENAME / PFPB / REME-DF** | Semanas 2–5 | ✅ Corpus v10 portado | `data/processed/` (`1.708` apresentações, `2.114` chunks `evidence_chunks_v3.json`, `20` normativos) e [Portação v10](docs/implementation/portacao_v10_semana5.md) |
 | **Recuperação híbrida na API** | Semanas 2–3 | ✅ Implementada | DCB tabular, BM25 e TF-IDF com RRF (sem ChromaDB em runtime). |
-| **Benchmark determinístico / Golden Dataset** | Semanas 2–3 | ✅ v1 e v2 aprovados no benchmark atual | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) |
+| **Benchmark determinístico / Golden Dataset** | Semanas 2–5 | ✅ v1 e v2 aprovados no corpus v10 | [Registro da portação v5](docs/implementation/plano_semana3_corpus_v5.md) e [Portação v10](docs/implementation/portacao_v10_semana5.md) |
 | **Comparação LLM sem recuperação × LLM com RAG** | Semana 3 | ✅ Protocolo desacoplado, validado e pronto para execução local (M4) | [Entregável Semana 3](docs/entregaveis_semana3_comparativo.md), [ADR 0004](docs/adr/0004_integridade_comparativo_semana3.md) e [Roteiro MacBook M4](docs/implementation/plano_execucao_semana3_local_macbook.md) |
-| **Multiagentes Especializados** | Semana 4 |  ✅  Implementados na `main`; comparativo local Ollama (`semana4-v2`) executado | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Guia dos quatro agentes](docs/architecture/agentes_semana4.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
-| **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado | App React Native com gravação de áudio e notificações |
+| **Multiagentes Especializados** | Semana 4 | ⚠️ Implementados; comparativo local Ollama (`semana4-v3` + `semana4-eval-v2`) reprovou em gates/revisão humana pendente | [Entregável Semana 4](docs/entregaveis_semana4_multiagentes.md), [Revisão Semana 4](docs/reviews/revisao_completa_semana4_2026_11_19.md) e [ADR 0007](docs/adr/0007_orquestracao_semana4.md) |
+| **Pipeline Multimodal (Texto + PDF Digital + Áudio)** | Semana 5 | ✅ Implementado na branch `feat/semana5-multimodalidade` | [Entregável Semana 5](docs/entregaveis_semana5_multimodalidade.md), [ADR 0008](docs/adr/0008_pipeline_multimodal_semana5.md) e `/api/v1/agents/multimodal` |
+| **Interface Mobile & Acessibilidade** | Semanas 5-6 | ⏳ Planejado (`mobile/` ainda não iniciado) | App React Native com gravação de áudio e notificações |
 | **Validação com Usuários & DCS** | Semana 7 | ⏳ Planejado | Redução de Conflito Decisório ($\ge 35\%$) com voluntários |
 ---
 ## Bases de Dados Oficiais (100% Públicas)
@@ -178,6 +179,10 @@ make semana4-compare   # Coleta comparativa completa (5 casos, timeout padrão 1
 make semana4-eval      # Avaliação automatizada Semana 4 (controles + juiz estruturado + RAGAS 0.4.3)
 make registrar-avaliacoes  # Indexa execuções locais no SQLite MLflow (evals/reports/mlflow.db)
 make mlflow-ui         # Sobe interface MLflow local para comparar execuções e versões de prompt
+
+# 11. Pipeline Multimodal (Semana 5: Texto + PDF digital + Áudio)
+make demo-multimodal   # Demo PDF + texto (ou STT_PROVIDER=faster_whisper STT_MODEL=base)
+make eval-multimodal   # Smoke sintético ou coleta real (STT_PROVIDER=faster_whisper)
 ```
 
 ### Endpoints Principais da API (FastAPI)
@@ -186,6 +191,7 @@ make mlflow-ui         # Sobe interface MLflow local para comparar execuções e
 - `GET /api/v1/medications/autocomplete?q=losartana` — Autocomplete assistido de fármacos da RENAME com princípios ativos DCB.
 - `POST /api/v1/prescriptions/audit` — Auditoria normativa de receitas médicas, mascaramento LGPD, roteiro de gratuidade e preservação do Ato Médico.
 - `POST /api/v1/agents/orchestrate` — Orquestração multiagente LangGraph stateless (`triagem`, `auditor_farmaceutico`, `consultor_normativo`, `sintetizador_cidadao`) com evidências por ocorrência e citações determinísticas.
+- `POST /api/v1/agents/multimodal` — Ingestão `multipart/form-data` stateless em memória para Texto, PDF digital nativo (`pypdf`) e Áudio (`faster_whisper` / `whisper_http` opcionais), com gates estruturais (`arquivos.py`) e confirmação humana para áudio/ortografia.
 
 ---
 

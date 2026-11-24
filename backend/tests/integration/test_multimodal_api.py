@@ -386,8 +386,13 @@ def test_faster_whisper_adapter_dependencia_ausente_e_duracao_excedida() -> None
             self.language = "pt"
 
     class _FakeWhisperModel:
+        chamadas_local: list[bool] = []
+
         def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
+            local = bool(kwargs.get("local_files_only", False))
+            self.chamadas_local.append(local)
+            if local and self.chamadas_local.count(True) == 2:
+                raise RuntimeError("cache ausente")
 
         def transcribe(self, *args: object, **kwargs: object) -> tuple[list[_FakeSeg], _FakeInfo]:
             buf = args[0] if args else None
@@ -397,12 +402,31 @@ def test_faster_whisper_adapter_dependencia_ausente_e_duracao_excedida() -> None
     fake_mod = types.ModuleType("faster_whisper")
     fake_mod.WhisperModel = _FakeWhisperModel  # type: ignore[attr-defined]
     adapter2 = FasterWhisperTranscriberAdapter(model_name="small")
-    with patch.dict(sys.modules, {"faster_whisper": fake_mod}):
+    adapter3 = FasterWhisperTranscriberAdapter(model_name="base")
+    with (
+        patch.dict(sys.modules, {"faster_whisper": fake_mod}),
+        patch(
+            "app.infrastructure.multimodal.audio_transcriber._decodificar_audio_16k_mono",
+            return_value=None,
+        ),
+    ):
         curto = adapter2.transcrever(_construir_wav_pcm(1.0), formato="wav")
         longo = adapter2.transcrever(_construir_wav_pcm(1.0) + b"LONG", formato="wav")
+        recarga = adapter3.transcrever(_construir_wav_pcm(1.0), formato="wav")
+    with (
+        patch.dict(sys.modules, {"faster_whisper": fake_mod}),
+        patch(
+            "app.infrastructure.multimodal.audio_transcriber._decodificar_audio_16k_mono",
+            return_value=([0.0], 75.0),
+        ),
+    ):
+        longo_dec = adapter2.transcrever(_construir_wav_pcm(1.0), formato="wav")
     assert curto.error_code is None
     assert curto.text == "Onde pego losartana"
     assert longo.error_code == "AUDIO_LONGO_DEMAIS"
+    assert longo_dec.error_code == "AUDIO_LONGO_DEMAIS"
+    assert recarga.error_code is None
+    assert _FakeWhisperModel.chamadas_local == [True, True, False]
 
 
 def test_multimodal_itens_json_invalido_retorna_422(

@@ -81,7 +81,8 @@ _DATE_BR_RE = re.compile(r"\b(\d{2})[/-](\d{2})[/-](\d{4})\b")
 _DATE_ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 
 _BOILERPLATE_PREFIX_RE = re.compile(
-    r"^(?:receitu[aá]rio|receita\s+m[eé]dica|secretaria\s+de\s+(?:estado\s+de\s+)?sa[uú]de"
+    r"^(?:receitu[aá]rio|receita\s+m[eé]dica|guia\s+(?:de\s+)?solicita[cç][aã]o"
+    r"|solicita[cç][aã]o\s+ambulatorial|secretaria\s+de\s+(?:estado\s+de\s+)?sa[uú]de"
     r"|governo\s+do\s+distrito|sus[-\s]*df|paciente|nome\s+do\s+paciente|titular"
     r"|cpf|cns|cart[aã]o\s+sus|rg\b|crm|cid-?10|cep|endere[cç]o|telefone|e-?mail"
     r"|data\s+de\s+nascimento|nascimento|assinad[oa]|icp-?brasil|carimbo|validade"

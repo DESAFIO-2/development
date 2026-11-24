@@ -10,6 +10,8 @@ import json
 import time
 import urllib.error
 import urllib.request
+import uuid
+from pathlib import Path
 from typing import Any
 
 
@@ -19,6 +21,41 @@ def requisitar(base_url: str, rota: str, payload: dict[str, Any] | None = None) 
         base_url.rstrip("/") + rota,
         data=data,
         headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        assert response.status == 200, response.status
+        return json.load(response)
+
+
+def requisitar_multipart(
+    base_url: str,
+    rota: str,
+    *,
+    arquivo_campo: str,
+    arquivo_nome: str,
+    arquivo_bytes: bytes,
+    campos: dict[str, str],
+) -> Any:
+    boundary = f"----SmokeBoundary{uuid.uuid4().hex}"
+    partes: list[bytes] = []
+    for k, v in campos.items():
+        partes.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+        )
+    partes.append(
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{arquivo_campo}"; filename="{arquivo_nome}"\r\n'
+            "Content-Type: application/pdf\r\n\r\n"
+        ).encode()
+    )
+    partes.append(arquivo_bytes)
+    partes.append(f"\r\n--{boundary}--\r\n".encode())
+    request = urllib.request.Request(
+        base_url.rstrip("/") + rota,
+        data=b"".join(partes),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         assert response.status == 200, response.status
@@ -84,7 +121,24 @@ def executar(base_url: str) -> None:
     )
     assert blocked["primary_route"] == "BLOQUEADO"
     assert "192" in blocked["card"]["resumo_acolhedor"]
-    print(f"HTTP smoke aprovado: health, autocomplete, {len(casos)} auditorias e 2 grafos.")
+    raiz_monorepo = Path(__file__).resolve().parents[2]
+    pdf_helena = raiz_monorepo / "evals/datasets/multimodal_sintetico_v1/receita_helena_digital.pdf"
+    multi = requisitar_multipart(
+        base_url,
+        "/api/v1/agents/multimodal",
+        arquivo_campo="pdf_file",
+        arquivo_nome="receita_helena_digital.pdf",
+        arquivo_bytes=pdf_helena.read_bytes(),
+        campos={"pergunta_adicional": "Onde retiro esses medicamentos em Ceilândia?"},
+    )
+    assert multi["sucesso"] is True
+    assert multi["modalidades_recebidas"] == ["texto", "pdf"]
+    assert not multi["requer_confirmacao_usuario"]
+    assert "123.456.789-00" not in json.dumps(multi, ensure_ascii=False)
+    print(
+        f"HTTP smoke aprovado: health, autocomplete, {len(casos)} auditorias, "
+        "2 grafos e 1 multimodal."
+    )
 
 
 if __name__ == "__main__":
