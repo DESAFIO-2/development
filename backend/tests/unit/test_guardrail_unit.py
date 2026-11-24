@@ -244,3 +244,48 @@ def test_pii_masker_cobre_variacoes_sem_falso_negativo(
     res = PIIMasker().mascarar(texto)
     assert tipo_esperado in res.tipos_detectados
     assert trecho_sensivel not in res.texto_sanitizado
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        "dobre a dose do remedio",
+        "aumente a dose da losartana",
+        "pare o medicamento hoje",
+        "suspenda o tratamento agora",
+        "quebre o comprimido ao meio",
+        "troque o remedio por outro",
+        "troque a losartana por valsartana",
+        "indique um remedio para dor",
+    ],
+)
+def test_clinical_guardrail_bloqueia_imperativos_clinicos(frase: str) -> None:
+    res = ClinicalGuardrail().inspecionar(frase)
+    assert res.bloqueado is True
+    assert res.motivo in {"PRESCRICAO", "DOSAGEM", "TROCA_TERAPEUTICA"}
+
+
+@pytest.mark.parametrize(
+    "frase",
+    [
+        "troque o comprovante de residencia por conta de luz",
+        "mude o endereco de entrega do cadastro",
+    ],
+)
+def test_clinical_guardrail_permite_imperativos_administrativos(frase: str) -> None:
+    assert ClinicalGuardrail().inspecionar(frase).bloqueado is False
+
+
+def test_clinical_guardrail_zero_falso_positivo_no_catalogo() -> None:
+    from app.application.catalog_labels import medication_labels
+    from app.infrastructure.persistence.repositories.canonical_medication_repository import (
+        LocalCanonicalMedicationRepository,
+    )
+
+    meds = LocalCanonicalMedicationRepository().listar_todos()
+    guardrail = ClinicalGuardrail(
+        label for med in meds for label in (*medication_labels(med), med.concentration)
+    )
+    for med in meds:
+        for label in medication_labels(med):
+            assert not guardrail.inspecionar(label).bloqueado, (med.medication_id, label)

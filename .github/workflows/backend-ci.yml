@@ -2,10 +2,10 @@ name: backend-ci
 
 on:
   pull_request:
-    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", "data/manifests/**", ".github/workflows/backend-ci.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "evals/**", "observability/**", "data/processed/**", "data/manifests/**", ".github/workflows/backend-ci.yml"]
 
 jobs:
   qualidade:

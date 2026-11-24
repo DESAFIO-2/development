@@ -4,7 +4,7 @@ Nunca fabrica qualidade nem mascara revisão humana: distingue explicitamente co
 determinísticos, juiz LLM com rubrica estruturada em português e métricas RAGAS oficiais.
 Executar na raiz (com `evals` para incluir RAGAS 0.4.3):
   uv run --project evals python evals/runners/semana4_avaliacao.py \\
-    --resultado evals/reports/semana4_comparativo_v2/resultado.json
+    --resultado evals/reports/semana4_comparativo_v3/resultado.json
 """
 
 # ruff: noqa: E402

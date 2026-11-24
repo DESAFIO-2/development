@@ -819,7 +819,7 @@ CURATED_COMPLEMENTARY_NORMATIVE_CHUNKS: list[dict[str, Any]] = [
         ),
         "page_number": 2,
         "text": (
-            "Pelo Programa Farmácia Popular do Brasil (Aqui Tem Farmácia Popular), além do "
+            "Pelo Programa Farmácia Popular do Brasil, além do "
             "elenco de medicamentos gratuitos para hipertensão, diabetes, asma, osteoporose, "
             "dislipidemia, rinite, doença de Parkinson, glaucoma e anticoncepção, são "
             "disponibilizadas fraldas geriátricas (para pessoas com idade igual ou superior a "

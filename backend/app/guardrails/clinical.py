@@ -88,8 +88,9 @@ class ClinicalGuardrail:
             r"\b(?:tomar|tomo|dar|dou|usar|uso|tomaria)\b"
         ),
         re.compile(
-            rf"\b(?:me|nos|pode|poderia)\b(?:\W+\w+){{0,3}}?\W+"
-            rf"\b(?:indica\w*|receit\w*|prescrev\w*|passa\w*|recomenda\w*)\b"
+            rf"\b(?:(?:me|nos|pode|poderia)\b(?:\W+\w+){{0,3}}?\W+"
+            rf"\b(?:indica\w*|receit\w*|prescrev\w*|passa\w*|recomenda\w*)"
+            rf"|\b(?:indique|receite|prescreva|recomende))\b"
             rf"(?:\W+\w+){{0,6}}?\W+\b(?:{_SUBST_TERAPEUTICO}|{_SINTOMA_OU_QUEIXA})\b"
         ),
         re.compile(
@@ -114,9 +115,12 @@ class ClinicalGuardrail:
     _PATTERNS_DOSAGEM: tuple[re.Pattern[str], ...] = (
         # Partir / dividir / quebrar / dobrar / ajustar / suspender medicamento ou dose
         re.compile(
-            r"\b(?:partir|parto|parta|quebrar|quebro|dividir|divido|cortar|corto|amassar|abrir"
-            r"|dobrar|dobro|duplicar|triplicar|aumentar|aumento|diminuir|diminuo|reduzir|reduzo"
-            r"|repetir|repito|parar|paro|suspender|suspendo|interromper)\b"
+            r"\b(?:partir|parto|parta|quebrar|quebro|quebre|dividir|divido|divida"
+            r"|cortar|corto|corte|amassar|amasso|amasse|abrir|abro|abra"
+            r"|dobrar|dobro|dobre|duplicar|duplico|duplique|triplicar|triplico|triplique"
+            r"|aumentar|aumento|aumente|diminuir|diminuo|diminua|reduzir|reduzo|reduza"
+            r"|repetir|repito|repita|parar|paro|pare|suspender|suspendo|suspenda"
+            r"|interromper|interrompo|interrompa)\b"
             rf"(?:\W+\w+){{0,6}}?\W+\b(?:{_SUBST_TERAPEUTICO}|ao meio|no meio|metade|tratamento)\b"
         ),
         # Suspensão/interrupção por conta própria ou antes de coleta/exame (mesmo nomeando fármaco)
@@ -189,13 +193,20 @@ class ClinicalGuardrail:
     # 4. Troca terapêutica, compartilhamento entre pessoas ou substituição por suplemento
     _PATTERNS_TROCA: tuple[re.Pattern[str], ...] = (
         re.compile(
-            r"\b(?:trocar|troco|substitu\w*|alternativa|equivalente|no\s+lugar\s+(?:de|do|da)"
-            r"|em\s+vez\s+(?:de|do|da))\b(?:\W+\w+){0,7}?\W+"
+            r"\b(?:trocar|troco|troque|substitu\w*|mudar|mude|alternativa|equivalente"
+            r"|no\s+lugar\s+(?:de|do|da)|em\s+vez\s+(?:de|do|da))\b(?:\W+\w+){0,7}?\W+"
             rf"\b(?:{_SUBST_TERAPEUTICO}|exame|tratamento|medico|receita|marca|jejum)\b"
         ),
         re.compile(
             r"\b(?:posso|pode|devo|consigo|quero)\b(?:\W+\w+){0,3}?\W+"
             r"\b(?:trocar|substituir|mudar)\b(?:\W+\w+){0,6}?\W+\b(?:pelo|pela|por)\b"
+            r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante|documento|conta)\b)"
+        ),
+        re.compile(
+            r"\b(?:troque|substitua|mude)\b"
+            r"(?!(?:\W+\w+){0,3}?\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante"
+            r"|documento|conta)\b)"
+            r"(?:\W+\w+){0,6}?\W+\b(?:pelo|pela|por)\b"
             r"(?!\W+(?:receita|cadastro|endereco|unidade|ubs|horario|comprovante|documento|conta)\b)"
         ),
         re.compile(

@@ -18,7 +18,7 @@ REGRA_CLINICA ?= v1_bloqueio
 QUATRO_DIR_V3 ?= evals/reports/quatro_bracos_v3
 HOLDOUT ?= evals/datasets/holdout_guardrail_v1.jsonl
 
-.PHONY: help install dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
+.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -80,10 +80,10 @@ run-ui:
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear --min-recall 1.0 --max-falso-bloqueio 0.05
 
 eval-guardrail:
-	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear
+	uv run --project backend python evals/runners/guardrail_runner.py --alvo app.guardrails.clinical:deve_bloquear --min-recall 1.0 --max-falso-bloqueio 0.05
 
 demo:
 	uv run --project backend python evals/runners/demo_rag_runner.py --caso helena
@@ -182,7 +182,7 @@ semana4-eval:
 	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)"
 
 # Monitoramento: o MLflow fica fora do uv.lock (entra só nestes alvos, versão fixa).
-# Ex.: make registrar-avaliacoes ROTULO=semana4-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo/resultado.json"
+# Ex.: make registrar-avaliacoes ROTULO=semana4-v3-2026-11-19 ARTEFATOS="--semana4 evals/reports/semana4_comparativo_v3/resultado.json"
 .PHONY: registrar-avaliacoes mlflow-ui
 registrar-avaliacoes:
 	@test -n "$(ROTULO)" || (echo "Defina ROTULO=, ex.: ROTULO=semana4-2026-11-19" && exit 1)

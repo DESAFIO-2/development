@@ -71,30 +71,6 @@ def build_services() -> ServiceContainer:
             label for med in medications for label in (*medication_labels(med), med.concentration)
         )
     )
-    audit_use_case = AuditPrescriptionUseCase(
-        medication_repo=medication_repo,
-        retriever=hybrid_retriever,
-        guardrail=guardrail,
-        tabular_matcher=tabular_matcher,
-    )
-    agents_auditor = AuditPrescriptionUseCase(
-        medication_repo=medication_repo,
-        retriever=hybrid_retriever,
-        guardrail=guardrail,
-        tabular_matcher=tabular_matcher,
-        evidence_repo=evidence_chunk_repo,
-    )
-    generator = None
-    if settings.agents_provider != "deterministic":
-        if not settings.agents_model.strip():
-            raise ValueError("APP_AGENTS_MODEL é obrigatório para geração")
-        generator = build_generator(
-            settings.agents_provider,
-            model_name=settings.agents_model,
-            timeout_seconds=settings.agents_timeout_seconds,
-            prompt_version=PROMPT_VERSION_AGENTS,
-            skip_input_guardrail=True,
-        )
     public_context = build_public_context(
         [
             *(literal_hit(e) for e in evidence_chunk_repo.listar_todos()),
@@ -114,6 +90,32 @@ def build_services() -> ServiceContainer:
         ],
         catalog_texts=(channel for med in medications for channel in med.df_channels),
     )
+    audit_use_case = AuditPrescriptionUseCase(
+        medication_repo=medication_repo,
+        retriever=hybrid_retriever,
+        guardrail=guardrail,
+        tabular_matcher=tabular_matcher,
+        public_context=public_context,
+    )
+    agents_auditor = AuditPrescriptionUseCase(
+        medication_repo=medication_repo,
+        retriever=hybrid_retriever,
+        guardrail=guardrail,
+        tabular_matcher=tabular_matcher,
+        evidence_repo=evidence_chunk_repo,
+        public_context=public_context,
+    )
+    generator = None
+    if settings.agents_provider != "deterministic":
+        if not settings.agents_model.strip():
+            raise ValueError("APP_AGENTS_MODEL é obrigatório para geração")
+        generator = build_generator(
+            settings.agents_provider,
+            model_name=settings.agents_model,
+            timeout_seconds=settings.agents_timeout_seconds,
+            prompt_version=PROMPT_VERSION_AGENTS,
+            skip_input_guardrail=True,
+        )
     agents = LangGraphOrchestrator(
         auditor=agents_auditor,
         guardrail=guardrail,
@@ -144,6 +146,7 @@ def build_orchestrator(
         guardrail=services.guardrail,
         tabular_matcher=services.tabular_matcher,
         evidence_repo=services.evidence_chunk_repo,
+        public_context=services.public_context,
     )
     return LangGraphOrchestrator(
         auditor=auditor,
