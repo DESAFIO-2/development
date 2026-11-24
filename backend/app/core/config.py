@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     agents_model: str = "qwen2.5:7b"
     agents_timeout_seconds: float = Field(default=60.0, gt=0, le=120)
 
+    # Multimodalidade Semana 5 (STT desabilitado por padrão até ativação explícita)
+    stt_provider: Literal["disabled", "faster_whisper", "whisper_http"] = "disabled"
+    stt_model: str = "small"
+    stt_base_url: str = "http://localhost:8001"
+    stt_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+
     # Diretório de Dados Processados
     data_processed_dir: Path = DATA_DIR / "processed"
 

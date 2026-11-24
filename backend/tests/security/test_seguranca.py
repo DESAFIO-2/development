@@ -292,3 +292,25 @@ def test_audio_conhecido_aceito(cabecalho: bytes, formato: str) -> None:
 
 def test_audio_desconhecido_recusado() -> None:
     assert not validar_audio(b"%PDF-1.7 disfarcado de audio").aceito
+
+
+def test_audio_vazio_e_wav_longo_recusados() -> None:
+    import struct
+
+    assert validar_audio(b"").motivos == ("AUDIO_VAZIO",)
+
+    # Cabeçalho WAV PCM 16 kHz mono 16-bit (byte_rate = 32_000 B/s) declarando data de 65 s.
+    byte_rate = 32_000
+    data_size = byte_rate * 65
+    header = (
+        b"RIFF"
+        + struct.pack("<I", 36 + data_size)
+        + b"WAVEfmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, 16_000, byte_rate, 2, 16)
+        + b"data"
+        + struct.pack("<I", data_size)
+    )
+    resultado = validar_audio(header)
+    assert not resultado.aceito
+    assert resultado.motivos == ("AUDIO_LONGO_DEMAIS",)
+    assert resultado.alertas == ("AUDIO_WAV",)

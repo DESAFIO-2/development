@@ -8,6 +8,7 @@ from app.agents.orchestrator import LangGraphOrchestrator
 from app.application.agents import OrchestratorPort
 from app.application.catalog_labels import medication_labels
 from app.application.evidence import literal_hit
+from app.application.multimodal import AudioTranscriberPort, PDFExtractorPort
 from app.application.ports import (
     EvidenceRepositoryPort,
     GeneratorPort,
@@ -15,10 +16,12 @@ from app.application.ports import (
     RetrievalHitDTO,
 )
 from app.application.use_cases.audit_prescription import AuditPrescriptionUseCase
+from app.application.use_cases.process_multimodal import ProcessMultimodalUseCase
 from app.core.config import settings
 from app.guardrails.adapter import LocalGuardrailAdapter
 from app.guardrails.clinical import ClinicalGuardrail
 from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS, build_generator
+from app.infrastructure.multimodal import PyPDFDigitalExtractor, build_audio_transcriber
 from app.infrastructure.persistence.repositories.canonical_medication_repository import (
     LocalCanonicalMedicationRepository,
 )
@@ -44,6 +47,9 @@ class ServiceContainer:
     audit_use_case: AuditPrescriptionUseCase
     agents: OrchestratorPort
     public_context: PublicContextRegistry
+    pdf_extractor: PDFExtractorPort
+    audio_transcriber: AudioTranscriberPort | None
+    multimodal_use_case: ProcessMultimodalUseCase
 
 
 _cached_services: ServiceContainer | None = None
@@ -123,6 +129,22 @@ def build_services() -> ServiceContainer:
         generator=generator,
         public_context=public_context,
     )
+    pdf_extractor = PyPDFDigitalExtractor()
+    audio_transcriber = build_audio_transcriber(
+        settings.stt_provider,
+        model_name=settings.stt_model,
+        base_url=settings.stt_base_url,
+        timeout_seconds=settings.stt_timeout_seconds,
+    )
+    multimodal_use_case = ProcessMultimodalUseCase(
+        orchestrator=agents,
+        guardrail=guardrail,
+        tabular_matcher=tabular_matcher,
+        medication_repo=medication_repo,
+        retriever=hybrid_retriever,
+        pdf_extractor=pdf_extractor,
+        audio_transcriber=audio_transcriber,
+    )
     return ServiceContainer(
         medication_repo=medication_repo,
         chunk_repo=chunk_repo,
@@ -133,6 +155,9 @@ def build_services() -> ServiceContainer:
         audit_use_case=audit_use_case,
         agents=agents,
         public_context=public_context,
+        pdf_extractor=pdf_extractor,
+        audio_transcriber=audio_transcriber,
+        multimodal_use_case=multimodal_use_case,
     )
 
 
@@ -154,6 +179,24 @@ def build_orchestrator(
         retriever=services.hybrid_retriever,
         generator=generator,
         public_context=services.public_context,
+    )
+
+
+def build_multimodal_use_case(
+    services: ServiceContainer,
+    *,
+    orchestrator: OrchestratorPort | None = None,
+    audio_transcriber: AudioTranscriberPort | None = None,
+) -> ProcessMultimodalUseCase:
+    """Compõe o caso de uso multimodal reaproveitando o catálogo e o matcher do container."""
+    return ProcessMultimodalUseCase(
+        orchestrator=orchestrator or services.agents,
+        guardrail=services.guardrail,
+        tabular_matcher=services.tabular_matcher,
+        medication_repo=services.medication_repo,
+        retriever=services.hybrid_retriever,
+        pdf_extractor=services.pdf_extractor,
+        audio_transcriber=audio_transcriber,
     )
 
 
