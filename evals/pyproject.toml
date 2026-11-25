@@ -10,7 +10,7 @@ dependencies = [
     # versões atuais do langchain 1.x: sem estes limites `import ragas` falha.
     "langchain<2",
     "langchain-community<0.4",
-    "langchain-openai<1",
+    "langchain-openai<2",
 ]
 
 [dependency-groups]
