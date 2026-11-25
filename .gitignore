@@ -51,3 +51,9 @@ evals/reports/*/
 
 # Artefatos legados locais
 entregavel_semana2/
+
+# Relatórios do Strix (pentest): nunca versionar
+strix_runs/
+relatorio-strix.tar.gz*
+output/dast/
+output/strix/
