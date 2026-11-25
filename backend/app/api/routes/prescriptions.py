@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from app.api.schemas.erro import CORPO_MALFORMADO
 from app.api.schemas.medication_response import (
     MedicationAutocompleteItemDTO,
     MedicationAutocompleteResponseDTO,
@@ -19,7 +20,11 @@ from app.domain.prescription import MedicationItemInput, PrescriptionAuditReques
 router = APIRouter(prefix="/api/v1", tags=["prescriptions"])
 
 
-@router.post("/prescriptions/audit", response_model=PrescriptionAuditResponseDTO)
+@router.post(
+    "/prescriptions/audit",
+    response_model=PrescriptionAuditResponseDTO,
+    responses=CORPO_MALFORMADO,
+)
 def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAuditResponseDTO:
     """Audita itens da receita médica e entrega o roteiro de obtenção gratuita no SUS."""
     services = get_services()

@@ -1,0 +1,29 @@
+# Configuração do Schemathesis usada por scripts/seguranca/dast.sh.
+# Toda exceção aqui precisa de motivo; ver docs/security/dast.md.
+
+[checks]
+# Todas as verificações (equivale a --checks all), com uma exceção abaixo.
+enabled = true
+
+# positive_data_acceptance (ST202) supõe que todo corpo válido pelo schema é
+# aceito. Esta API tem regras de negócio que o OpenAPI não consegue expressar:
+# - data_emissao deve ser hoje ou anterior (rejeita receita com data futura);
+# - no multimodal, a validade depende do conteúdo dos arquivos (PDF real, áudio
+#   decodificável) e do JSON dentro de `itens_json`.
+# Rejeitar esses casos é o comportamento correto. O que dava para expressar foi
+# levado ao contrato (2 caracteres visíveis no nome, "itens ou pergunta" no
+# orchestrate). Continuam ligadas: rejeição de dado inválido (ST201), códigos e
+# respostas conforme o contrato e ausência de erro 500.
+positive_data_acceptance.enabled = false
+
+[[operations]]
+include-path = "/api/v1/agents/multimodal"
+# negative_data_rejection (ST201) gera corpos que violam o schema mudando o tipo
+# dos campos (null, array, objeto). Em multipart/form-data tudo vira texto ou
+# bytes na serialização: "null" num campo de arquivo chega como um arquivo com o
+# texto "null", que é um arquivo válido e é recusado pelas barreiras de entrada
+# (200 com o motivo). O resultado é falso positivo. Os casos reais que esta
+# verificação achou aqui (booleano permissivo, data em branco, arquivo enviado
+# como texto) foram corrigidos e têm teste de regressão em
+# backend/tests/security/test_contrato_dast.py. Nas rotas JSON ela continua ligada.
+checks.negative_data_rejection.enabled = false

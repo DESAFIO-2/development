@@ -98,3 +98,23 @@ jobs:
         with:
           name: relatorio-anti-injection
           path: evals/reports/guardrail_ultimo.json
+
+  dast:
+    # ZAP (API scan) + Schemathesis contra a API num container efêmero.
+    # Gratuito, sem LLM. Mesmo script do `make dast` local.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Bloqueia o merge desde a primeira triagem (25/11/2026). Exceções do
+    # Schemathesis, com motivo, em scripts/seguranca/schemathesis.toml.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: ZAP e Schemathesis
+        run: bash scripts/seguranca/dast.sh
+      - name: Guardar relatórios
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-dast
+          path: output/dast/
+          retention-days: 14

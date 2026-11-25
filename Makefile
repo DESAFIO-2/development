@@ -40,6 +40,8 @@ help:
 	@echo "  make semana3-run-blindado  - Braço D: coleta + RAGAS com esteira de entrada e validação de saída"
 	@echo "  make seguranca-smoke       - Suíte de segurança dos 4 braços com fixture sintética (não mede LLM)"
 	@echo "  make seguranca-run         - Suíte de segurança dos 4 braços com o modelo local (LOCAL_MODEL)"
+	@echo "  make dast                  - ZAP + Schemathesis contra a API em container (gratuito, sem LLM)"
+	@echo "  make strix-local           - Pentest Strix contra o backend (STRIX_LLM=..., ver docs/security)"
 	@echo "  make semana3-quatro-bracos - Tabela única dos 4 braços e braço escolhido (COLETA_PADRAO=...)"
 	@echo "  make ragas-v2-reavaliar    - Reavalia uma coleta com juiz pt-BR sem citações (COLETA_DIR=...)"
 	@echo "  make semana3-run-v3        - Coleta nova com citação por ID (semana3-v3) + juiz ragas_v2"
@@ -130,6 +132,14 @@ seguranca-smoke:
 
 seguranca-run:
 	uv run --project backend python evals/runners/suite_seguranca.py --dataset evals/datasets/seguranca_variantes_v1.jsonl --provider ollama --model "$(LOCAL_MODEL)" --base-url http://localhost:11434 --timeout 180 --saida-dir "$(SEG_DIR)"
+
+.PHONY: dast strix-local
+
+dast:
+	bash scripts/seguranca/dast.sh
+
+strix-local:
+	bash scripts/seguranca/strix_local.sh
 
 semana3-quatro-bracos:
 	uv run --project backend python evals/runners/consolidar_quatro_bracos.py --coleta-padrao "$(COLETA_PADRAO)" --coleta-blindada "$(RUN_DIR_BLINDADO)" --seguranca "$(SEG_DIR)/seguranca.json" --saida-dir "$(QUATRO_DIR)"
