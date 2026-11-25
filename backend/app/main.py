@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.health import router as health_router
-from app.api.middleware import registrar_requisicao
+from app.api.middleware import aplicar_cabecalhos_seguranca, registrar_requisicao
 from app.api.routes.agents import router as agents_router
 from app.api.routes.multimodal import router as multimodal_router
 from app.api.routes.prescriptions import router as prescriptions_router
@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
 app.middleware("http")(registrar_requisicao)
+app.middleware("http")(aplicar_cabecalhos_seguranca)
 app.include_router(health_router)
 app.include_router(prescriptions_router)
 app.include_router(agents_router)

@@ -7,7 +7,7 @@ Teste dinâmico da API, sem LLM e sem custo. O script
 | Ferramenta | Versão | O que faz |
 |---|---|---|
 | [OWASP ZAP](https://www.zaproxy.org/docs/docker/api-scan/) (`zap-api-scan.py`) | `ghcr.io/zaproxy/zaproxy:2.17.0` | Lê o `/openapi.json` e ataca cada rota: injeção, XSS, cabeçalhos de segurança, vazamento de erro e de informação |
-| [Schemathesis](https://schemathesis.readthedocs.io/) | `4.34.2` | Gera casos válidos e inválidos a partir do OpenAPI e verifica erro 500, respostas fora do contrato e dados inválidos aceitos (`--checks all`) |
+| [Schemathesis](https://schemathesis.readthedocs.io/) | `4.34.2` | Gera casos válidos e inválidos a partir do OpenAPI e verifica erro 500, respostas fora do contrato e dados inválidos aceitos (todas as verificações, com as exceções justificadas em `scripts/seguranca/schemathesis.toml`) |
 
 ## Escopo
 
@@ -52,19 +52,45 @@ Em `output/dast/` (no CI, no artifact `relatorio-dast`, guardado por 14 dias):
 Códigos de saída: o script retorna 0 só se o ZAP não tiver regra `FAIL` (os
 avisos são ignorados com `-I`) e o Schemathesis não tiver falhas.
 
-## Fase de observação
+## Bloqueio e exceções
 
-O job `dast` tem `continue-on-error: true`: ele roda em todo PR e na `main`,
-mas **não bloqueia o merge** enquanto os achados da primeira execução não forem
-triados. A ideia é não deixar o CI vermelho por falso positivo antes de
-conhecer a linha de base. Depois da triagem:
+O job `dast` **bloqueia o merge**: o script só retorna 0 se o ZAP não tiver
+regra `FAIL` e o Schemathesis não tiver falhas. Para um achado novo:
 
-1. Corrija os achados reais, cada um com um teste de regressão em
-   `backend/tests/`.
-2. Para falsos positivos do ZAP, crie um arquivo de regras (`-c`) com a regra
-   marcada como `IGNORE` e o motivo. Para os do Schemathesis, exclua a
-   verificação específica (`--exclude-checks`) e anote o motivo no script.
-3. Remova `continue-on-error: true` do job.
+1. Se for real, corrija com um teste de regressão em
+   [`backend/tests/security/test_contrato_dast.py`](../../backend/tests/security/test_contrato_dast.py).
+2. Se for falso positivo do Schemathesis, desligue só a verificação e só na rota
+   afetada em [`scripts/seguranca/schemathesis.toml`](../../scripts/seguranca/schemathesis.toml),
+   com o motivo ao lado. Para o ZAP, use um arquivo de regras (`-c`) com a regra
+   como `IGNORE` e o motivo.
+
+Nunca desligue uma verificação para todas as rotas sem justificar no arquivo
+por que ela não se aplica a nenhuma.
+
+## Primeira triagem (25/11/2026)
+
+Primeira execução no PR #36: o ZAP passou em 118 regras com 2 avisos, e o
+Schemathesis achou 8 falhas em 307 casos. Nenhum erro 500. Corrigir as
+primeiras revelou outras mais fundas, e todas foram tratadas:
+
+| Achado | Ferramenta | Tipo | Tratamento |
+|---|---|---|---|
+| Faltavam `X-Content-Type-Options` e `Cross-Origin-Resource-Policy` | ZAP (aviso) | Real | Middleware `aplicar_cabecalhos_seguranca` em toda resposta, inclusive de erro |
+| 400, 413 e 415 não documentados no OpenAPI | Schemathesis ST103 | Contrato | `responses=` nas três rotas (`app/api/schemas/erro.py`) |
+| `"data_emissao": 0` aceito como 01/01/1970 | Schemathesis ST201 | **Real** | `DataISO`: só `AAAA-MM-DD` |
+| `"0\r"` passava no schema e virava `"0"` depois do strip | Schemathesis ST202 | Contrato | Padrão "2 caracteres visíveis", o mesmo no OpenAPI e no Pydantic (`regex_engine="python-re"` e classe de espaços explícita) |
+| "Itens ou pergunta" fora do contrato do `/orchestrate` | Schemathesis ST202 | Contrato | `anyOf` no schema e a mesma regra (`tem_visivel`) no validador |
+| `confirmado_pelo_usuario` aceitava `"0"`, `"yes"`, `"on"` | Schemathesis ST201 | **Real** | Só `"true"` ou `"false"`, que é o que todos os clientes já mandam |
+| `data_emissao` com espaços virava "não informada" | Schemathesis ST201 | Real | Só o campo vazio conta como não informado, como diz o contrato |
+| `pdf_file`/`audio_file` como texto eram ignorados em silêncio | Schemathesis ST201 | Real | 422 |
+| Data futura, conteúdo de arquivo e JSON de `itens_json` rejeitados | Schemathesis ST202 | Falso positivo | `positive_data_acceptance` desligado: são regras de negócio que o OpenAPI não expressa |
+| Mutação de tipo (null, array) em campo de multipart | Schemathesis ST201 | Falso positivo | `negative_data_rejection` desligado **só** no multimodal: no multipart tudo vira texto ou bytes |
+
+Validação: as cinco seeds testadas (a do CI e mais quatro, com até 100 casos
+por operação, mais de 3.900 casos no total) passaram sem falha. Com a correção
+da data revertida de propósito, o Schemathesis voltou a acusá-la nas duas rotas
+JSON, o que confirma que a exceção do multimodal não desligou a verificação nas
+outras.
 
 Os logs e artifacts de um repositório público são visíveis para qualquer
 pessoa logada no GitHub. Os achados do ZAP e do Schemathesis são, em geral, de
@@ -76,5 +102,5 @@ os detalhes em issue ou PR público.
 ## Reversão
 
 Remova o job `dast` de `.github/workflows/security.yml`, o alvo `dast` do
-`Makefile`, `scripts/seguranca/dast.sh` (e `_api.sh`, se o Strix também sair)
+`Makefile`, `scripts/seguranca/dast.sh`, `scripts/seguranca/schemathesis.toml` (e `_api.sh`, se o Strix também sair)
 e este documento.

@@ -57,3 +57,4 @@ strix_runs/
 relatorio-strix.tar.gz*
 output/dast/
 output/strix/
+.schemathesis/

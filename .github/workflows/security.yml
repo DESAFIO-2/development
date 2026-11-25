@@ -104,9 +104,8 @@ jobs:
     # Gratuito, sem LLM. Mesmo script do `make dast` local.
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Fase de observação: o job não bloqueia o merge até a primeira triagem
-    # dos achados (docs/security/dast.md). Depois, remover esta linha.
-    continue-on-error: true
+    # Bloqueia o merge desde a primeira triagem (25/11/2026). Exceções do
+    # Schemathesis, com motivo, em scripts/seguranca/schemathesis.toml.
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

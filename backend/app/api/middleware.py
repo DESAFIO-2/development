@@ -12,6 +12,25 @@ logger = logging.getLogger("app.http")
 
 CABECALHO_REQUEST_ID = "X-Request-ID"
 
+# Cabeçalhos de segurança em toda resposta, inclusive nas de erro.
+# - nosniff: o navegador não "adivinha" o tipo e não executa JSON como script.
+# - CORP same-origin: outro site não embute as respostas da API (dados de saúde).
+#   Não afeta o app mobile, que não é navegador, nem o Swagger em /docs.
+CABECALHOS_SEGURANCA = {
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
+
+
+async def aplicar_cabecalhos_seguranca(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Acrescenta os cabeçalhos de segurança sem sobrescrever os que a rota já definiu."""
+    response = await call_next(request)
+    for nome, valor in CABECALHOS_SEGURANCA.items():
+        response.headers.setdefault(nome, valor)
+    return response
+
 
 async def registrar_requisicao(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]

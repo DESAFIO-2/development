@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from contextlib import aclosing
-from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -14,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 
-from app.api.schemas.prescription_request import MedicationItemDTO
+from app.api.schemas.erro import ERROS_MULTIMODAL
+from app.api.schemas.prescription_request import DataISO, MedicationItemDTO
 from app.application.multimodal import MultimodalRequest, MultimodalResponse
 from app.container import get_services
 from app.domain.prescription import MedicationItemInput
@@ -39,7 +39,13 @@ _MULTIMODAL_OPENAPI_EXTRA: dict[str, Any] = {
                         "itens_json": {"type": "string"},
                         "pergunta_adicional": {"type": "string", "maxLength": 500},
                         "regiao_administrativa": {"type": "string", "maxLength": 150},
-                        "data_emissao": {"type": "string", "format": "date"},
+                        # Vazio = não informado (o campo de formulário vem em branco).
+                        "data_emissao": {
+                            "anyOf": [
+                                {"type": "string", "format": "date"},
+                                {"type": "string", "maxLength": 0},
+                            ]
+                        },
                         "tipo_prescritor": {"type": "string", "default": "SUS"},
                         "confirmado_pelo_usuario": {"type": "boolean", "default": False},
                     },
@@ -73,7 +79,7 @@ class _MultimodalFormFields(BaseModel):
     itens_json: str | None = None
     pergunta_adicional: Annotated[str | None, Field(default=None, max_length=500)] = None
     regiao_administrativa: Annotated[str | None, Field(default=None, max_length=150)] = None
-    data_emissao: date | None = None
+    data_emissao: DataISO | None = None
     tipo_prescritor: Annotated[str, Field(default="SUS", min_length=1, max_length=50)] = "SUS"
     confirmado_pelo_usuario: bool = False
 
@@ -81,7 +87,6 @@ class _MultimodalFormFields(BaseModel):
         "itens_json",
         "pergunta_adicional",
         "regiao_administrativa",
-        "data_emissao",
         mode="before",
     )
     @classmethod
@@ -89,6 +94,28 @@ class _MultimodalFormFields(BaseModel):
         if isinstance(valor, str) and not valor.strip():
             return None
         return valor
+
+    @field_validator("data_emissao", mode="before")
+    @classmethod
+    def _data_vazia_para_none(cls, valor: Any) -> Any:
+        # Só o campo vazio conta como "não informado", como diz o contrato.
+        # Espaços ou qualquer outro texto passam pela validação AAAA-MM-DD.
+        return None if valor == "" else valor
+
+    @field_validator("confirmado_pelo_usuario", mode="before")
+    @classmethod
+    def _booleano_estrito(cls, valor: Any) -> Any:
+        """Só "true" ou "false": é a confirmação do usuário sobre o que foi extraído.
+
+        No modo permissivo, o Pydantic aceitava "0", "1", "yes", "on" etc.
+        (Schemathesis ST201). Todos os clientes do repositório já mandam
+        "true"/"false".
+        """
+        if isinstance(valor, bool):
+            return valor
+        if valor in ("true", "false"):
+            return valor == "true"
+        raise ValueError("confirmado_pelo_usuario deve ser 'true' ou 'false'")
 
 
 async def _ler_upload_limitado(upload: UploadFile, limite: int) -> bytes:
@@ -134,6 +161,7 @@ def _parsear_itens_json(itens_json: str | None) -> list[MedicationItemInput]:
 @router.post(
     "/multimodal",
     response_model=MultimodalResponse,
+    responses=ERROS_MULTIMODAL,
     openapi_extra=_MULTIMODAL_OPENAPI_EXTRA,
 )
 async def orchestrate_multimodal(request: Request) -> MultimodalResponse:
@@ -180,6 +208,14 @@ async def orchestrate_multimodal(request: Request) -> MultimodalResponse:
     try:
         pdf_part = form.get("pdf_file")
         audio_part = form.get("audio_file")
+        # Campo de texto no lugar do arquivo era ignorado em silêncio e a
+        # requisição seguia (Schemathesis ST201). Agora é erro do cliente.
+        for nome, parte in (("pdf_file", pdf_part), ("audio_file", audio_part)):
+            if parte is not None and not isinstance(parte, UploadFile):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"{nome} deve ser enviado como arquivo",
+                )
         pdf_file = pdf_part if isinstance(pdf_part, UploadFile) else None
         audio_file = audio_part if isinstance(audio_part, UploadFile) else None
 

@@ -60,9 +60,9 @@ set -e
 # é reproduzível entre a máquina local e o CI.
 echo "== Schemathesis"
 set +e
-uvx --from "schemathesis==${SCHEMATHESIS_VERSION}" schemathesis run \
+uvx --from "schemathesis==${SCHEMATHESIS_VERSION}" schemathesis \
+  --config-file "$(dirname "$0")/schemathesis.toml" run \
   "http://127.0.0.1:${PORTA}/openapi.json" \
-  --checks all \
   --max-examples "$EXEMPLOS" \
   --seed 20261125 \
   --request-timeout 30 \
