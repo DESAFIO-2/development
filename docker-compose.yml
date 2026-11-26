@@ -1,0 +1,33 @@
+# Banco de usuários da autenticação (RemedIA). Só a tabela de contas e sessões:
+# CPF como HMAC, senha como hash Argon2id, nenhum dado de saúde.
+#
+# Uso (da raiz):
+#   1. Defina POSTGRES_PASSWORD no .env da raiz (veja .env.example).
+#   2. make db-up
+#   3. No backend/.env: APP_DATABASE_URL=postgresql://remedia:<senha>@127.0.0.1:5432/remedia
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: remedia-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: remedia
+      POSTGRES_USER: remedia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env da raiz}
+      # scram-sha-256 em vez de md5 para a senha do banco.
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    # Só na interface local: o banco nunca fica exposto na rede.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - remedia-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remedia -d remedia"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  remedia-pgdata:

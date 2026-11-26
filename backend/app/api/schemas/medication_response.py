@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.domain.medication import CoverageRoute
+
 
 class MedicationAutocompleteItemDTO(BaseModel):
     """Item sugerido na barra de busca do app com autocomplete."""
@@ -7,7 +9,9 @@ class MedicationAutocompleteItemDTO(BaseModel):
     dcb_principio_ativo: str = Field(..., examples=["LOSARTANA POTASSICA"])
     concentracao: str = Field(..., examples=["50 MG"])
     forma_farmaceutica: str = Field(..., examples=["COMPRIMIDO"])
+    via_retirada: CoverageRoute = Field(..., examples=[CoverageRoute.FARMACIA_POPULAR])
     dispensacao_gratuita_prevista: bool = True
+    exige_lme: bool = False
     texto_exibicao: str = Field(
         ...,
         description="Texto formatado amigável para a lista do app",

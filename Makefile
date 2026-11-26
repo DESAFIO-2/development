@@ -18,7 +18,7 @@ REGRA_CLINICA ?= v1_bloqueio
 QUATRO_DIR_V3 ?= evals/reports/quatro_bracos_v3
 HOLDOUT ?= evals/datasets/holdout_guardrail_v1.jsonl
 
-.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
+.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean db-up db-down test-db
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -80,7 +80,7 @@ run-api:
 	cd backend && uv run python -c "import os, pathlib, uvicorn; p = pathlib.Path('.env'); [os.environ.setdefault(k.strip(), v.strip()) for line in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if line.strip() and not line.lstrip().startswith('#') and '=' in line for k, v in [line.split('=', 1)]]; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, reload=True)"
 
 run-ui:
-	@echo "Interface React Native planejada. Consulte docs/adr/0002_mobile_first_react_native_client.md"
+	cd mobile && npx expo start
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py
@@ -168,6 +168,16 @@ guardrail-holdout:
 	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear --max-falso-bloqueio 0.05 --relatorio holdout_camada2.json
 	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear_combinado --max-falso-bloqueio 0.05 --relatorio holdout_combinado.json
 
+db-up: ## Sobe o Postgres da autenticação (só em 127.0.0.1; exige POSTGRES_PASSWORD no .env)
+	docker compose up -d --wait postgres
+
+db-down: ## Para o Postgres (os dados ficam no volume remedia-pgdata)
+	docker compose stop postgres
+
+test-db: ## Testes de contrato do repositório de usuários contra o Postgres local
+	@test -n "$$APP_TESTE_DATABASE_URL" || { echo "Defina APP_TESTE_DATABASE_URL"; exit 1; }
+	cd backend && uv run pytest -q tests/integration/test_usuario_repository_contrato.py
+
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .
 
@@ -175,23 +185,25 @@ clean:
 	uv run --project backend python -c "import pathlib, shutil; root = pathlib.Path('.'); [shutil.rmtree(p, ignore_errors=True) for name in ('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache') for p in root.rglob(name) if '.venv' not in p.parts]; [p.unlink(missing_ok=True) for p in root.rglob('*.pyc') if '.venv' not in p.parts]"
 
 S4_PILOT_DIR ?= evals/reports/semana4_piloto
-S4_RUN_DIR ?= evals/reports/semana4_comparativo_v3
+S4_RUN_DIR ?= evals/reports/semana4_comparativo_v8
 S4_RESULTADO ?= $(S4_RUN_DIR)/resultado.json
 S4_EVAL_DIR ?= $(S4_RUN_DIR)/avaliacao
-S4_EVAL_MODEL ?= $(LOCAL_MODEL)
+S4_MODELS ?= qwen3.5:4b
+S4_EVAL_MODELS ?=
+S4_EVAL_MODEL ?= qwen2.5:14b
 
 .PHONY: demo-agents semana4-pilot semana4-compare semana4-eval
 demo-agents:
 	cd backend && uv run python -m app.agents.demo
 
 semana4-pilot:
-	uv run --project backend python evals/runners/semana4_comparativo.py --pilot --run-dir "$(S4_PILOT_DIR)"
+	uv run --project backend python evals/runners/semana4_comparativo.py --pilot --run-dir "$(S4_PILOT_DIR)" --models $(S4_MODELS)
 
 semana4-compare:
-	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)"
+	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)" --models $(S4_MODELS)
 
 semana4-eval:
-	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)"
+	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)" $(if $(S4_EVAL_MODELS),--models $(S4_EVAL_MODELS),)
 
 STT_PROVIDER ?= disabled
 STT_MODEL ?= base

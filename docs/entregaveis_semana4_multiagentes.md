@@ -182,3 +182,14 @@ antigo. Quando a linhagem não vem no artefato, fica explicitamente não informa
 Falha de consulta ao MLflow adia escrita nativa e mantém recuperação pelo JSON.
 O holdout aplica `--max-falso-bloqueio 0.05` nas três camadas; seus casos devem
 continuar sendo escritos e congelados por pessoa independente.
+
+### Calibração `semana4-v3` + rubrica `semana4-eval-v3` (26/11 — `qwen3.5:4b`)
+
+Com `think=False` automático em `OllamaRESTGeneratorAdapter`, `warmup()` separado das
+medições de caso, `_focused_generation_candidates` para consultas puras de endereço,
+`num_predict=900` no juiz estruturado e suporte `--models` em `semana4_avaliacao.py`, a
+rodada focada no candidato local **`qwen3.5:4b`** (`evals/reports/semana4_comparativo_v8`,
+indexada no MLflow sob `semana4-v8-qwen35-4b-2026-11-26`) registrou:
+- **`qwen3.5:4b` (`5/5` casos, `0` falhas):** Determ. `10,00/10`, Juiz `9,39/10` (`0` contradições, `0` não verificáveis), RAGAS `Answer Relevancy = 0,9484` (`APROVADO >= 0,88`), `Faithfulness = 0,8833` (`REPROVADO < 0,92`, oscilação NLI local Q4 frente a `0,9000` em `v6`), warmup `378,41 ms`, mediana `5.006,42 ms`, `p95 = 5.329,77 ms` (**`RNF04 = true <= 8.000 ms`**).
+- Código de saída `2` mantido com transparência diante de `Faithfulness < 0,92` sob juiz local Q4 e revisão humana clínica ainda pendente (`revisao_humana_realizada = false`).
+- Modelo local padrão alinhado para `APP_AGENTS_MODEL=qwen3.5:4b`, preservando `APP_AGENTS_PROVIDER=deterministic` como fallback offline/CI e `GeminiRESTGeneratorAdapter` (`APP_AGENTS_PROVIDER=gemini`) pronto para uso em nuvem.

@@ -462,3 +462,21 @@ def test_api_resumo_inclui_orientacao_hospitalar() -> None:
     data = response.json()
     assert data["itens"][0]["via_retirada"] == "HOSPITALAR"
     assert "uso hospitalar" in data["resumo_acolhedor"]
+
+
+def test_api_autocomplete_expoe_via_retirada_e_lme() -> None:
+    resp_los = client.get(
+        "/api/v1/medications/autocomplete", params={"q": "losartana", "limite": 3}
+    )
+    assert resp_los.status_code == 200
+    los_item = resp_los.json()["resultados"][0]
+    assert los_item["via_retirada"] == "FARMACIA_POPULAR"
+    assert los_item["exige_lme"] is False
+
+    resp_ada = client.get(
+        "/api/v1/medications/autocomplete", params={"q": "adalimumabe", "limite": 3}
+    )
+    assert resp_ada.status_code == 200
+    ada_item = resp_ada.json()["resultados"][0]
+    assert ada_item["via_retirada"] == "FARMACIA_ALTO_CUSTO"
+    assert ada_item["exige_lme"] is True

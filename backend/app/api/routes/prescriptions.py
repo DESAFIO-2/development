@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from app.api.schemas.erro import CORPO_MALFORMADO
+from app.api.autenticacao import ROTA_COM_LOGIN
+from app.api.schemas.erro import ROTA_PROTEGIDA
 from app.api.schemas.medication_response import (
     MedicationAutocompleteItemDTO,
     MedicationAutocompleteResponseDTO,
@@ -15,6 +16,7 @@ from app.api.schemas.prescription_response import (
     PrescriptionAuditResponseDTO,
 )
 from app.container import get_services
+from app.domain.medication import route_from_dispensation
 from app.domain.prescription import MedicationItemInput, PrescriptionAuditRequest
 
 router = APIRouter(prefix="/api/v1", tags=["prescriptions"])
@@ -23,7 +25,8 @@ router = APIRouter(prefix="/api/v1", tags=["prescriptions"])
 @router.post(
     "/prescriptions/audit",
     response_model=PrescriptionAuditResponseDTO,
-    responses=CORPO_MALFORMADO,
+    responses=ROTA_PROTEGIDA,
+    dependencies=ROTA_COM_LOGIN,
 )
 def audit_prescription(payload: PrescriptionAuditRequestDTO) -> PrescriptionAuditResponseDTO:
     """Audita itens da receita médica e entrega o roteiro de obtenção gratuita no SUS."""
@@ -89,7 +92,9 @@ def autocomplete_medications(
             dcb_principio_ativo=med.dcb_name.upper(),
             concentracao=med.concentration,
             forma_farmaceutica=med.pharmaceutical_form.upper(),
+            via_retirada=route_from_dispensation(med.dispensation_route),
             dispensacao_gratuita_prevista=med.available_pfpb or med.available_reme_df,
+            exige_lme=med.requires_lme,
             texto_exibicao=(
                 f"{med.dcb_name.title()} {med.concentration} - {med.pharmaceutical_form.title()}"
             ),

@@ -136,6 +136,7 @@ def _injetar_stt(base: ServiceContainer, stt: AudioTranscriberPort | None) -> No
         pdf_extractor=base.pdf_extractor,
         audio_transcriber=stt,
         multimodal_use_case=uc,
+        pharmacy_stock_repo=base.pharmacy_stock_repo,
     )
     set_services(patched)
 

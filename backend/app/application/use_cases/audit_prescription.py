@@ -17,7 +17,7 @@ from app.application.ports import (
 from app.application.use_cases.triage import inspect_request
 from app.core.telemetry import trace_operation
 from app.domain.guidance import CitizenGuidanceCard, ItemRoteiroCidadao
-from app.domain.medication import CoverageRoute
+from app.domain.medication import CoverageRoute, route_from_dispensation
 from app.domain.prescription import PrescriptionAuditRequest
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.retrieval.text_normalizer import normalizar_texto_pt
@@ -168,30 +168,24 @@ class AuditPrescriptionUseCase(AuditPrescriptionUseCasePort):
                             )
                         )
                 evidences.extend(item_hits)
-                route_str = med_canonico.dispensation_route
-
-                if route_str == "FARMACIA_POPULAR":
-                    via = CoverageRoute.FARMACIA_POPULAR
+                via = route_from_dispensation(med_canonico.dispensation_route)
+                if via == CoverageRoute.FARMACIA_POPULAR:
                     local = f"Drogarias privadas credenciadas ao Farmácia Popular em {regiao}."
-                elif route_str == "ALTO_CUSTO_CEAF":
-                    via = CoverageRoute.FARMACIA_ALTO_CUSTO
+                elif via == CoverageRoute.FARMACIA_ALTO_CUSTO:
                     local = (
                         "Farmácia de Alto Custo (CEAF-DF): Polos Asa Sul (Estação 102 Sul), "
                         "Ceilândia (ao lado do HRC) ou Gama."
                     )
-                elif route_str == "UBS_ATENCAO_PRIMARIA":
-                    via = CoverageRoute.UBS_REME_DF
+                elif via == CoverageRoute.UBS_REME_DF:
                     local = (
                         f"Canal registrado na REME-DF: {'; '.join(med_canonico.df_channels)}. "
                         "Confirme as condições de atendimento com o serviço."
                         if med_canonico.df_channels
                         else "Confirme na UBS de referência qual unidade atende esta apresentação."
                     )
-                elif route_str == "HOSPITALAR":
-                    via = CoverageRoute.HOSPITALAR
+                elif via == CoverageRoute.HOSPITALAR:
                     local = "Consulte o serviço hospitalar responsável pelo atendimento."
                 else:
-                    via = CoverageRoute.NAO_PADRONIZADO
                     local = "Consulte a gerência de assistência farmacêutica da UBS."
 
                 insumo = med_canonico.item_type == "supply"

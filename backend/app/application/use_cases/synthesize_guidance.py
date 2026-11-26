@@ -21,10 +21,39 @@ from app.seguranca.contexto import PublicContextRegistry
 from app.seguranca.saida import validar_saida
 
 _CITATION = re.compile(r"\[\s*fonte\s*:[^\]]*\]", re.IGNORECASE)
+_LOCATION_QUERY_RE = re.compile(
+    r"\b(?:onde\s+(?:fica|retir\w*|peg\w*|busc\w*|encontr\w*)|localizac[aã]o|enderec[oa]"
+    r"|qual\s+(?:polo|unidade|local))\b"
+)
+_NON_LOCATION_DETAIL_RE = re.compile(
+    r"\b(?:document\w*|laudo\w*|receita\w*|exame\w*|requisit\w*|criteri\w*|lme|ter|pcdt"
+    r"|procurac\w*|prazo\w*|validad\w*|estoq\w*|disponib\w*|infosaud\w*|como\s+(?:solicitar|agendar))\b"
+)
+_LOCATION_CHUNK_RE = re.compile(
+    r"\b(?:localizad[oa]|atende\s+moradores|praca|estacao|enderec[oa]|subsolo|regionalizad[oa])\b"
+)
 NO_EVIDENCE = (
     "Não localizamos evidência suficiente para responder à dúvida. "
     "Confirme com a UBS de referência."
 )
+
+
+def _focused_generation_candidates(
+    question: str | None,
+    candidates: list[RetrievalHitDTO],
+    *,
+    use_item_evidence: bool,
+) -> list[RetrievalHitDTO]:
+    """Em consultas puras de localização, foca no trecho regional principal sem cortar citações."""
+    if use_item_evidence or not question or len(candidates) <= 1:
+        return candidates
+    norm_q = normalizar_texto_pt(question)
+    if not _LOCATION_QUERY_RE.search(norm_q) or _NON_LOCATION_DETAIL_RE.search(norm_q):
+        return candidates
+    norm_top = normalizar_texto_pt(candidates[0].text)
+    if _LOCATION_CHUNK_RE.search(norm_top):
+        return [candidates[0]]
+    return candidates
 
 
 def citation(hit: RetrievalHitDTO) -> str:
@@ -94,9 +123,12 @@ def synthesize(
         if (request.pergunta_adicional and not use_item_evidence)
         else list(audit_hits)
     )
+    focused_candidates = _focused_generation_candidates(
+        request.pergunta_adicional, candidates, use_item_evidence=use_item_evidence
+    )
     context: list[RetrievalHitDTO] = []
     budget = 6000
-    for hit in {hit.chunk_id: hit for hit in candidates}.values():
+    for hit in {hit.chunk_id: hit for hit in focused_candidates}.values():
         size = len(hit.text) + len(citation(hit)) + 200
         if size <= budget:
             context.append(hit)

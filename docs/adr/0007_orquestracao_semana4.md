@@ -79,3 +79,24 @@ literal antes de apontar omissão; isso requer nova medição, não prova melhor
 Backfills MLflow não atribuem o manifesto de importação à execução histórica.
 Reversão dessas correções deve manter relatórios e seus manifestos originais;
 reverter código não autoriza declarar aprovação dos antigos gates permissivos.
+
+## Convergência operacional local (`qwen3.5:4b`, `semana4-v3`, `semana4-eval-v3`)
+
+Após a rodada histórica em `qwen2.5:7b` e `qwen2.5:14b`, a calibração com `warmup()`
+explícito, `think=False` automático em `qwen3.5*`, foco de localização
+(`_focused_generation_candidates`), prompt `semana4-v3` e juiz `semana4-eval-v3`
+(`num_predict=900`, suporte `--models` em `semana4_avaliacao.py`) convergiu o candidato
+local para **`qwen3.5:4b`** (rodada `evals/reports/semana4_comparativo_v8`):
+- **Desempenho (`RNF04 <= 8 s`):** warmup `378,41 ms`, mediana `5.006,42 ms`,
+  `p95 = 5.329,77 ms` (**aprovado**, vs. `9,05–19,08 s` no `7B` e `33,86 s` no `14B`).
+- **Controles & Juiz Estruturado (`qwen2.5:14b`):** determinístico `10,00/10` (`5/5`,
+  `0` falhas), nota do juiz `9,39/10` (`0` contradições, `0` não verificáveis, `1`
+  omissão parcial apontada em `procuracao_fralda`).
+- **RAGAS (`0.4.4` + `bge-m3`):** `Answer Relevancy = 0,9484 >= 0,88` (**aprovado**) e
+  `Faithfulness = 0,8833` (vs. `0,900` na rodada `v6` com `Juiz = 9,9/10`; oscilação
+  do NLI local Q4 e revisão factual humana clínica permanecem explicitadas, sem baixar
+  o gate `0,92`).
+- **Produto (`backend/app/core/config.py`):** mantém `APP_AGENTS_PROVIDER=deterministic`
+  como padrão seguro offline/CI, `APP_AGENTS_MODEL=qwen3.5:4b` como modelo local
+  validado e `GeminiRESTGeneratorAdapter` (`APP_AGENTS_PROVIDER=gemini`) pronto e
+  desacoplado para conexão futura em nuvem por MLOps/LLMOps via variáveis de ambiente.

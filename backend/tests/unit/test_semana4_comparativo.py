@@ -141,3 +141,47 @@ def test_semana4_comparativo_p95_outlier_and_manifest_isolation(
             synthetic_smoke=False,
             services=services,
         )
+
+
+def test_ollama_adapter_warmup_and_think_false_for_qwen35() -> None:
+    from io import BytesIO
+
+    from app.infrastructure.llm.generator import OllamaRESTGeneratorAdapter
+
+    captured_payloads: list[dict[str, object]] = []
+
+    class _FakeResp(BytesIO):
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+    def fake_urlopen(req: object, timeout: float = 0.0) -> _FakeResp:
+        data = json.loads(req.data.decode("utf-8"))  # type: ignore[attr-defined]
+        captured_payloads.append(data)
+        return _FakeResp(json.dumps({"response": "ok"}).encode("utf-8"))
+
+    adapter_qwen35 = OllamaRESTGeneratorAdapter(
+        base_url="http://localhost:11434",
+        model_name="qwen3.5:4b",
+        keep_alive="15m",
+        num_ctx=4096,
+        num_predict=280,
+    )
+    assert adapter_qwen35.think is False
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        warmup_ms = adapter_qwen35.warmup()
+        req = adapter_qwen35._request("teste")
+        gen_payload = json.loads(req.data.decode("utf-8"))  # type: ignore[union-attr]
+    assert warmup_ms >= 0.0
+    assert captured_payloads[0]["think"] is False
+    assert captured_payloads[0]["keep_alive"] == "15m"
+    assert gen_payload["think"] is False
+    assert gen_payload["keep_alive"] == "15m"
+    assert gen_payload["options"]["num_ctx"] == 4096
+
+    adapter_qwen25 = OllamaRESTGeneratorAdapter(model_name="qwen2.5:7b")
+    assert adapter_qwen25.think is None
+    req25 = adapter_qwen25._request("teste")
+    assert "think" not in json.loads(req25.data.decode("utf-8"))  # type: ignore[union-attr]

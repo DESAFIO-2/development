@@ -10,6 +10,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # ragas==0.4.4 requer langchain-community<0.4 e langchain-openai<1 (evals/pyproject.toml).
+    ignore:
+      - dependency-name: "langchain-community"
+        versions: [">=0.4.0"]
+      - dependency-name: "langchain-openai"
+        versions: [">=1.0.0"]
+      - dependency-name: "langchain"
+        versions: [">=2.0.0"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

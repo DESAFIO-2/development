@@ -156,9 +156,19 @@ auditoria determinística e geração opcional via `GeneratorPort`. A rota de au
 anterior permanece disponível. Sem frontend nesta entrega.
 
 Execute `uv run python -m app.agents.demo` de `backend/` (ou `make demo-agents` da raiz).
-O padrão é `APP_AGENTS_PROVIDER=deterministic`. Para Ollama, configure esse campo
-como `ollama` e `APP_AGENTS_MODEL=qwen2.5:7b`. A execução `--strict` falha sem gerador
-ou quando a geração é rejeitada; fixtures não são evidência científica.
+O padrão é `APP_AGENTS_PROVIDER=deterministic`. Para Ollama local, configure esse
+campo como `ollama` e `APP_AGENTS_MODEL=qwen3.5:4b` (com `GeminiRESTGeneratorAdapter`
+pronto para troca via `APP_AGENTS_PROVIDER=gemini` e `APP_GOOGLE_API_KEY`). A
+execução `--strict` falha sem gerador ou quando a geração é rejeitada; fixtures não
+são evidência científica.
 
 Responsabilidades, diagrama, contratos, modelos, limites, testes e operação:
 [guia dos agentes](../docs/architecture/agentes_semana4.md).
+
+## 7. Prontidão de Deploy (LLMOps / MLOps) & Estoque CEAF
+
+- **Porta dinâmica & Docker (`backend/Dockerfile`):** a imagem inclui os snapshots `data/processed/ceaf_live_stock.json` e `df_pharmacies_geolocated.json` e sobe via `${PORT:-8000}` (`--host 0.0.0.0`), com `HEALTHCHECK` apontando para `GET /health`.
+- **CORS & Web (`APP_CORS_ORIGINS`):** origens liberadas para o cliente Expo Web (padrão local `http://localhost:8081,http://127.0.0.1:8081`); requisições sem `Origin` autorizada mantêm `Cross-Origin-Resource-Policy: same-origin` (compatível com ZAP/Schemathesis).
+- **Troca de provedor LLM em produção:** o código já isola `GeneratorPort`. Para sair do modo `deterministic` ou `ollama` (`qwen3.5:4b`) para uma API na nuvem sem alterar código, basta configurar `APP_AGENTS_PROVIDER=gemini`, `APP_AGENTS_MODEL=<modelo-flash>` e `APP_GOOGLE_API_KEY`.
+- **Áudio / STT no deploy (`APP_STT_PROVIDER`):** padrão `disabled`. Em container com >= 1–2 GB RAM (ex.: Cloud Run), usar `--extra stt` (`faster_whisper` + `base`); em planos <= 512 MB RAM, usar `APP_STT_PROVIDER=whisper_http` apontando para endpoint `/v1/audio/transcriptions` compatível.
+- **Rotas de farmácias & estoque (`backend/app/api/routes/pharmacies.py`):** `GET /api/v1/pharmacies/nearby` e `GET /api/v1/ceaf-stock` sanitizam parâmetros ecoados (`ra`, `query`, `unidade`) contra PII, ordenam estritamente por menor distância quando recebem GPS (`lat`/`lng`), mantêm `cobertura_ubs_disponivel=false` e calculam `updated_at` e `stale_warning` por item a partir de `ultima_atualizacao` da fonte. Data ausente, inválida, futura ou antiga (> 48 h) exige alerta. No resumo, `updated_at` é a menor data entre todos os resultados filtrados (nulo se algum não tem data ou não há resultados); `stale_warning` é verdadeiro se qualquer resultado exige alerta, inclusive além do limite da página. `panel_updated_at_utc` é somente metadado do painel e `synced_at_utc` informa a coleta. Os snapshots são embutidos na imagem Docker e carregados uma vez em memória por processo; atualizações feitas via `PYTHONPATH=backend uv run --project backend python -m app.ingestion.infosaude_sync --output-dir data/processed` (ou PR automático de `.github/workflows/infosaude-stock-sync.yml`) exigem merge + rebuild/redeploy para refletir em produção.

@@ -218,6 +218,7 @@ def registros_semana4(relatorio: dict[str, Any]) -> list[Registro]:
                 "abstencoes",
                 "bloqueados",
                 "falhas_ou_rejeicoes",
+                "warmup_ms",
                 "mediana_wall_ms",
                 "p95_wall_ms",
                 "mediana_geracao_ms",

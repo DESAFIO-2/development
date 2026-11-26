@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 
-from app.api.schemas.erro import ERROS_MULTIMODAL
+from app.api.autenticacao import ROTA_COM_LOGIN
+from app.api.schemas.erro import ERROS_MULTIMODAL, MUITAS_REQUISICOES, NAO_AUTENTICADO
 from app.api.schemas.prescription_request import DataISO, MedicationItemDTO
 from app.application.multimodal import MultimodalRequest, MultimodalResponse
 from app.container import get_services
@@ -161,8 +162,9 @@ def _parsear_itens_json(itens_json: str | None) -> list[MedicationItemInput]:
 @router.post(
     "/multimodal",
     response_model=MultimodalResponse,
-    responses=ERROS_MULTIMODAL,
+    responses={**ERROS_MULTIMODAL, **MUITAS_REQUISICOES, **NAO_AUTENTICADO},
     openapi_extra=_MULTIMODAL_OPENAPI_EXTRA,
+    dependencies=ROTA_COM_LOGIN,
 )
 async def orchestrate_multimodal(request: Request) -> MultimodalResponse:
     content_type_raw = request.headers.get("Content-Type", "")

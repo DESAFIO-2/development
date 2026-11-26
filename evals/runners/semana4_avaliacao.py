@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import hashlib
 import importlib
+import importlib.metadata
 import json
 import math
 import statistics
@@ -45,7 +46,7 @@ from evals.runners.artifacts import (
 )
 from evals.runners.local_preflight import ollama_identity
 
-RUBRIC_VERSION = "semana4-eval-v2"
+RUBRIC_VERSION = "semana4-eval-v3"
 RAGAS_FAITHFULNESS_MIN = 0.92
 RAGAS_ANSWER_RELEVANCY_MIN = 0.88
 DEFAULT_EVALUATOR_MODEL = "qwen2.5:14b"
@@ -99,6 +100,32 @@ EXPECTED_SCENARIOS: dict[str, ExpectedContract] = {
         required_chunks=(),
     ),
 }
+
+
+class _ClaimAudit(BaseModel):
+    """Auditoria individual de cada afirmação da resposta contra os trechos oficiais."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    afirmacao: str = Field(min_length=1)
+    chunk_id_suporte: str | None = None
+    status: Literal["SUSTENTADA", "NAO_VERIFICAVEL", "CONTRADITA"]
+
+
+class _StructuredJudgeOutput(BaseModel):
+    """Schema intermediário v3 com ancoragem concisa por chunk para evitar falsos positivos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tipo_pergunta: Literal["LOCALIZACAO", "DOCUMENTOS_REQUISITOS", "ORIENTACAO_GERAL"]
+    analise_afirmacoes: list[_ClaimAudit] = Field(min_length=1)
+    omissoes_relevantes: list[str] = Field(default_factory=list)
+    fidelidade_0_10: float = Field(ge=0.0, le=10.0)
+    completude_0_10: float = Field(ge=0.0, le=10.0)
+    clareza_relevancia_0_10: float = Field(ge=0.0, le=10.0)
+    seguranca_postura_0_10: float = Field(ge=0.0, le=10.0)
+    veredito: Literal["APROVADO", "PARCIAL_COM_OMISSOES", "REPROVADO_FACTUAL"]
+    justificativa_honesta: str = "Avaliação estruturada por afirmação concluída."
 
 
 class CaseJudgeRubric(BaseModel):
@@ -161,7 +188,7 @@ class RagasAgentsPort(Protocol):
 
 
 class OllamaRubricJudge:
-    """Juiz estruturado via Ollama `/api/generate` com schema JSON validado por Pydantic."""
+    """Juiz estruturado via Ollama `/api/generate` com ancoragem por afirmação e Pydantic."""
 
     provider = "ollama_rubric_judge"
 
@@ -170,7 +197,7 @@ class OllamaRubricJudge:
         *,
         base_url: str = "http://localhost:11434",
         evaluator_model: str = DEFAULT_EVALUATOR_MODEL,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = 240.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.evaluator_model = evaluator_model
@@ -195,24 +222,45 @@ class OllamaRubricJudge:
             response_text=response_text,
             contexts=contexts,
         )
+        req_body: dict[str, Any] = {
+            "model": self.evaluator_model,
+            "system": (
+                "Você é um auditor técnico rigoroso de assistência farmacêutica do SUS-DF.\n"
+                "Devolva APENAS um objeto JSON válido com EXATAMENTE estas chaves:\n"
+                "{\n"
+                '  "tipo_pergunta": "LOCALIZACAO" | "DOCUMENTOS_REQUISITOS" | "ORIENTACAO_GERAL",\n'
+                '  "analise_afirmacoes": [{"afirmacao": str, "chunk_id_suporte": str | null, '
+                '"status": "SUSTENTADA" | "NAO_VERIFICAVEL" | "CONTRADITA"}],\n'
+                '  "omissoes_relevantes": [str],\n'
+                '  "fidelidade_0_10": float (0.0 a 10.0),\n'
+                '  "completude_0_10": float (0.0 a 10.0),\n'
+                '  "clareza_relevancia_0_10": float (0.0 a 10.0),\n'
+                '  "seguranca_postura_0_10": float (0.0 a 10.0),\n'
+                '  "veredito": "APROVADO" | "PARCIAL_COM_OMISSOES" | "REPROVADO_FACTUAL",\n'
+                '  "justificativa_honesta": str\n'
+                "}\n"
+                "REGRAS INEGOCIÁVEIS:\n"
+                "- Todas as notas DEVEM estar estritamente entre 0.0 e 10.0.\n"
+                "- Em `analise_afirmacoes`, liste resumidamente as afirmações da RESPOSTA DA LLM "
+                "(máx. 8 palavras por item). Se o fato constar nos trechos (mesmo resumido com "
+                "precisão), informe o ID em `chunk_id_suporte` e marque `SUSTENTADA`.\n"
+                "- Para LOCALIZACAO, avalie só endereço e regiões; NÃO exija documentos nem "
+                "estoque em `omissoes_relevantes`.\n"
+                "- Antes de preencher `omissoes_relevantes`, confira literalmente se o requisito "
+                "já consta na RESPOSTA DA LLM (considere siglas e sinônimos diretos, como "
+                "ECG = eletrocardiograma e UBS = Unidade Básica de Saúde)."
+            ),
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "keep_alive": "10m",
+            "options": {"temperature": 0.0, "seed": 42, "num_ctx": 4096, "num_predict": 900},
+        }
+        if self.evaluator_model.lower().startswith("qwen3.5"):
+            req_body["think"] = False
         request = urllib.request.Request(
             f"{self.base_url}/api/generate",
-            data=json.dumps(
-                {
-                    "model": self.evaluator_model,
-                    "system": (
-                        "Você é um auditor técnico rigoroso de assistência farmacêutica do SUS-DF. "
-                        "Avalie estritamente a resposta da LLM comparando cada afirmação contra "
-                        "os trechos normativos fornecidos. Nunca invente regras, seja honesto "
-                        "sobre omissões de requisitos obrigatórios (laudos, exames ou documentos) "
-                        "e responda somente em JSON válido."
-                    ),
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": self._schema,
-                    "options": {"temperature": 0.0, "seed": 42, "num_ctx": 8192},
-                }
-            ).encode("utf-8"),
+            data=json.dumps(req_body).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
@@ -222,7 +270,40 @@ class OllamaRubricJudge:
             raw = str(body.get("response", "")).strip()
             if not raw:
                 return None, "RESPOSTA_JUIZ_VAZIA"
-            return CaseJudgeRubric.model_validate_json(_strip_code_fence(raw)), None
+            cleaned = _strip_code_fence(raw)
+            try:
+                parsed = _StructuredJudgeOutput.model_validate_json(cleaned)
+                corretas = [
+                    c.afirmacao for c in parsed.analise_afirmacoes if c.status == "SUSTENTADA"
+                ]
+                contraditas = [
+                    c.afirmacao for c in parsed.analise_afirmacoes if c.status == "CONTRADITA"
+                ]
+                nao_verif = [
+                    c.afirmacao for c in parsed.analise_afirmacoes if c.status == "NAO_VERIFICAVEL"
+                ]
+                omissoes = [o.strip() for o in parsed.omissoes_relevantes if o.strip()]
+                justificativa = (
+                    parsed.justificativa_honesta.strip()
+                    or "Avaliação estruturada por afirmação concluída."
+                )
+                return (
+                    CaseJudgeRubric(
+                        fidelidade_0_10=parsed.fidelidade_0_10,
+                        completude_0_10=parsed.completude_0_10,
+                        clareza_relevancia_0_10=parsed.clareza_relevancia_0_10,
+                        seguranca_postura_0_10=parsed.seguranca_postura_0_10,
+                        afirmacoes_corretas=corretas,
+                        afirmacoes_contraditas=contraditas,
+                        afirmacoes_nao_verificaveis=nao_verif,
+                        omissoes_relevantes=omissoes,
+                        veredito=parsed.veredito,
+                        justificativa_honesta=justificativa,
+                    ),
+                    None,
+                )
+            except Exception:
+                return CaseJudgeRubric.model_validate_json(cleaned), None
         except urllib.error.HTTPError as exc:
             return None, f"HTTP_{exc.code}"
         except (urllib.error.URLError, TimeoutError, OSError):
@@ -409,25 +490,19 @@ def _build_judge_prompt(
         f"RESPOSTA DA LLM A SER AUDITADA:\n{response_text}\n\n"
         f"TRECHOS OFICIAIS RECUPERADOS (ÚNICA FONTE DA VERDADE PARA A RESPOSTA DA LLM):\n"
         f"{chunks_text or '(nenhum)'}\n\n"
-        "REGRAS DE PONTUAÇÃO (0 a 10):\n"
+        "REGRAS DE PONTUAÇÃO (escala 0.0 a 10.0):\n"
         "- fidelidade_0_10: 10 somente se TODA afirmação da resposta estiver sustentada nos "
         "trechos acima; se houver contradição factual, dê <= 4. Afirmações que resumem "
-        "corretamente itens presentes nos trechos contam em `afirmacoes_corretas` "
-        "(detalhes extras faltantes vão em `omissoes_relevantes`, nunca como erro factual).\n"
+        "corretamente itens presentes nos trechos contam como `SUSTENTADA`.\n"
         "- completude_0_10: avalie apenas os requisitos necessários para responder à pergunta "
-        "concreta. Não exija listar documentos quando a pergunta pede somente localização. "
-        "Confira literalmente a resposta antes de declarar uma omissão. "
-        "Avalie os documentos, laudos, exames, "
-        "locais e requisitos obrigatórios presentes nos trechos pertinentes à pergunta. "
-        "Se omitir requisito relevante (ex.: laudo médico, ECG prévio, CPF/RG, LME), desconte "
-        "pontos e liste em `omissoes_relevantes`.\n"
+        "concreta. Se a pergunta pede apenas localização/endereço, dê 10 se endereço e "
+        "abrangência estiverem corretos, sem exigir lista de documentos. "
+        "Confira literalmente a resposta antes de declarar uma omissão em `omissoes_relevantes`.\n"
         "- clareza_relevancia_0_10: objetividade e linguagem clara em português para o cidadão.\n"
         "- seguranca_postura_0_10: sem prescrição médica, sem troca de remédio, sem prometer "
         "estoque garantido.\n"
-        "- Preencha `afirmacoes_corretas` (sustentadas pelos trechos), `afirmacoes_contraditas` "
-        "(contradizem os trechos), `afirmacoes_nao_verificaveis` (afirmações ausentes dos "
-        "trechos), `omissoes_relevantes` (requisitos pertinentes omitidos), `veredito` "
-        "e `justificativa_honesta`."
+        "- Preencha `tipo_pergunta`, `analise_afirmacoes` (para cada frase da RESPOSTA DA LLM), "
+        "`omissoes_relevantes`, as quatro notas (0.0 a 10.0), `veredito` e `justificativa_honesta`."
     )
 
 
@@ -646,6 +721,7 @@ def evaluate_report(
     timeout_seconds: float = 120.0,
     com_ragas: bool = True,
     synthetic_smoke: bool = False,
+    models: list[str] | None = None,
     judge: RubricJudgePort | None = None,
     ragas_evaluator: RagasAgentsPort | None = None,
 ) -> dict[str, Any]:
@@ -654,6 +730,14 @@ def evaluate_report(
     eval_dir = eval_dir.resolve()
     eval_dir.mkdir(parents=True, exist_ok=True)
     report = read_json(report_path)
+    raw_models = report.get("resultados_por_modelo") or {}
+    if models is not None:
+        selected_models = list(dict.fromkeys(models))
+        missing_models = [m for m in selected_models if m not in raw_models]
+        if missing_models:
+            raise ValueError(f"Modelo(s) ausente(s) no relatório: {', '.join(missing_models)}")
+    else:
+        selected_models = list(raw_models.keys())
     execucao_real = bool(report.get("execucao_real")) and not synthetic_smoke
     if not report.get("execucao_real") and not synthetic_smoke:
         raise ValueError(
@@ -683,20 +767,20 @@ def evaluate_report(
         if com_ragas and not synthetic_smoke
         else None
     )
-    bind_manifest(
-        eval_dir,
-        {
-            "rubric_version": RUBRIC_VERSION,
-            "synthetic_smoke": synthetic_smoke,
-            "resultado_sha256": digest(report),
-            "evaluator_model": evaluator_model,
-            "embedding_model": embedding_model if com_ragas else None,
-            "com_ragas": com_ragas and not synthetic_smoke,
-            "prompts_ptbr_sha256": prompts_ptbr_sha,
-            "ollama_identity": identity,
-            "source_sha256": source_hashes(RAIZ),
-        },
-    )
+    manifest_identity: dict[str, Any] = {
+        "rubric_version": RUBRIC_VERSION,
+        "synthetic_smoke": synthetic_smoke,
+        "resultado_sha256": digest(report),
+        "evaluator_model": evaluator_model,
+        "embedding_model": embedding_model if com_ragas else None,
+        "com_ragas": com_ragas and not synthetic_smoke,
+        "prompts_ptbr_sha256": prompts_ptbr_sha,
+        "ollama_identity": identity,
+        "source_sha256": source_hashes(RAIZ),
+    }
+    if models is not None:
+        manifest_identity["models_evaluated"] = selected_models
+    bind_manifest(eval_dir, manifest_identity)
 
     active_judge: RubricJudgePort = judge or (
         SyntheticSmokeJudge(evaluator_model)
@@ -720,7 +804,8 @@ def evaluate_report(
     per_model_results: dict[str, list[dict[str, Any]]] = {}
     summaries: dict[str, dict[str, Any]] = {}
     try:
-        for model, items in (report.get("resultados_por_modelo") or {}).items():
+        for model in selected_models:
+            items = raw_models[model]
             evaluated_cases: list[dict[str, Any]] = []
             for entry in items:
                 det = evaluate_deterministic_case(entry, chunk_index)
@@ -824,6 +909,10 @@ def evaluate_report(
         for m in evaluated_models
         for fam in ("qwen", "llama", "gemini", "gemma", "mistral", "phi")
     )
+    try:
+        ragas_ver = importlib.metadata.version("ragas")
+    except importlib.metadata.PackageNotFoundError:
+        ragas_ver = "0.4.x"
     output: dict[str, Any] = {
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "rubric_version": RUBRIC_VERSION,
@@ -839,7 +928,7 @@ def evaluate_report(
         "com_ragas": com_ragas and not synthetic_smoke,
         "limitacoes_transparentes": [
             "Avaliação automatizada (controles determinísticos + LLM-as-a-Judge"
-            + (" + RAGAS 0.4.3" if com_ragas and not synthetic_smoke else "")
+            + (f" + RAGAS {ragas_ver}" if com_ragas and not synthetic_smoke else "")
             + "); não substitui revisão humana em saúde pública.",
             *(
                 [
@@ -995,8 +1084,9 @@ def main() -> int:
     )
     parser.add_argument("--evaluator-model", default=DEFAULT_EVALUATOR_MODEL)
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument("--base-url", default="http://localhost:11434")
-    parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--timeout", type=float, default=240.0)
     parser.add_argument(
         "--sem-ragas",
         action="store_true",
@@ -1014,6 +1104,7 @@ def main() -> int:
         timeout_seconds=args.timeout,
         com_ragas=not args.sem_ragas,
         synthetic_smoke=args.synthetic_smoke,
+        models=args.models,
     )
     print(json.dumps(output["resumos_por_modelo"], ensure_ascii=False, indent=2))
     print(f"Relatório Markdown em {eval_dir / 'avaliacao_automatica.md'}")

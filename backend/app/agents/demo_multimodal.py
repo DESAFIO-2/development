@@ -68,6 +68,7 @@ def _substituir_transcritor(
         pdf_extractor=base.pdf_extractor,
         audio_transcriber=transcriber,
         multimodal_use_case=use_case,
+        pharmacy_stock_repo=base.pharmacy_stock_repo,
     )
     set_services(patched)
 

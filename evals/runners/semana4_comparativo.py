@@ -1,4 +1,4 @@
-"""Coleta reproduzível da Semana 4 (Qwen2.5 7B vs 14B no Ollama).
+"""Coleta reproduzível da Semana 4 (modelo local Ollama).
 
 Nunca fabrica qualidade de LLM nem troca falha real por saída determinística.
 Executar via ambiente backend:
@@ -15,6 +15,8 @@ import platform
 import statistics
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,8 +42,10 @@ from evals.runners.artifacts import (
 )
 from evals.runners.local_preflight import ollama_identity
 
-DEFAULT_MODELS = ("qwen2.5:7b", "qwen2.5:14b")
+DEFAULT_MODELS = ("qwen3.5:4b",)
 RNF04_LATENCY_LIMIT_MS = 8000.0
+DEFAULT_NUM_CTX = 4096
+DEFAULT_NUM_PREDICT = 280
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,9 @@ def _checkpoint_path(
     *,
     synthetic_smoke: bool,
     model_digest: str,
+    prompt_version: str = PROMPT_VERSION_AGENTS,
+    num_ctx: int = 8192,
+    num_predict: int = 450,
 ) -> Path:
     key = digest(
         {
@@ -103,7 +110,9 @@ def _checkpoint_path(
             "case_id": case_id,
             "payload": payload,
             "synthetic_smoke": synthetic_smoke,
-            "prompt_version": PROMPT_VERSION_AGENTS,
+            "prompt_version": prompt_version,
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
         }
     )
     return run_dir / "checkpoints" / f"{model.replace(':', '_')}_{case_id}_{key[:10]}.json"
@@ -163,7 +172,13 @@ def _run_case(
         )
 
 
-def _summarize_model(model: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_model(
+    model: str,
+    items: list[dict[str, Any]],
+    *,
+    warmup_ms: float | None = None,
+    warmup_error: str | None = None,
+) -> dict[str, Any]:
     latencies = [float(it["wall_ms"]) for it in items]
     gen_latencies = [float(it["latency_ms"]) for it in items if it.get("latency_ms") is not None]
     failures = [
@@ -178,6 +193,8 @@ def _summarize_model(model: str, items: list[dict[str, Any]]) -> dict[str, Any]:
     )
     return {
         "model": model,
+        "warmup_ms": warmup_ms,
+        "warmup_error": warmup_error,
         "casos_executados": len(items),
         "gerados": sum(1 for it in items if it["generation_status"] == "GERADO"),
         "abstencoes": sum(1 for it in items if it["generation_status"] == "ABSTENCAO"),
@@ -190,6 +207,20 @@ def _summarize_model(model: str, items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _unload_ollama_model(base_url: str, model: str, timeout_seconds: float) -> None:
+    try:
+        req = urllib.request.Request(
+            f"{base_url.rstrip('/')}/api/generate",
+            data=json.dumps({"model": model, "keep_alive": 0}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=min(timeout_seconds, 10.0)) as resp:  # nosec B310
+            resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return
+
+
 def run_comparison(
     *,
     run_dir: Path,
@@ -200,6 +231,11 @@ def run_comparison(
     synthetic_smoke: bool = False,
     status_only: bool = False,
     services: ServiceContainer | None = None,
+    prompt_version: str = PROMPT_VERSION_AGENTS,
+    warmup: bool = False,
+    keep_alive: str | None = None,
+    num_ctx: int = DEFAULT_NUM_CTX,
+    num_predict: int = DEFAULT_NUM_PREDICT,
 ) -> dict[str, Any]:
     run_dir = run_dir.resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -208,7 +244,7 @@ def run_comparison(
     if status_only:
         report: dict[str, Any] = {
             "timestamp_utc": datetime.now(UTC).isoformat(),
-            "prompt_version": PROMPT_VERSION_AGENTS,
+            "prompt_version": prompt_version,
             "base_url": base_url,
             "models": models,
             "casos_planejados": len(scenarios),
@@ -230,7 +266,10 @@ def run_comparison(
         run_dir,
         {
             "synthetic_smoke": synthetic_smoke,
-            "prompt_version": PROMPT_VERSION_AGENTS,
+            "prompt_version": prompt_version,
+            "warmup": warmup,
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
             "base_url": base_url,
             "models": list(models),
             "cases": [[case_id, payload] for case_id, payload in scenarios],
@@ -240,6 +279,7 @@ def run_comparison(
     )
     resolved_services = services or build_services()
     per_model: dict[str, list[dict[str, Any]]] = {}
+    warmup_stats: dict[str, tuple[float | None, str | None]] = {}
 
     for model in models:
         model_digest = (
@@ -254,21 +294,45 @@ def run_comparison(
                 base_url=base_url,
                 model_name=model,
                 timeout_seconds=timeout_seconds,
-                prompt_version=PROMPT_VERSION_AGENTS,
+                prompt_version=prompt_version,
                 skip_input_guardrail=True,
+                keep_alive=keep_alive or ("10m" if warmup else None),
+                num_ctx=num_ctx,
+                num_predict=num_predict,
             )
         )
-        orchestrator = build_orchestrator(resolved_services, generator)
-        entries: list[dict[str, Any]] = []
-        for case_id, payload in scenarios:
-            ckpt = _checkpoint_path(
+        checkpoints = [
+            _checkpoint_path(
                 run_dir,
                 model,
                 case_id,
                 payload,
                 synthetic_smoke=synthetic_smoke,
                 model_digest=model_digest,
+                prompt_version=prompt_version,
+                num_ctx=num_ctx,
+                num_predict=num_predict,
             )
+            for case_id, payload in scenarios
+        ]
+        needs_execution = any(not ckpt.exists() for ckpt in checkpoints)
+        w_ms: float | None = None
+        w_err: str | None = None
+        if (
+            warmup
+            and needs_execution
+            and not synthetic_smoke
+            and isinstance(generator, OllamaRESTGeneratorAdapter)
+        ):
+            try:
+                w_ms = generator.warmup()
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+                w_err = type(exc).__name__
+        warmup_stats[model] = (w_ms, w_err)
+
+        orchestrator = build_orchestrator(resolved_services, generator)
+        entries: list[dict[str, Any]] = []
+        for (case_id, payload), ckpt in zip(scenarios, checkpoints, strict=True):
             cached = read_json(ckpt) if ckpt.exists() else None
             if cached is not None:
                 entries.append(cached)
@@ -286,6 +350,8 @@ def run_comparison(
                 atomic_json(ckpt, item)
             entries.append(item)
         per_model[model] = entries
+        if warmup and needs_execution and not synthetic_smoke and len(models) > 1:
+            _unload_ollama_model(base_url, model, timeout_seconds)
 
     has_provider_failure = any(
         item["generation_status"] == "FALHA_PROVEDOR"
@@ -304,14 +370,23 @@ def run_comparison(
             "platform": platform.platform(),
             "python": platform.python_version(),
         },
-        "prompt_version": PROMPT_VERSION_AGENTS,
+        "prompt_version": prompt_version,
+        "warmup": warmup,
         "base_url": base_url,
         "ollama_identity": identity,
         "models": models,
         "casos_planejados": len(scenarios),
         "execucao_real": not synthetic_smoke,
         "status_cientifico": scientific_status,
-        "resumos": {model: _summarize_model(model, items) for model, items in per_model.items()},
+        "resumos": {
+            model: _summarize_model(
+                model,
+                items,
+                warmup_ms=warmup_stats.get(model, (None, None))[0],
+                warmup_error=warmup_stats.get(model, (None, None))[1],
+            )
+            for model, items in per_model.items()
+        },
         "resultados_por_modelo": per_model,
     }
     atomic_json(run_dir / "resultado.json", report)
@@ -326,6 +401,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- **Status Científico:** `{report['status_cientifico']}`",
         f"- **Execução Real:** `{report['execucao_real']}`",
         f"- **Prompt Version:** `{report['prompt_version']}`",
+        f"- **Warmup Explícito:** `{bool(report.get('warmup'))}`",
         f"- **Casos Planejados:** {report['casos_planejados']}",
         "",
     ]
@@ -337,15 +413,17 @@ def _render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "| Modelo | Casos | Gerados | Abstenções | Bloqueios | Falhas | "
-            "Mediana (ms) | p95 (ms) | RNF04 <= 8s |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---|",
+            "Warmup (ms) | Mediana (ms) | p95 (ms) | RNF04 <= 8s |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
     for model, stats in resumos.items():
+        w = stats.get("warmup_ms")
+        w_str = "N/A" if w is None else str(w)
         lines.append(
             f"| `{model}` | {stats['casos_executados']} | {stats['gerados']} | "
             f"{stats['abstencoes']} | {stats['bloqueados']} | {stats['falhas_ou_rejeicoes']} | "
-            f"{stats['mediana_wall_ms']} | {stats['p95_wall_ms']} | "
+            f"{w_str} | {stats['mediana_wall_ms']} | {stats['p95_wall_ms']} | "
             f"{stats['dentro_meta_rnf04_8s']} |"
         )
     lines.append("")
@@ -362,6 +440,16 @@ def main() -> int:
     parser.add_argument("--models", nargs="+", default=list(DEFAULT_MODELS))
     parser.add_argument("--base-url", default="http://localhost:11434")
     parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--prompt-version", default=PROMPT_VERSION_AGENTS)
+    parser.add_argument(
+        "--warmup",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Pré-aquece cada modelo antes dos casos e registra warmup_ms separadamente.",
+    )
+    parser.add_argument("--keep-alive", default="10m")
+    parser.add_argument("--num-ctx", type=int, default=DEFAULT_NUM_CTX)
+    parser.add_argument("--num-predict", type=int, default=DEFAULT_NUM_PREDICT)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--pilot", action="store_true", help="Executa somente os 2 primeiros casos")
     parser.add_argument(
@@ -384,6 +472,11 @@ def main() -> int:
         limit=limit,
         synthetic_smoke=args.synthetic_smoke,
         status_only=args.status_only,
+        prompt_version=args.prompt_version,
+        warmup=args.warmup,
+        keep_alive=args.keep_alive,
+        num_ctx=args.num_ctx,
+        num_predict=args.num_predict,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
