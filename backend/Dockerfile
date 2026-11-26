@@ -1,5 +1,11 @@
 FROM python:3.12-slim
 
+# Aplica as correções de segurança do Debian que saíram depois da imagem base
+# (o Trivy no CI bloqueia CVE alta/crítica com correção disponível).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv copiado da imagem oficial (versão fixada para o build ser reprodutível)
 COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /bin/uv
 
