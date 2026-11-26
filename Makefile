@@ -80,7 +80,7 @@ run-api:
 	cd backend && uv run python -c "import os, pathlib, uvicorn; p = pathlib.Path('.env'); [os.environ.setdefault(k.strip(), v.strip()) for line in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if line.strip() and not line.lstrip().startswith('#') and '=' in line for k, v in [line.split('=', 1)]]; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, reload=True)"
 
 run-ui:
-	@echo "Interface React Native planejada. Consulte docs/adr/0002_mobile_first_react_native_client.md"
+	cd mobile && npx expo start
 
 eval:
 	uv run --project backend python evals/runners/validar_datasets.py

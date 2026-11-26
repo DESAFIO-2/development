@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from opentelemetry import trace
 
+from app.core.config import settings
 from app.core.logs import request_id_var
 
 logger = logging.getLogger("app.http")
@@ -14,8 +15,10 @@ CABECALHO_REQUEST_ID = "X-Request-ID"
 
 # Cabeçalhos de segurança em toda resposta, inclusive nas de erro.
 # - nosniff: o navegador não "adivinha" o tipo e não executa JSON como script.
-# - CORP same-origin: outro site não embute as respostas da API (dados de saúde).
-#   Não afeta o app mobile, que não é navegador, nem o Swagger em /docs.
+# - CORP same-origin: bloqueia embutimento por terceiros por padrão; libera
+#   `cross-origin` apenas quando a requisição traz uma `Origin` explicitamente
+#   autorizada em APP_CORS_ORIGINS (ex.: Expo Web), preservando same-origin em
+#   Swagger, mobile nativo e verificações DAST.
 CABECALHOS_SEGURANCA = {
     "X-Content-Type-Options": "nosniff",
     "Cross-Origin-Resource-Policy": "same-origin",
@@ -27,8 +30,17 @@ async def aplicar_cabecalhos_seguranca(
 ) -> Response:
     """Acrescenta os cabeçalhos de segurança sem sobrescrever os que a rota já definiu."""
     response = await call_next(request)
+    origin = (request.headers.get("origin") or "").strip().rstrip("/")
+    allowed_origin = bool(origin and origin in settings.cors_origins_list)
     for nome, valor in CABECALHOS_SEGURANCA.items():
-        response.headers.setdefault(nome, valor)
+        if nome == "Cross-Origin-Resource-Policy" and allowed_origin:
+            response.headers.setdefault(nome, "cross-origin")
+        else:
+            response.headers.setdefault(nome, valor)
+    if allowed_origin:
+        vary = response.headers.get("Vary", "")
+        if "Origin" not in vary:
+            response.headers["Vary"] = f"{vary}, Origin".strip(", ")
     return response
 
 

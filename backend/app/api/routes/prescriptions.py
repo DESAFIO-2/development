@@ -15,6 +15,7 @@ from app.api.schemas.prescription_response import (
     PrescriptionAuditResponseDTO,
 )
 from app.container import get_services
+from app.domain.medication import route_from_dispensation
 from app.domain.prescription import MedicationItemInput, PrescriptionAuditRequest
 
 router = APIRouter(prefix="/api/v1", tags=["prescriptions"])
@@ -89,7 +90,9 @@ def autocomplete_medications(
             dcb_principio_ativo=med.dcb_name.upper(),
             concentracao=med.concentration,
             forma_farmaceutica=med.pharmaceutical_form.upper(),
+            via_retirada=route_from_dispensation(med.dispensation_route),
             dispensacao_gratuita_prevista=med.available_pfpb or med.available_reme_df,
+            exige_lme=med.requires_lme,
             texto_exibicao=(
                 f"{med.dcb_name.title()} {med.concentration} - {med.pharmaceutical_form.title()}"
             ),

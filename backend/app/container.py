@@ -31,6 +31,9 @@ from app.infrastructure.persistence.repositories.evidence_chunk_repository impor
 from app.infrastructure.persistence.repositories.normative_chunk_repository import (
     LocalNormativeChunkRepository,
 )
+from app.infrastructure.persistence.repositories.pharmacy_stock_repository import (
+    LocalPharmacyStockRepository,
+)
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.tabular_matcher import TabularDCBMatcher
 from app.seguranca.contexto import PublicContextRegistry, build_public_context
@@ -50,6 +53,7 @@ class ServiceContainer:
     pdf_extractor: PDFExtractorPort
     audio_transcriber: AudioTranscriberPort | None
     multimodal_use_case: ProcessMultimodalUseCase
+    pharmacy_stock_repo: LocalPharmacyStockRepository | None = None
 
 
 _cached_services: ServiceContainer | None = None
@@ -145,6 +149,7 @@ def build_services() -> ServiceContainer:
         pdf_extractor=pdf_extractor,
         audio_transcriber=audio_transcriber,
     )
+    pharmacy_stock_repo = LocalPharmacyStockRepository()
     return ServiceContainer(
         medication_repo=medication_repo,
         chunk_repo=chunk_repo,
@@ -158,6 +163,7 @@ def build_services() -> ServiceContainer:
         pdf_extractor=pdf_extractor,
         audio_transcriber=audio_transcriber,
         multimodal_use_case=multimodal_use_case,
+        pharmacy_stock_repo=pharmacy_stock_repo,
     )
 
 

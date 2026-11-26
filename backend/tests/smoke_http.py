@@ -74,6 +74,12 @@ def executar(base_url: str) -> None:
             time.sleep(0.5)
     resultado = requisitar(base_url, "/api/v1/medications/autocomplete?q=losartana&limite=1")
     assert resultado["total_encontrados"] == 1
+    assert resultado["resultados"][0]["via_retirada"] == "FARMACIA_POPULAR"
+    pharm = requisitar(base_url, "/api/v1/pharmacies/nearby?ra=Ceilandia&limite=2")
+    assert pharm["total"] >= 1
+    stock = requisitar(base_url, "/api/v1/ceaf-stock?q=adalimumabe&unidade=Ceilandia&limite=2")
+    assert stock["cobertura_escopo"] == "CEAF_ALTO_CUSTO"
+    assert stock["cobertura_ubs_disponivel"] is False
     casos = [
         ("onde retiro losartana?", True, False),
         ("qual a validade da receita e posso dobrar a dose do remédio", False, False),

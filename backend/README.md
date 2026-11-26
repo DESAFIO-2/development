@@ -164,3 +164,11 @@ são evidência científica.
 
 Responsabilidades, diagrama, contratos, modelos, limites, testes e operação:
 [guia dos agentes](../docs/architecture/agentes_semana4.md).
+
+## 7. Prontidão de Deploy (LLMOps / MLOps) & Estoque CEAF
+
+- **Porta dinâmica & Docker (`backend/Dockerfile`):** a imagem inclui os snapshots `data/processed/ceaf_live_stock.json` e `df_pharmacies_geolocated.json` e sobe via `${PORT:-8000}` (`--host 0.0.0.0`), com `HEALTHCHECK` apontando para `GET /health`.
+- **CORS & Web (`APP_CORS_ORIGINS`):** origens liberadas para o cliente Expo Web (padrão local `http://localhost:8081,http://127.0.0.1:8081`); requisições sem `Origin` autorizada mantêm `Cross-Origin-Resource-Policy: same-origin` (compatível com ZAP/Schemathesis).
+- **Troca de provedor LLM em produção:** o código já isola `GeneratorPort`. Para sair do modo `deterministic` ou `ollama` (`qwen3.5:4b`) para uma API na nuvem sem alterar código, basta configurar `APP_AGENTS_PROVIDER=gemini`, `APP_AGENTS_MODEL=<modelo-flash>` e `APP_GOOGLE_API_KEY`.
+- **Áudio / STT no deploy (`APP_STT_PROVIDER`):** padrão `disabled`. Em container com >= 1–2 GB RAM (ex.: Cloud Run), usar `--extra stt` (`faster_whisper` + `base`); em planos <= 512 MB RAM, usar `APP_STT_PROVIDER=whisper_http` apontando para endpoint `/v1/audio/transcriptions` compatível.
+- **Rotas de farmácias & estoque (`backend/app/api/routes/pharmacies.py`):** `GET /api/v1/pharmacies/nearby` e `GET /api/v1/ceaf-stock` mantêm `cobertura_ubs_disponivel=false` e `stale_warning` automático (> 48 h), atualizados por `.github/workflows/infosaude-stock-sync.yml` via `python -m app.ingestion.infosaude_sync`.

@@ -157,3 +157,31 @@ def test_multimodal_arquivo_enviado_como_texto_e_rejeitado(client: TestClient, c
     resposta = client.post(MULTIMODAL, data={campo: "não sou um arquivo"})
     assert resposta.status_code == 422
     assert campo in resposta.json()["detail"]
+
+
+def test_cors_e_corp_preservam_same_origin_por_padrao_e_liberam_expo_autorizado(
+    client: TestClient,
+) -> None:
+    allowed = "http://localhost:8081"
+    preflight = client.options(
+        "/api/v1/agents/orchestrate",
+        headers={
+            "Origin": allowed,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["Access-Control-Allow-Origin"] == allowed
+    assert preflight.headers["Cross-Origin-Resource-Policy"] == "cross-origin"
+    assert preflight.headers["X-Content-Type-Options"] == "nosniff"
+
+    resp_ok = client.get("/health", headers={"Origin": allowed})
+    assert resp_ok.status_code == 200
+    assert resp_ok.headers["Access-Control-Allow-Origin"] == allowed
+    assert resp_ok.headers["Cross-Origin-Resource-Policy"] == "cross-origin"
+
+    resp_untrusted = client.get("/health", headers={"Origin": "https://site-terceiro.invalid"})
+    assert resp_untrusted.status_code == 200
+    assert "Access-Control-Allow-Origin" not in resp_untrusted.headers
+    assert resp_untrusted.headers["Cross-Origin-Resource-Policy"] == "same-origin"

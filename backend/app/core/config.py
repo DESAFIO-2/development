@@ -43,5 +43,18 @@ class Settings(BaseSettings):
     # Diretório de Dados Processados
     data_processed_dir: Path = DATA_DIR / "processed"
 
+    # Origens permitidas para clientes Web (Expo Web / browser). Vazio desabilita CORS.
+    cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"
+
+    @property
+    def cors_origins_list(self) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                origin.strip().rstrip("/")
+                for origin in self.cors_origins.split(",")
+                if origin.strip()
+            )
+        )
+
 
 settings = Settings()
