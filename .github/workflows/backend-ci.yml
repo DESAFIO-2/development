@@ -13,6 +13,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Postgres efêmero só para o contrato do repositório de usuários
+    # (tests/integration/test_usuario_repository_contrato.py). Some com o job.
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: remedia_ci
+          POSTGRES_USER: remedia_ci
+          POSTGRES_PASSWORD: ci-somente-teste-efemero
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U remedia_ci -d remedia_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      APP_TESTE_DATABASE_URL: postgresql://remedia_ci:ci-somente-teste-efemero@127.0.0.1:5432/remedia_ci
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

@@ -1,4 +1,4 @@
-# SUS Digital — Base Mobile (`mobile/`)
+# RemedIA — Base Mobile (`mobile/`)
 
 Base React Native (**Expo SDK 58 + NativeWind + TypeScript**) portado do repositório `DESAFIO-2/Front-End-` para integração oficial com o backend FastAPI de `development/backend/` (ADR 0002).
 
@@ -9,7 +9,7 @@ Base React Native (**Expo SDK 58 + NativeWind + TypeScript**) portado do reposit
   - `checkHealth` (`GET /health`)
   - `autocompleteMedications` (`GET /api/v1/medications/autocomplete` — incluindo `via_retirada` e `exige_lme`)
   - `auditPrescription` (`POST /api/v1/prescriptions/audit`)
-  - `orchestrateAgents` (`POST /api/v1/agents/orchestrate` — recomendado para o chat Zelo)
+  - `orchestrateAgents` (`POST /api/v1/agents/orchestrate` — recomendado para o chat RemedIA)
   - `orchestrateMultimodal` (`POST /api/v1/agents/multimodal` — upload em memória de PDF digital + áudio + `confirmado_pelo_usuario`)
   - `fetchNearbyPharmacies` (`GET /api/v1/pharmacies/nearby`)
   - `fetchCeafStock` (`GET /api/v1/ceaf-stock` — Alto Custo CEAF com `stale_warning` > 48 h e `cobertura_ubs_disponivel: false`)

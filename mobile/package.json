@@ -1,5 +1,5 @@
 {
-  "name": "susdigital",
+  "name": "remedia",
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
@@ -16,8 +16,10 @@
     "expo-image": "~58.0.18",
     "expo-linear-gradient": "~58.0.3",
     "expo-linking": "~58.0.16",
+    "expo-local-authentication": "~58.0.3",
     "expo-notifications": "~58.1.8",
     "expo-router": "~58.0.30",
+    "expo-secure-store": "~58.0.3",
     "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
     "expo-symbols": "~58.0.4",

@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "SUS Digital",
-    "slug": "susdigital",
+    "name": "RemedIA",
+    "slug": "remedia",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "susdigital",
+    "scheme": "remedia",
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "A Zelo usa o microfone para ouvir suas dúvidas por voz.",
+        "NSMicrophoneUsageDescription": "A RemedIA usa o microfone para ouvir suas dúvidas por voz.",
         "NSCameraUsageDescription": "A câmera é usada para fotografar receitas e exames."
       }
     },
@@ -35,6 +35,13 @@
           "backgroundColor": "#00254d",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "A RemedIA usa o Face ID para desbloquear sua sessão sem digitar a senha."
         }
       ]
     ],

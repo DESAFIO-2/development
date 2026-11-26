@@ -1,4 +1,4 @@
-// Design tokens do SUS Digital — extraídos das telas de referência (referencias/*.html).
+// Design tokens da RemedIA — extraídos das telas de referência (referencias/*.html).
 // Arquivo CommonJS para ser usado tanto pelo tailwind.config.js quanto pelo código TS.
 
 const colors = {

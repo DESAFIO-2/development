@@ -71,14 +71,32 @@ export type TxtProps = TextProps & {
   className?: string;
 };
 
+// Classes `text-*` que não são cor (tamanho da escala e alinhamento).
+const TEXT_NAO_COR = new Set([
+  ...Object.values(SIZE),
+  ...['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl'].map((s) => `text-${s}`),
+  ...['left', 'center', 'right', 'justify', 'start', 'end'].map((a) => `text-${a}`),
+]);
+
+/** Indica se o className já define uma cor de texto (ex.: `text-primary`, `text-white/70`). */
+export function temCorDeTexto(className: string): boolean {
+  return className.split(/\s+/).some((c) => {
+    const base = c.slice(c.lastIndexOf(':') + 1).replace(/^!/, '');
+    return base.startsWith('text-') && !TEXT_NAO_COR.has(base);
+  });
+}
+
 export function Txt({ v = 'body-md', w, serif, upper, className = '', children, ...rest }: TxtProps) {
   const isSerif = serif ?? (v.startsWith('headline') || v.startsWith('display'));
   const weight = w ?? DEFAULT_WEIGHT[v];
   const family = isSerif ? SERIF[weight] : SANS[weight];
+  // A cor padrão só entra quando o texto não traz a sua: com as duas classes,
+  // a ordem do CSS gerado decide qual vence e a cor pedida podia sumir.
+  const corPadrao = temCorDeTexto(className) ? '' : 'text-on-surface';
   return (
     <Text
       {...rest}
-      className={`${SIZE[v]} ${family} ${upper ? 'uppercase' : ''} text-on-surface ${className}`}>
+      className={`${SIZE[v]} ${family} ${upper ? 'uppercase' : ''} ${corPadrao} ${className}`}>
       {children}
     </Text>
   );

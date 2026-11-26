@@ -28,13 +28,13 @@ type Msg =
 const INICIAIS: Msg[] = [
   { id: 'm1', de: 'zelo', hora: '11:52', texto: '' }, // saudação (montada com o nome do usuário)
   { id: 'm2', de: 'zelo', tipo: 'lembrete', hora: '11:53' },
-  { id: 'm3', de: 'eu', hora: '11:54', texto: 'Zelo, onde posso pegar a Losartana da minha receita aqui perto da Asa Sul?' },
+  { id: 'm3', de: 'eu', hora: '11:54', texto: 'RemedIA, onde posso pegar a Losartana da minha receita aqui perto da Asa Sul?' },
   { id: 'm4', de: 'zelo', tipo: 'farmacia', hora: '11:55' },
   {
     id: 'm5',
     de: 'eu',
     hora: '11:57',
-    texto: 'Zelo, tô com uma dor muito forte no estômago e queimação. Posso tomar 2 comprimidos de Ibuprofeno 600mg junto com a Metformina pra passar logo?',
+    texto: 'RemedIA, tô com uma dor muito forte no estômago e queimação. Posso tomar 2 comprimidos de Ibuprofeno 600mg junto com a Metformina pra passar logo?',
   },
   { id: 'm6', de: 'zelo', tipo: 'seguranca', hora: '11:58' },
 ];
@@ -66,7 +66,7 @@ function AvatarZelo({ icon = 'spa', bg = 'bg-primary' }: { icon?: string; bg?: s
   );
 }
 
-function BolhaZelo({ children, hora, rodape = 'SUS Digital', destaque }: { children: React.ReactNode; hora: string; rodape?: string; destaque?: boolean }) {
+function BolhaZelo({ children, hora, rodape = 'RemedIA', destaque }: { children: React.ReactNode; hora: string; rodape?: string; destaque?: boolean }) {
   return (
     <View className="relative overflow-hidden rounded-2xl rounded-tl-sm bg-surface-container-lowest p-4" style={destaque ? shadow.md : shadow.sm}>
       {children}
@@ -326,7 +326,7 @@ export default function Zelo() {
               {saudacao ? (
                 <Txt v="body-md" className="text-on-surface">
                   Olá, <Txt v="body-md" w="semibold" className="text-primary">{usuario?.nome}</Txt>! Sou a{' '}
-                  <Txt v="body-md" w="semibold" className="text-primary">Zelo</Txt>, sua companheira de saúde. Como
+                  <Txt v="body-md" w="semibold" className="text-primary">RemedIA</Txt>, sua companheira de saúde. Como
                   posso te ajudar hoje com seus remédios, receitas ou consultas na{' '}
                   <Txt v="body-md" w="semibold" className="text-primary">{usuario?.ubs}</Txt>?
                 </Txt>
@@ -380,7 +380,7 @@ export default function Zelo() {
             </Pressable>
           </View>
 
-          {/* Cartão da Zelo */}
+          {/* Cartão da RemedIA */}
           <View className="overflow-hidden rounded-2xl bg-surface-container-lowest p-4" style={shadow.md}>
             <View className="flex-row items-center justify-between gap-3">
               <View className="flex-1 flex-row items-center gap-3">
@@ -391,7 +391,7 @@ export default function Zelo() {
                 <View className="flex-1">
                   <View className="flex-row items-center gap-1.5">
                     <Txt v="title-md" className="text-primary">
-                      Zelo
+                      RemedIA
                     </Txt>
                     <Pill label="SUS DF" className="bg-primary/10" />
                   </View>
@@ -480,7 +480,7 @@ export default function Zelo() {
               />
               <IconButton
                 icon="mic"
-                label="Falar com a Zelo"
+                label="Falar com a RemedIA"
                 size={44}
                 iconSize={22}
                 color="on-primary"

@@ -31,7 +31,7 @@ export function AppHeader({ subtitle = 'Ministério da Saúde' }: { subtitle?: s
           <Logo />
           <View className="min-w-0">
             <Txt v="title-md" className="leading-tight text-primary">
-              SUS Digital
+              RemedIA
             </Txt>
             <View className="flex-row items-center gap-1.5">
               <View className="h-1.5 w-1.5 rounded-full bg-secondary" />

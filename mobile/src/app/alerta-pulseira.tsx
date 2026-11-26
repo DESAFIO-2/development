@@ -98,7 +98,7 @@ function TelaPulseira({ tomado }: { tomado: boolean }) {
 
 const PASSOS = [
   { icon: 'bluetooth', titulo: 'Pareie a pulseira com o celular', texto: 'Use o app da sua pulseira (Mi Fitness, Zepp, Galaxy Wearable, Wear OS ou Apple Watch).' },
-  { icon: 'notifications_active', titulo: 'Libere as notificações do SUS Digital', texto: 'No app da pulseira, ative "Notificações de apps" e marque o SUS Digital.' },
+  { icon: 'notifications_active', titulo: 'Libere as notificações da RemedIA', texto: 'No app da pulseira, ative "Notificações de apps" e marque a RemedIA.' },
   { icon: 'vibration', titulo: 'Pronto! O alerta vibra no pulso', texto: 'Na hora da dose, a pulseira vibra e mostra o remédio. Toque em "Tomei" ali mesmo.' },
 ];
 

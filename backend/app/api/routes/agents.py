@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import ConfigDict, Field, model_validator
 
-from app.api.schemas.erro import CORPO_MALFORMADO
+from app.api.autenticacao import ROTA_COM_LOGIN
+from app.api.schemas.erro import ROTA_PROTEGIDA
 from app.api.schemas.prescription_request import (
     PADRAO_UM_VISIVEL,
     MedicationItemDTO,
@@ -46,6 +47,11 @@ class AgentRequestDTO(PrescriptionAuditRequestDTO):
         return self
 
 
-@router.post("/orchestrate", response_model=AgentResponse, responses=CORPO_MALFORMADO)
+@router.post(
+    "/orchestrate",
+    response_model=AgentResponse,
+    responses=ROTA_PROTEGIDA,
+    dependencies=ROTA_COM_LOGIN,
+)
 def orchestrate(payload: AgentRequestDTO) -> AgentResponse:
     return get_services().agents.executar(AgentRequest.model_validate(payload.model_dump()))

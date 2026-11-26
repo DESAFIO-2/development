@@ -6,7 +6,8 @@ import math
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.schemas.erro import ErroDTO
+from app.api.autenticacao import ROTA_COM_LOGIN
+from app.api.schemas.erro import MUITAS_REQUISICOES, NAO_AUTENTICADO, ErroDTO
 from app.application.pharmacy_stock import (
     CeafStockResponseDTO,
     NearbyPharmaciesResponseDTO,
@@ -27,7 +28,12 @@ def _stock_repo() -> PharmacyStockRepositoryPort:
 @router.get(
     "/pharmacies/nearby",
     response_model=NearbyPharmaciesResponseDTO,
-    responses={422: {"model": ErroDTO, "description": "Coordenadas ou parâmetros inválidos"}},
+    responses={
+        422: {"model": ErroDTO, "description": "Coordenadas ou parâmetros inválidos"},
+        **MUITAS_REQUISICOES,
+        **NAO_AUTENTICADO,
+    },
+    dependencies=ROTA_COM_LOGIN,
 )
 def nearby_pharmacies(
     ra: str = Query(default="", max_length=150, description="Região Administrativa (RA) no DF"),
@@ -52,7 +58,12 @@ def nearby_pharmacies(
     return _stock_repo().find_nearby(ra=ra_segura, q=q, lat=lat, lng=lng, limite=limite)
 
 
-@router.get("/ceaf-stock", response_model=CeafStockResponseDTO)
+@router.get(
+    "/ceaf-stock",
+    response_model=CeafStockResponseDTO,
+    responses={**MUITAS_REQUISICOES, **NAO_AUTENTICADO},
+    dependencies=ROTA_COM_LOGIN,
+)
 def ceaf_stock(
     q: str = Query(default="", max_length=150, description="Medicamento ou termo de busca DCB"),
     unidade: str = Query(

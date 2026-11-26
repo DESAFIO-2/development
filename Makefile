@@ -18,7 +18,7 @@ REGRA_CLINICA ?= v1_bloqueio
 QUATRO_DIR_V3 ?= evals/reports/quatro_bracos_v3
 HOLDOUT ?= evals/datasets/holdout_guardrail_v1.jsonl
 
-.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean
+.PHONY: help dev-install eval-setup lint format test run-api run-ui eval eval-guardrail demo benchmark compare compare-ollama eval-ragas compare-smoke docker-build clean db-up db-down test-db
 
 help:
 	@echo "Comandos disponíveis no SUS Cidadão:"
@@ -167,6 +167,16 @@ guardrail-holdout:
 	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.clinical:deve_bloquear --max-falso-bloqueio 0.05 --relatorio holdout_camada1.json
 	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear --max-falso-bloqueio 0.05 --relatorio holdout_camada2.json
 	uv run --project backend python evals/runners/guardrail_runner.py --dataset "$(HOLDOUT)" --alvo app.guardrails.segunda_camada:deve_bloquear_combinado --max-falso-bloqueio 0.05 --relatorio holdout_combinado.json
+
+db-up: ## Sobe o Postgres da autenticação (só em 127.0.0.1; exige POSTGRES_PASSWORD no .env)
+	docker compose up -d --wait postgres
+
+db-down: ## Para o Postgres (os dados ficam no volume remedia-pgdata)
+	docker compose stop postgres
+
+test-db: ## Testes de contrato do repositório de usuários contra o Postgres local
+	@test -n "$$APP_TESTE_DATABASE_URL" || { echo "Defina APP_TESTE_DATABASE_URL"; exit 1; }
+	cd backend && uv run pytest -q tests/integration/test_usuario_repository_contrato.py
 
 docker-build:
 	docker build -t sus-cidadao-backend:latest -f backend/Dockerfile .

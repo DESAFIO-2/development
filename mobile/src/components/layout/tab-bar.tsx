@@ -11,7 +11,7 @@ const TABS: Record<string, { label: string; icon: string }> = {
   farmacias: { label: 'Farmácias', icon: 'local_pharmacy' },
   remedios: { label: 'Remédios', icon: 'medication' },
   receitas: { label: 'Receitas', icon: 'prescriptions' },
-  zelo: { label: 'Zelo', icon: 'graphic_eq' },
+  zelo: { label: 'RemedIA', icon: 'graphic_eq' },
 };
 
 /** Barra de navegação flutuante em formato de pílula (igual aos HTMLs). */

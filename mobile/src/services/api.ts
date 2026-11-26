@@ -277,10 +277,49 @@ export function getDefaultApiBaseUrl(): string {
   return 'http://127.0.0.1:8000';
 }
 
+/**
+ * Fora do modo de desenvolvimento só fala HTTPS: senha, token e dado de saúde
+ * nunca trafegam em texto puro. No `expo start` (__DEV__) o HTTP da rede local
+ * continua liberado para testar no celular.
+ */
+export function exigirTransporteSeguro(url: string, emDesenvolvimento: boolean = __DEV__): void {
+  if (!emDesenvolvimento && !url.toLowerCase().startsWith('https://')) {
+    throw new Error('Conexão insegura bloqueada: a API precisa usar HTTPS.');
+  }
+}
+
 function resolveUrl(path: string, baseUrl?: string): string {
   const cleanBase = (baseUrl?.trim() || getDefaultApiBaseUrl()).replace(/\/+$/, '');
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${cleanBase}${cleanPath}`;
+  const url = `${cleanBase}${cleanPath}`;
+  exigirTransporteSeguro(url);
+  return url;
+}
+
+// --- Autenticação ------------------------------------------------------------
+// O app-state registra aqui como obter o access token (em memória) e como
+// renová-lo. Assim toda chamada protegida leva o token sem cada tela saber dele.
+
+type GanchosAuth = {
+  obterToken: () => string | null;
+  /** Renova a sessão; devolve o token novo ou null (sessão encerrada). */
+  renovar: () => Promise<string | null>;
+};
+
+let ganchos: GanchosAuth | null = null;
+
+export function configurarAutenticacao(g: GanchosAuth | null): void {
+  ganchos = g;
+}
+
+export class ErroApi extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'ErroApi';
+  }
 }
 
 function extractErrorMessage(body: unknown, fallback: string): string {
@@ -302,16 +341,27 @@ async function requestJson<T>(
   path: string,
   init?: RequestInit,
   baseUrl?: string,
-  timeoutMs = 20000
+  timeoutMs = 20000,
+  { autenticar = true }: { autenticar?: boolean } = {}
 ): Promise<T> {
   const url = resolveUrl(path, baseUrl);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const enviar = (token: string | null) => {
+    const headers = new Headers(init?.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // credentials 'omit': a API não usa cookie; nada de sessão implícita.
+    return fetch(url, { ...init, headers, credentials: 'omit', signal: controller.signal });
+  };
+
   try {
-    const res = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
+    let res = await enviar(autenticar ? (ganchos?.obterToken() ?? null) : null);
+    // Access token venceu: renova uma única vez e repete a chamada.
+    if (res.status === 401 && autenticar && ganchos) {
+      const novo = await ganchos.renovar();
+      if (novo) res = await enviar(novo);
+    }
     if (!res.ok) {
       let message = `Erro HTTP ${res.status}`;
       try {
@@ -319,8 +369,9 @@ async function requestJson<T>(
       } catch {
         // Ignora corpo não-JSON em erro HTTP.
       }
-      throw new Error(message);
+      throw new ErroApi(message, res.status);
     }
+    if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -335,6 +386,39 @@ async function requestJson<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export interface TokensDTO {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'bearer';
+  expires_in: number;
+}
+
+const SEM_TOKEN = { autenticar: false };
+
+function postJson(body: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+export function cadastrarConta(cpf: string, senha: string, baseUrl?: string): Promise<TokensDTO> {
+  return requestJson<TokensDTO>('/api/v1/auth/cadastro', postJson({ cpf, senha }), baseUrl, 20000, SEM_TOKEN);
+}
+
+export function entrarConta(cpf: string, senha: string, baseUrl?: string): Promise<TokensDTO> {
+  return requestJson<TokensDTO>('/api/v1/auth/login', postJson({ cpf, senha }), baseUrl, 20000, SEM_TOKEN);
+}
+
+export function renovarSessao(refresh_token: string, baseUrl?: string): Promise<TokensDTO> {
+  return requestJson<TokensDTO>('/api/v1/auth/refresh', postJson({ refresh_token }), baseUrl, 15000, SEM_TOKEN);
+}
+
+export function sairConta(refresh_token: string, baseUrl?: string): Promise<void> {
+  return requestJson<void>('/api/v1/auth/sair', postJson({ refresh_token }), baseUrl, 10000, SEM_TOKEN);
 }
 
 export async function checkHealth(baseUrl?: string): Promise<HealthResponse> {
