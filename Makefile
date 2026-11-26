@@ -175,23 +175,25 @@ clean:
 	uv run --project backend python -c "import pathlib, shutil; root = pathlib.Path('.'); [shutil.rmtree(p, ignore_errors=True) for name in ('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache') for p in root.rglob(name) if '.venv' not in p.parts]; [p.unlink(missing_ok=True) for p in root.rglob('*.pyc') if '.venv' not in p.parts]"
 
 S4_PILOT_DIR ?= evals/reports/semana4_piloto
-S4_RUN_DIR ?= evals/reports/semana4_comparativo_v3
+S4_RUN_DIR ?= evals/reports/semana4_comparativo_v8
 S4_RESULTADO ?= $(S4_RUN_DIR)/resultado.json
 S4_EVAL_DIR ?= $(S4_RUN_DIR)/avaliacao
-S4_EVAL_MODEL ?= $(LOCAL_MODEL)
+S4_MODELS ?= qwen3.5:4b
+S4_EVAL_MODELS ?=
+S4_EVAL_MODEL ?= qwen2.5:14b
 
 .PHONY: demo-agents semana4-pilot semana4-compare semana4-eval
 demo-agents:
 	cd backend && uv run python -m app.agents.demo
 
 semana4-pilot:
-	uv run --project backend python evals/runners/semana4_comparativo.py --pilot --run-dir "$(S4_PILOT_DIR)"
+	uv run --project backend python evals/runners/semana4_comparativo.py --pilot --run-dir "$(S4_PILOT_DIR)" --models $(S4_MODELS)
 
 semana4-compare:
-	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)"
+	uv run --project backend python evals/runners/semana4_comparativo.py --run-dir "$(S4_RUN_DIR)" --models $(S4_MODELS)
 
 semana4-eval:
-	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)"
+	uv run --project evals python evals/runners/semana4_avaliacao.py --resultado "$(S4_RESULTADO)" --eval-dir "$(S4_EVAL_DIR)" --evaluator-model "$(S4_EVAL_MODEL)" --embedding-model "$(EMBED_MODEL)" $(if $(S4_EVAL_MODELS),--models $(S4_EVAL_MODELS),)
 
 STT_PROVIDER ?= disabled
 STT_MODEL ?= base

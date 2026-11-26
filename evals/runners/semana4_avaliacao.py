@@ -254,7 +254,7 @@ class OllamaRubricJudge:
             "stream": False,
             "format": "json",
             "keep_alive": "10m",
-            "options": {"temperature": 0.0, "seed": 42, "num_ctx": 4096, "num_predict": 450},
+            "options": {"temperature": 0.0, "seed": 42, "num_ctx": 4096, "num_predict": 900},
         }
         if self.evaluator_model.lower().startswith("qwen3.5"):
             req_body["think"] = False
@@ -721,6 +721,7 @@ def evaluate_report(
     timeout_seconds: float = 120.0,
     com_ragas: bool = True,
     synthetic_smoke: bool = False,
+    models: list[str] | None = None,
     judge: RubricJudgePort | None = None,
     ragas_evaluator: RagasAgentsPort | None = None,
 ) -> dict[str, Any]:
@@ -729,6 +730,14 @@ def evaluate_report(
     eval_dir = eval_dir.resolve()
     eval_dir.mkdir(parents=True, exist_ok=True)
     report = read_json(report_path)
+    raw_models = report.get("resultados_por_modelo") or {}
+    if models is not None:
+        selected_models = list(dict.fromkeys(models))
+        missing_models = [m for m in selected_models if m not in raw_models]
+        if missing_models:
+            raise ValueError(f"Modelo(s) ausente(s) no relatório: {', '.join(missing_models)}")
+    else:
+        selected_models = list(raw_models.keys())
     execucao_real = bool(report.get("execucao_real")) and not synthetic_smoke
     if not report.get("execucao_real") and not synthetic_smoke:
         raise ValueError(
@@ -758,20 +767,20 @@ def evaluate_report(
         if com_ragas and not synthetic_smoke
         else None
     )
-    bind_manifest(
-        eval_dir,
-        {
-            "rubric_version": RUBRIC_VERSION,
-            "synthetic_smoke": synthetic_smoke,
-            "resultado_sha256": digest(report),
-            "evaluator_model": evaluator_model,
-            "embedding_model": embedding_model if com_ragas else None,
-            "com_ragas": com_ragas and not synthetic_smoke,
-            "prompts_ptbr_sha256": prompts_ptbr_sha,
-            "ollama_identity": identity,
-            "source_sha256": source_hashes(RAIZ),
-        },
-    )
+    manifest_identity: dict[str, Any] = {
+        "rubric_version": RUBRIC_VERSION,
+        "synthetic_smoke": synthetic_smoke,
+        "resultado_sha256": digest(report),
+        "evaluator_model": evaluator_model,
+        "embedding_model": embedding_model if com_ragas else None,
+        "com_ragas": com_ragas and not synthetic_smoke,
+        "prompts_ptbr_sha256": prompts_ptbr_sha,
+        "ollama_identity": identity,
+        "source_sha256": source_hashes(RAIZ),
+    }
+    if models is not None:
+        manifest_identity["models_evaluated"] = selected_models
+    bind_manifest(eval_dir, manifest_identity)
 
     active_judge: RubricJudgePort = judge or (
         SyntheticSmokeJudge(evaluator_model)
@@ -795,7 +804,8 @@ def evaluate_report(
     per_model_results: dict[str, list[dict[str, Any]]] = {}
     summaries: dict[str, dict[str, Any]] = {}
     try:
-        for model, items in (report.get("resultados_por_modelo") or {}).items():
+        for model in selected_models:
+            items = raw_models[model]
             evaluated_cases: list[dict[str, Any]] = []
             for entry in items:
                 det = evaluate_deterministic_case(entry, chunk_index)
@@ -1074,6 +1084,7 @@ def main() -> int:
     )
     parser.add_argument("--evaluator-model", default=DEFAULT_EVALUATOR_MODEL)
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--models", nargs="+", default=None)
     parser.add_argument("--base-url", default="http://localhost:11434")
     parser.add_argument("--timeout", type=float, default=240.0)
     parser.add_argument(
@@ -1093,6 +1104,7 @@ def main() -> int:
         timeout_seconds=args.timeout,
         com_ragas=not args.sem_ragas,
         synthetic_smoke=args.synthetic_smoke,
+        models=args.models,
     )
     print(json.dumps(output["resumos_por_modelo"], ensure_ascii=False, indent=2))
     print(f"Relatório Markdown em {eval_dir / 'avaliacao_automatica.md'}")

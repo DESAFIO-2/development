@@ -156,9 +156,11 @@ auditoria determinística e geração opcional via `GeneratorPort`. A rota de au
 anterior permanece disponível. Sem frontend nesta entrega.
 
 Execute `uv run python -m app.agents.demo` de `backend/` (ou `make demo-agents` da raiz).
-O padrão é `APP_AGENTS_PROVIDER=deterministic`. Para Ollama, configure esse campo
-como `ollama` e `APP_AGENTS_MODEL=qwen2.5:7b`. A execução `--strict` falha sem gerador
-ou quando a geração é rejeitada; fixtures não são evidência científica.
+O padrão é `APP_AGENTS_PROVIDER=deterministic`. Para Ollama local, configure esse
+campo como `ollama` e `APP_AGENTS_MODEL=qwen3.5:4b` (com `GeminiRESTGeneratorAdapter`
+pronto para troca via `APP_AGENTS_PROVIDER=gemini` e `APP_GOOGLE_API_KEY`). A
+execução `--strict` falha sem gerador ou quando a geração é rejeitada; fixtures não
+são evidência científica.
 
 Responsabilidades, diagrama, contratos, modelos, limites, testes e operação:
 [guia dos agentes](../docs/architecture/agentes_semana4.md).

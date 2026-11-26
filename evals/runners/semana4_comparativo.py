@@ -1,4 +1,4 @@
-"""Coleta reproduzível da Semana 4 (Qwen2.5 7B vs 14B no Ollama).
+"""Coleta reproduzível da Semana 4 (modelo local Ollama).
 
 Nunca fabrica qualidade de LLM nem troca falha real por saída determinística.
 Executar via ambiente backend:
@@ -42,7 +42,7 @@ from evals.runners.artifacts import (
 )
 from evals.runners.local_preflight import ollama_identity
 
-DEFAULT_MODELS = ("qwen3.5:4b", "qwen2.5:7b")
+DEFAULT_MODELS = ("qwen3.5:4b",)
 RNF04_LATENCY_LIMIT_MS = 8000.0
 DEFAULT_NUM_CTX = 4096
 DEFAULT_NUM_PREDICT = 280

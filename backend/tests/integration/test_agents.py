@@ -675,3 +675,33 @@ def test_hospitalar_com_pergunta_usa_evidencia_do_item(client: TestClient) -> No
     assert data["primary_route"] == "HOSPITALAR"
     assert "Não localizamos" not in (data["resposta_adicional"] or "")
     assert "abciximabe" in (data["resposta_adicional"] or "").lower()
+
+
+def test_location_only_question_focuses_context_while_preserving_citations(
+    services: ServiceContainer,
+) -> None:
+    generator = RecordingGenerator()
+    result = graph(services, generator).executar(
+        AgentRequest.model_validate(
+            {
+                "itens": [{"nome_digitado": "alendronato de sódio 70 mg"}],
+                "regiao_administrativa": "Ceilândia",
+                "pergunta_adicional": "Onde fica a farmácia de alto custo em Ceilândia?",
+            }
+        )
+    )
+    assert result.generation.status == "GERADO"
+    assert result.generation.context_chunk_ids == ["CHK-COMP-CEAF-002"]
+    assert any("CHK-REGRA-CEAF-001" in c for c in result.citacoes)
+
+    mixed_generator = RecordingGenerator()
+    mixed = graph(services, mixed_generator).executar(
+        AgentRequest.model_validate(
+            {
+                "itens": [{"nome_digitado": "alendronato de sódio 70 mg"}],
+                "regiao_administrativa": "Ceilândia",
+                "pergunta_adicional": "Onde fica e quais documentos levo para o alto custo?",
+            }
+        )
+    )
+    assert len(mixed.generation.context_chunk_ids) > 1

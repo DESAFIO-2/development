@@ -378,3 +378,27 @@ def test_make_holdout_aplica_limite_e_avaliacao_segue_coleta() -> None:
     )
     assert '--resultado "/tmp/rodada-unica/resultado.json"' in command
     assert '--eval-dir "/tmp/rodada-unica/avaliacao"' in command
+
+
+def test_evaluate_report_filtra_modelos_e_rejeita_desconhecido(tmp_path: Path) -> None:
+    report = _sample_report(execucao_real=True)
+    report["resultados_por_modelo"]["qwen3.5:4b"] = report["resultados_por_modelo"]["qwen2.5:7b"]
+    report["resumos"]["qwen3.5:4b"] = {"dentro_meta_rnf04_8s": True}
+    report_path = tmp_path / "resultado.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    filtered = evaluate_report(
+        report_path=report_path,
+        eval_dir=tmp_path / "eval_filtrado",
+        synthetic_smoke=True,
+        models=["qwen3.5:4b"],
+    )
+    assert list(filtered["resumos_por_modelo"]) == ["qwen3.5:4b"]
+
+    with pytest.raises(ValueError, match="Modelo\\(s\\) ausente\\(s\\)"):
+        evaluate_report(
+            report_path=report_path,
+            eval_dir=tmp_path / "eval_invalido",
+            synthetic_smoke=True,
+            models=["modelo-inexistente"],
+        )

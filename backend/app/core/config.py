@@ -28,8 +28,10 @@ class Settings(BaseSettings):
     google_api_key: str = ""
 
     # Ativação explícita, independente dos experimentos da Semana 3.
+    # Padrão offline/determinístico; local validado com Ollama `qwen3.5:4b`.
+    # Mantém GeminiRESTGeneratorAdapter plugável via APP_AGENTS_PROVIDER=gemini.
     agents_provider: Literal["deterministic", "ollama", "gemini"] = "deterministic"
-    agents_model: str = "qwen2.5:7b"
+    agents_model: str = "qwen3.5:4b"
     agents_timeout_seconds: float = Field(default=60.0, gt=0, le=120)
 
     # Multimodalidade Semana 5 (STT desabilitado por padrão até ativação explícita)
