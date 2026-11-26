@@ -1,0 +1,18 @@
+# Configuração do scanner de segredos (Gitleaks v8) — .github/workflows/security.yml
+# Os UUIDs abaixo pertencem ao relatório público Power BI do InfoSaúde-DF
+# (sem autenticação; presentes no payload público da SES-DF), mas disparavam
+# a regra genérica `generic-api-key` por causa do sufixo `_RESOURCE_KEY`.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "IDs públicos do painel Power BI aberto InfoSaúde-DF (SES-DF)"
+condition = "AND"
+paths = [
+  '''^backend/app/ingestion/infosaude_sync\.py$''',
+]
+regexes = [
+  '''a665320c-1f2b-43cd-8380-6d39f535daf9''',
+  '''d77b9ba0-317a-4041-88a0-3241c35384ac''',
+]

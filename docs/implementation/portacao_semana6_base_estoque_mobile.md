@@ -28,20 +28,17 @@ Registro formal conforme [portacoes.md](../runbooks/portacoes.md), mantendo sepa
 - **Validações Mobile (`.github/workflows/mobile-ci.yml`):** Node `22`, `npm ci`, `npx tsc --noEmit` e `npx eslint src`.
 - **Reversão:**
   ```bash
-  # Na própria branch feat/semana6-base-integracao, reverter toda a portação acima de fix/semana4-calibracao-e-revisao (4197613):
-  git revert 4197613..7c3bb71
-  # ou descartar a branch feat/semana6-base-integracao mantendo fix/semana4-calibracao-e-revisao @ 4197613
+  # No histórico desta PR (#41), para reverter apenas as correções acima da base 7c3bb71:
+  git revert 7c3bb71..2d9238a
+  # Ou após merge na main, reverter o merge commit do PR #41 como unidade:
+  git revert -m 1 <SHA_MERGE_PR_41>
   ```
-
-A reversão acima fixa somente os dois commits já registrados da base Semana 6. As correções posteriores ainda locais devem ser preservadas em patch antes de qualquer reversão; após integração, registrar e reverter o SHA real do PR de correções, sem intervalo aberto até `HEAD`.
 
 O bot serializa execuções, preserva PR sem mudanças materiais e fecha proposta obsoleta quando a fonte volta à base. Publicação usa lease com SHA remoto explícito. PRs criados pelo `GITHUB_TOKEN` exigem aprovação da execução dos checks conforme configuração do GitHub; merge não substitui rebuild/redeploy.
 
-## Fechamento das correções — 2026-11-26
+## Fechamento e auto-revisão técnica (AI) — 2026-11-26
 
-- 579 testes backend com conexões externas bloqueadas; 4 testes de evals. Ruff lint/format (157 arquivos), Mypy (149 arquivos), TypeScript e ESLint aprovados.
-- Golden Sets v1/v2: 16/16 e 22/22, Hit@3 e MRR 1,0. Guardrail: recall 100%, falso bloqueio 0% no conjunto executado. Smoke sintético de comparação: 0 pares inválidos, RAGAS/factualidade explicitamente não avaliados. Esses resultados não aprovam geração LLM.
-- Docker `sus-cidadao-backend:review-s6`: build aprovado; smoke HTTP completo em container com `PORT=8087`, health interno e regressão de estoque antigo aprovados; container temporário removido.
-- No snapshot real, omalizumabe 150 mg em Asa Sul preserva `05/11/2026 13:45:15` e agora retorna `updated_at=2026-11-05T16:45:15+00:00`, `stale_warning=true`.
-- Workflow: YAML e sintaxe Bash validados; política coberta por testes. Script de publicação exercitado com Git real em repositório temporário e `gh` simulado: criação A→B, preservação B→B, atualização B→C, fechamento no retorno à base A. Nenhuma publicação real foi executada.
-- Pendências para integração: commit/PR das correções, CI remoto e revisão do squad; validar uma execução real do sincronizador e suas permissões. A avaliação v8 continua reprovada em Faithfulness (0,8833 < 0,92), sem revisão humana. Integração visual mobile e deploy permanecem no escopo seguinte.
+- **PR & Segurança CI:** [PR #41](https://github.com/DESAFIO-2/development/pull/41) aberto em `feat/semana6-base-integracao`; adicionada regra cirúrgica em [`.gitleaks.toml`](../../.gitleaks.toml) (`condition = "AND"`) apenas para os dois UUIDs públicos do painel Power BI InfoSaúde-DF em `backend/app/ingestion/infosaude_sync.py` (evitando falso positivo de `generic-api-key` sem isentar segredos reais).
+- **Frescor por item & InfoSaúde:** no snapshot real, omalizumabe 150 mg em Asa Sul preserva `05/11/2026 13:45:15` e retorna `updated_at=2026-11-05T16:45:15+00:00`, `stale_warning=true`; job remoto `validar-fonte-real` em PR aprovou consulta ao InfoSaúde-DF ao vivo (`857` CEAF e `231` unidades) sem publicar snapshot.
+- **Avaliação científica LLM (separada do CI):** rodada experimental `semana4_fechamento_v9` com candidato `semana4-v4` (`qwen3.5:4b`) obteve RAGAS `Faithfulness=0,967` e `Answer Relevancy=0,907` (`p95=5776,96 ms`), mas manteve status `REPROVADO_OU_COM_RESSALVAS` (juiz `9,53` com omissão de procuração pública/em cartório em `procuracao_fralda` e uso impróprio de `"municípios"` para RAs em `dona_helena_misto`); portanto `semana4-v4` segue apenas experimental (com cabeçalho em `montar_prompt` corrigido para não emitir `[Fonte: ...]`), mantendo padrão determinístico em produção e sem revisão humana clínica declarada (`revisao_humana_realizada=false`).
+- **Pendências humanas / próximas etapas:** aprovação de PR no GitHub por revisores humanos (`CONTRIBUTING.md` / `CODEOWNERS`), pareamento clínico humano dos modelos LLM, disparo agendado real do sincronizador pós-merge na `main`, ligação das telas em `mobile/` (mocks) e deploy/rebuild da imagem.

@@ -290,3 +290,11 @@ def test_cli_grava_falha_e_smoke_em_diretorios_distintos(
     assert len(real) == len(smoke) == 1
     assert json.loads(real[0].read_text(encoding="utf8"))["pares_invalidos"] == 1
     assert json.loads(smoke[0].read_text(encoding="utf8"))["tipo_execucao"] == "SINTETICA"
+
+
+def test_montar_prompt_semana4_v4_usa_cabecalho_sem_colchetes() -> None:
+    from app.infrastructure.llm.generator import PROMPT_VERSION_AGENTS_V4, montar_prompt
+
+    prompt = montar_prompt("Onde fica?", (HIT,), prompt_version=PROMPT_VERSION_AGENTS_V4)
+    assert "Trecho de referência CHK-TEST-001" in prompt
+    assert "[Fonte:" not in prompt

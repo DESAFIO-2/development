@@ -101,6 +101,7 @@ def montar_prompt(
     def cabecalho(h: RetrievalHitDTO) -> str:
         if prompt_version in (
             PROMPT_VERSION_AGENTS,
+            PROMPT_VERSION_AGENTS_V4,
             PROMPT_VERSION_AGENTS_V3,
             PROMPT_VERSION_AGENTS_V2,
         ):
