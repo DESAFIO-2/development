@@ -10,3 +10,5 @@ backend/app/**/__pycache__/
 !data/processed/medicamentos_sus_canonical.json
 !data/processed/normative_chunks.json
 !data/processed/evidence_chunks_v3.json
+!data/processed/ceaf_live_stock.json
+!data/processed/df_pharmacies_geolocated.json

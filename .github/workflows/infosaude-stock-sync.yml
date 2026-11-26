@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   sincronizar-ceaf-mapas:
@@ -18,13 +19,47 @@ jobs:
       - name: Instalar dependências do backend
         run: uv sync --locked --project backend
       - name: Sincronizar snapshots públicos InfoSaúde-DF (CEAF e Estabelecimentos)
+        env:
+          PYTHONPATH: backend
         run: uv run --project backend python -m app.ingestion.infosaude_sync --output-dir data/processed
-      - name: Publicar atualização apenas se houver mudança nos snapshots
+      - name: Publicar PR de atualização apenas se houver mudança real nos snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          HAS_DATA_CHANGE=$(python3 - <<'PY'
+          import json, pathlib, subprocess
+          changed = False
+          for rel in ("data/processed/ceaf_live_stock.json", "data/processed/df_pharmacies_geolocated.json"):
+              cur = json.loads(pathlib.Path(rel).read_text(encoding="utf-8"))
+              try:
+                  prev = json.loads(subprocess.check_output(["git", "show", f"HEAD:{rel}"], text=True))
+              except subprocess.CalledProcessError:
+                  changed = True
+                  break
+              cur.pop("synced_at_utc", None)
+              prev.pop("synced_at_utc", None)
+              if cur != prev:
+                  changed = True
+                  break
+          print("1" if changed else "0")
+          PY
+          )
+          if [ "$HAS_DATA_CHANGE" != "1" ]; then
+            echo "Sem alterações funcionais nos snapshots InfoSaúde-DF."
+            git checkout -- data/processed/ceaf_live_stock.json data/processed/df_pharmacies_geolocated.json
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/infosaude-stock-sync
           git add data/processed/ceaf_live_stock.json data/processed/df_pharmacies_geolocated.json
-          git diff --staged --quiet || (
-            git commit -m "chore(data): atualiza snapshots InfoSaude-DF (CEAF e estabelecimentos)" &&
-            git push
-          )
+          git commit -m "chore(data): atualiza snapshots InfoSaude-DF (CEAF e estabelecimentos)"
+          git push --force origin chore/infosaude-stock-sync
+          if ! gh pr list --head chore/infosaude-stock-sync --base main --state open --json number --jq '.[0].number' | grep -q .; then
+            gh pr create \
+              --base main \
+              --head chore/infosaude-stock-sync \
+              --title "chore(data): atualiza snapshots InfoSaude-DF" \
+              --body "Atualização automática dos snapshots públicos InfoSaúde-DF (ceaf_live_stock.json e df_pharmacies_geolocated.json). Execute e valide o CI antes do merge para disparar rebuild da imagem."
+          fi

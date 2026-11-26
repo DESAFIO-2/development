@@ -47,7 +47,9 @@ def nearby_pharmacies(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Informe lat e lng juntos ao filtrar por GPS.",
         )
-    return _stock_repo().find_nearby(ra=ra, q=q, lat=lat, lng=lng, limite=limite)
+    guardrail = get_services().guardrail
+    ra_segura = guardrail.desidentificar_dados_pessoais(ra).texto_sanitizado if ra else ""
+    return _stock_repo().find_nearby(ra=ra_segura, q=q, lat=lat, lng=lng, limite=limite)
 
 
 @router.get("/ceaf-stock", response_model=CeafStockResponseDTO)
@@ -59,4 +61,9 @@ def ceaf_stock(
     limite: int = Query(default=15, ge=1, le=50),
 ) -> CeafStockResponseDTO:
     """Consulta o último snapshot InfoSaúde-DF de estoque do Alto Custo (CEAF-DF)."""
-    return _stock_repo().query_ceaf_stock(q=q, unidade=unidade, limite=limite)
+    guardrail = get_services().guardrail
+    q_seguro = guardrail.desidentificar_dados_pessoais(q).texto_sanitizado if q else ""
+    unidade_segura = (
+        guardrail.desidentificar_dados_pessoais(unidade).texto_sanitizado if unidade else ""
+    )
+    return _stock_repo().query_ceaf_stock(q=q_seguro, unidade=unidade_segura, limite=limite)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import tempfile
 import urllib.parse
@@ -16,6 +17,9 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
+
+_BRT_TZ = ZoneInfo("America/Sao_Paulo")
 
 POWERBI_QUERY_ENDPOINT = (
     "https://wabi-brazil-south-api.analysis.windows.net/public/reports/querydata?synchronous=true"
@@ -307,6 +311,45 @@ def post_powerbi_query(
         return body
 
 
+def _parse_source_timestamp_utc(raw_value: Any) -> datetime | None:
+    """Converte timestamp da fonte InfoSaúde-DF (BRT/ISO/epoch) para UTC sem fabricar data atual."""
+    if raw_value is None or isinstance(raw_value, bool):
+        return None
+    if isinstance(raw_value, int | float):
+        if not math.isfinite(raw_value) or raw_value <= 0:
+            return None
+        seconds = raw_value / 1000.0 if abs(raw_value) >= 1e11 else float(raw_value)
+        try:
+            return datetime.fromtimestamp(seconds, tz=UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(raw_value).strip()
+    if not text:
+        return None
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=_BRT_TZ).astimezone(UTC)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_BRT_TZ)
+    return parsed.astimezone(UTC)
+
+
+def _latest_source_timestamp_utc(items: list[dict[str, str]]) -> str | None:
+    """Extrai o timestamp UTC mais recente a partir de `ultima_atualizacao` das linhas."""
+    parsed = [
+        dt
+        for item in items
+        if (dt := _parse_source_timestamp_utc(item.get("ultima_atualizacao"))) is not None
+    ]
+    return max(parsed).isoformat() if parsed else None
+
+
 def parse_ceaf_stock_payload(
     raw_stock: dict[str, Any], *, synced_at_utc: str | None = None
 ) -> dict[str, Any]:
@@ -339,11 +382,14 @@ def parse_ceaf_stock_payload(
         unit: dict(Counter(i["disp_estoque"] for i in items if i["unidade"] == unit))
         for unit in ("Asa Sul", "Ceilândia", "Gama")
     }
+    collected_at = synced_at_utc or datetime.now(UTC).isoformat()
+    source_updated_at = _latest_source_timestamp_utc(items)
     return {
         "source_url": CEAF_SOURCE_URL,
         "powerbi_api_endpoint": POWERBI_QUERY_ENDPOINT,
         "resource_key": CEAF_RESOURCE_KEY,
-        "panel_updated_at_utc": synced_at_utc or datetime.now(UTC).isoformat(),
+        "panel_updated_at_utc": source_updated_at,
+        "synced_at_utc": collected_at,
         "update_schedule": "Diária (00:00 BRT e atualização intradiária ~13:45-14:37 BRT)",
         "total_records": len(items),
         "distinct_medications": len({i["desc_produto"] for i in items if i["desc_produto"]}),
@@ -353,7 +399,9 @@ def parse_ceaf_stock_payload(
     }
 
 
-def parse_establishments_payload(raw_estab: dict[str, Any]) -> dict[str, Any]:
+def parse_establishments_payload(
+    raw_estab: dict[str, Any], *, synced_at_utc: str | None = None
+) -> dict[str, Any]:
     """Converte resposta DSR de `Estabelecimentos` mantendo as 3 unidades CEAF-DF."""
     ds_estab = raw_estab["results"][0]["result"]["data"]["dsr"]["DS"][0]
     rows = decode_powerbi_dsr(ds_estab)
@@ -391,11 +439,13 @@ def parse_establishments_payload(raw_estab: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    collected_at = synced_at_utc or datetime.now(UTC).isoformat()
     return {
         "source_url": MAPS_SOURCE_URL,
         "powerbi_api_endpoint": POWERBI_QUERY_ENDPOINT,
         "ceaf_resource_key": CEAF_RESOURCE_KEY,
         "establishments_resource_key": DOC_MAPS_RESOURCE_KEY,
+        "synced_at_utc": collected_at,
         "update_schedule": "Semanal (Segundas-feiras às 00:19 BRT)",
         "total_establishments": len(pharmacies),
         "geolocated_with_lat_lng": geolocated_count,
@@ -424,8 +474,9 @@ def sync_infosaude_files(
     timeout: float = 20.0,
 ) -> dict[str, Any]:
     """Sincroniza estoque CEAF e (opcionalmente) estabelecimentos para `output_dir`."""
+    collected_at = datetime.now(UTC).isoformat()
     raw_stock = post_powerbi_query(CEAF_RESOURCE_KEY, build_ceaf_query_payload(), timeout=timeout)
-    stock_out = parse_ceaf_stock_payload(raw_stock)
+    stock_out = parse_ceaf_stock_payload(raw_stock, synced_at_utc=collected_at)
     _atomic_write_json(output_dir / "ceaf_live_stock.json", stock_out)
 
     maps_total: int | None = None
@@ -433,12 +484,13 @@ def sync_infosaude_files(
         raw_estab = post_powerbi_query(
             DOC_MAPS_RESOURCE_KEY, build_establishments_query_payload(), timeout=timeout
         )
-        maps_out = parse_establishments_payload(raw_estab)
+        maps_out = parse_establishments_payload(raw_estab, synced_at_utc=collected_at)
         _atomic_write_json(output_dir / "df_pharmacies_geolocated.json", maps_out)
         maps_total = int(maps_out["total_establishments"])
 
     return {
         "panel_updated_at_utc": stock_out["panel_updated_at_utc"],
+        "synced_at_utc": stock_out["synced_at_utc"],
         "stock_records": stock_out["total_records"],
         "distinct_medications": stock_out["distinct_medications"],
         "total_establishments": maps_total,

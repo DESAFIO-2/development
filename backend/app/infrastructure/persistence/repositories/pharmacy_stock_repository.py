@@ -167,7 +167,18 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
                 items=[],
             )
 
-        scored.sort(key=lambda pair: pair[0], reverse=True)
+        has_gps = lat is not None and lng is not None
+        if has_gps:
+            scored.sort(
+                key=lambda pair: (
+                    pair[1].distance_km is None,
+                    pair[1].distance_km if pair[1].distance_km is not None else float("inf"),
+                    -pair[0],
+                    pair[1].name,
+                )
+            )
+        else:
+            scored.sort(key=lambda pair: (-pair[0], pair[1].name))
         return NearbyPharmaciesResponseDTO(
             ra=ra or "Distrito Federal",
             total=len(scored),
@@ -189,6 +200,7 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
             if raw.get("panel_updated_at_utc") is not None
             else None
         )
+        synced_at_utc = str(raw["synced_at_utc"]) if raw.get("synced_at_utc") is not None else None
         stale = _is_snapshot_stale(updated_at, now_utc=now_utc)
         rows: list[dict[str, Any]] = list(raw.get("items", []))
         norm_q = normalizar_texto_pt(q)
@@ -221,6 +233,7 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
             query=q,
             unidade=unidade or "Todas",
             updated_at=updated_at,
+            synced_at_utc=synced_at_utc,
             stale_warning=stale,
             total=len(matched),
             items=matched[:limite],

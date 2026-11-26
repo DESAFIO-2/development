@@ -57,6 +57,7 @@ class CeafStockResponseDTO(BaseModel):
     query: str
     unidade: str
     updated_at: str | None = None
+    synced_at_utc: str | None = None
     stale_warning: bool = True
     stale_after_hours: int = STALE_AFTER_HOURS
     cobertura_escopo: Literal["CEAF_ALTO_CUSTO"] = "CEAF_ALTO_CUSTO"

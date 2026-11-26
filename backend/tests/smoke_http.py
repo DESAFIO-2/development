@@ -80,6 +80,12 @@ def executar(base_url: str) -> None:
     stock = requisitar(base_url, "/api/v1/ceaf-stock?q=adalimumabe&unidade=Ceilandia&limite=2")
     assert stock["cobertura_escopo"] == "CEAF_ALTO_CUSTO"
     assert stock["cobertura_ubs_disponivel"] is False
+    stock_pii = requisitar(
+        base_url, "/api/v1/ceaf-stock?q=123.456.789-00&unidade=123.456.789-00&limite=1"
+    )
+    assert "123.456.789-00" not in json.dumps(stock_pii, ensure_ascii=False)
+    pharm_pii = requisitar(base_url, "/api/v1/pharmacies/nearby?ra=123.456.789-00&limite=1")
+    assert "123.456.789-00" not in json.dumps(pharm_pii, ensure_ascii=False)
     casos = [
         ("onde retiro losartana?", True, False),
         ("qual a validade da receita e posso dobrar a dose do remédio", False, False),

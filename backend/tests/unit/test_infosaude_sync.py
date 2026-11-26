@@ -132,10 +132,30 @@ def test_decode_powerbi_dsr_e_parsers() -> None:
     assert stock_out["total_records"] == 2
     assert stock_out["distinct_medications"] == 1
     assert stock_out["stock_by_unit"]["Ceilândia"]["COM ESTOQUE"] == 1
+    assert stock_out["panel_updated_at_utc"] == "2026-11-26T12:00:00+00:00"
+    assert stock_out["synced_at_utc"] == "2026-11-26T12:00:00+00:00"
 
     maps_out = parse_establishments_payload(_sample_establishments_dsr())
     assert maps_out["total_establishments"] == 4
     assert maps_out["geolocated_with_lat_lng"] == 4
+
+
+def test_parse_ceaf_separa_data_fonte_da_data_de_coleta() -> None:
+    stale_source = _sample_ceaf_dsr()
+    stale_source["results"][0]["result"]["data"]["dsr"]["DS"][0]["ValueDicts"]["D6"] = [  # type: ignore[index]
+        "01/01/2020 10:00:00"
+    ]
+    parsed = parse_ceaf_stock_payload(stale_source, synced_at_utc="2026-11-26T18:00:00+00:00")
+    assert parsed["synced_at_utc"] == "2026-11-26T18:00:00+00:00"
+    assert parsed["panel_updated_at_utc"] == "2020-01-01T13:00:00+00:00"
+
+    missing_date = _sample_ceaf_dsr()
+    missing_date["results"][0]["result"]["data"]["dsr"]["DS"][0]["ValueDicts"]["D6"] = [""]  # type: ignore[index]
+    parsed_missing = parse_ceaf_stock_payload(
+        missing_date, synced_at_utc="2026-11-26T18:00:00+00:00"
+    )
+    assert parsed_missing["synced_at_utc"] == "2026-11-26T18:00:00+00:00"
+    assert parsed_missing["panel_updated_at_utc"] is None
 
 
 def test_post_powerbi_query_rejeita_http_nao_seguro() -> None:

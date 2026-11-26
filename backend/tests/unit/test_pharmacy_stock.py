@@ -14,7 +14,7 @@ from app.infrastructure.persistence.repositories.pharmacy_stock_repository impor
 from app.main import app
 
 
-def _seed_files(base_dir: Path, *, updated_at: str | None) -> None:
+def _seed_files(base_dir: Path, *, updated_at: str | None, synced_at: str | None = None) -> None:
     maps_payload = {
         "update_schedule": "Semanal",
         "pharmacies": [
@@ -40,10 +40,21 @@ def _seed_files(base_dir: Path, *, updated_at: str | None) -> None:
                 "google_maps_url": "https://maps.google.com/?q=-15.8147,-48.1066",
                 "covered_ras": ["Ceilândia", "Taguatinga"],
             },
+            {
+                "cnes": "UBS-TAGUATINGA-PERTO",
+                "name": "UBS 1 Taguatinga",
+                "address": "QNB 10",
+                "neighborhood_or_ra": "Taguatinga",
+                "pharmacy_type": "Farmácias das Unidades Básicas de Saúde (UBS)",
+                "latitude": -15.8330,
+                "longitude": -48.0560,
+                "google_maps_url": "https://maps.google.com/?q=-15.833,-48.056",
+            },
         ],
     }
     stock_payload = {
         "panel_updated_at_utc": updated_at,
+        "synced_at_utc": synced_at,
         "items": [
             {
                 "cod_produto": "101",
@@ -80,21 +91,41 @@ def test_repository_filtra_por_ra_gps_e_calcula_frescor(tmp_path: Path) -> None:
     repo = LocalPharmacyStockRepository(data_dir=tmp_path)
 
     nearby = repo.find_nearby(ra="Taguatinga", lat=-15.815, lng=-48.107, limite=5)
-    assert nearby.total == 1
+    assert nearby.total == 2
     assert nearby.items[0].cnes == "CEAF-CEILANDIA"
     assert nearby.items[0].distance_km is not None
     assert nearby.items[0].distance_km < 1.0
 
+    # Em busca por GPS ("Próximas"), a UBS mais próxima deve vir antes de um CEAF distante.
+    gps_near_ubs = repo.find_nearby(lat=-15.8331, lng=-48.0561, limite=5)
+    assert gps_near_ubs.items[0].cnes == "UBS-TAGUATINGA-PERTO"
+    assert gps_near_ubs.items[0].distance_km is not None
+    assert gps_near_ubs.items[1].distance_km is not None
+    assert gps_near_ubs.items[0].distance_km < gps_near_ubs.items[1].distance_km
+
     gps_only = repo.find_nearby(lat=-15.815, lng=-48.107, limite=5)
-    assert gps_only.total == 2
+    assert gps_only.total == 3
     assert gps_only.items[0].cnes == "CEAF-CEILANDIA"
-    assert gps_only.items[1].cnes == "CEAF-ASA-SUL"
+    assert gps_only.items[1].cnes == "UBS-TAGUATINGA-PERTO"
+    assert gps_only.items[2].cnes == "CEAF-ASA-SUL"
 
     fresh_stock = repo.query_ceaf_stock(q="adalimumabe", unidade="ceilandia", now_utc=now)
     assert fresh_stock.total == 1
     assert fresh_stock.stale_warning is False
     assert fresh_stock.cobertura_escopo == "CEAF_ALTO_CUSTO"
     assert fresh_stock.cobertura_ubs_disponivel is False
+
+    # Coleta recente NÃO pode esconder fonte antiga (ex.: painel de 2020 coletado em 2026).
+    _seed_files(
+        tmp_path,
+        updated_at="2020-01-01T13:00:00+00:00",
+        synced_at=now.isoformat(),
+    )
+    old_source_repo = LocalPharmacyStockRepository(data_dir=tmp_path)
+    old_source_stock = old_source_repo.query_ceaf_stock(q="adalimumabe", now_utc=now)
+    assert old_source_stock.stale_warning is True
+    assert old_source_stock.updated_at == "2020-01-01T13:00:00+00:00"
+    assert old_source_stock.synced_at_utc == now.isoformat()
 
     stale_ts = (now - timedelta(hours=49)).isoformat()
     _seed_files(tmp_path, updated_at=stale_ts)
@@ -137,3 +168,20 @@ def test_rotas_http_pharmacies_e_ceaf_stock() -> None:
         assert stock_data["cobertura_escopo"] == "CEAF_ALTO_CUSTO"
         assert stock_data["cobertura_ubs_disponivel"] is False
         assert stock_data["total"] >= 1
+        assert stock_data["updated_at"] is not None
+        assert stock_data["synced_at_utc"] is not None
+
+        cpf = "123.456.789-00"
+        pharm_pii = client.get("/api/v1/pharmacies/nearby", params={"ra": f"Ceilândia {cpf}"})
+        assert pharm_pii.status_code == 200
+        assert cpf not in pharm_pii.text
+        assert "[CPF_MASCARADO_LGPD]" in pharm_pii.json()["ra"]
+
+        stock_pii = client.get(
+            "/api/v1/ceaf-stock",
+            params={"q": f"adalimumabe {cpf}", "unidade": f"CPF {cpf}"},
+        )
+        assert stock_pii.status_code == 200
+        assert cpf not in stock_pii.text
+        assert "[CPF_MASCARADO_LGPD]" in stock_pii.json()["query"]
+        assert "[CPF_MASCARADO_LGPD]" in stock_pii.json()["unidade"]

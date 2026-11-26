@@ -254,6 +254,7 @@ export interface CeafStockResponseDTO {
   query: string;
   unidade: string;
   updated_at: string | null;
+  synced_at_utc?: string | null;
   stale_warning: boolean;
   stale_after_hours: number;
   cobertura_escopo: 'CEAF_ALTO_CUSTO';
