@@ -69,6 +69,25 @@ jobs:
             --ignore-vuln PYSEC-2026-76 \
             --ignore-vuln PYSEC-2026-3046
 
+  dependencias-mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Instalar dependências travadas
+        run: npm ci --ignore-scripts
+      - name: Auditar CVEs do app (alta e crítica bloqueiam)
+        # Em 26/11/2026 restam 5 moderadas no minimatch, puxado pelo tooling do
+        # Expo SDK 58; o "fix" do npm rebaixaria para o SDK 52. Revisar a cada SDK.
+        run: npm audit --omit=dev --audit-level=high
+
   sast:
     runs-on: ubuntu-latest
     steps:
@@ -76,6 +95,38 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: Análise estática de segurança (média e alta)
         run: uvx bandit -r backend/app evals -x "evals/.venv,backend/.venv" -ll
+
+  semgrep:
+    # Complementa o Bandit no Python e cobre o TypeScript do app (sem conta Semgrep).
+    runs-on: ubuntu-latest
+    env:
+      SEMGREP_VERSION: "1.187.0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Semgrep (regras públicas; só severidade ERROR bloqueia)
+        run: >
+          uvx "semgrep==${SEMGREP_VERSION}" scan
+          --config p/python --config p/typescript --config p/react --config p/secrets
+          --severity ERROR --error --metrics off
+          --exclude "**/node_modules/**" --exclude "**/.venv/**" --exclude "evals/reports/**"
+          backend/app mobile/src
+
+  imagem:
+    # CVEs do sistema e das libs dentro da imagem Docker que vai para produção.
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_VERSION: "0.76.2"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build da imagem
+        run: docker build -t remedia-backend:scan -f backend/Dockerfile .
+      - name: Trivy (alta e crítica com correção disponível bloqueiam)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "aquasec/trivy:${TRIVY_VERSION}" image \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
+            remedia-backend:scan
 
   anti-injection:
     runs-on: ubuntu-latest
