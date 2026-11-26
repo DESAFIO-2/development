@@ -36,6 +36,13 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "A RemedIA usa o Face ID para desbloquear sua sessão sem digitar a senha."
+        }
       ]
     ],
     "experiments": {

@@ -5,17 +5,20 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { Icon } from '@/components/ui/icon';
 import { Txt } from '@/components/ui/txt';
-import { usuario as usuarioMock } from '@/data/mock';
+import { type Resultado, useAutenticacao, type Usuario } from '@/state/auth';
 import { shadow } from '@/theme/shadows';
 
-type Usuario = typeof usuarioMock;
 type DoseState = 'tomada' | 'adiada' | undefined;
 
 type AppState = {
   usuario: Usuario | null;
-  entrar: (cpf: string, senha: string) => boolean;
-  cadastrar: (dados: Partial<Usuario>) => void;
-  sair: () => void;
+  /** Há sessão guardada no aparelho (dá para desbloquear com biometria). */
+  sessaoSalva: boolean;
+  biometriaDisponivel: boolean;
+  entrar: (cpf: string, senha: string) => Promise<Resultado>;
+  cadastrar: (dados: Partial<Usuario> & { cpf: string }, senha: string) => Promise<Resultado>;
+  desbloquearComBiometria: () => Promise<Resultado>;
+  sair: () => Promise<void>;
   doses: Record<string, DoseState>;
   horaTomada: Record<string, string>;
   registrarDose: (medId: string, nome?: string) => void;
@@ -35,7 +38,7 @@ function vibrar() {
 }
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const auth = useAutenticacao();
   // A Losartana já vem tomada às 08:05, como na tela de referência.
   const [doses, setDoses] = useState<Record<string, DoseState>>({ losartana: 'tomada' });
   const [horaTomada, setHoraTomada] = useState<Record<string, string>>({ losartana: '08:05' });
@@ -50,23 +53,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AppState>(
     () => ({
-      usuario,
-      // Login fictício: qualquer CPF com 11 dígitos e senha com 4+ caracteres.
-      entrar: (cpf, senha) => {
-        if (cpf.replace(/\D/g, '').length !== 11 || senha.length < 4) return false;
-        setUsuario(usuarioMock);
-        return true;
-      },
-      cadastrar: (dados) => {
-        const nomeCompleto = dados.nomeCompleto?.trim() || usuarioMock.nomeCompleto;
-        setUsuario({
-          ...usuarioMock,
-          ...dados,
-          nomeCompleto,
-          nome: nomeCompleto.split(' ').slice(0, 2).join(' '),
-        });
-      },
-      sair: () => setUsuario(null),
+      ...auth,
       doses,
       horaTomada,
       registrarDose: (medId, nome) => {
@@ -81,7 +68,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       },
       toast,
     }),
-    [usuario, doses, horaTomada, toast],
+    [auth, doses, horaTomada, toast],
   );
 
   return (

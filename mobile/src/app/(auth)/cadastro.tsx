@@ -8,6 +8,7 @@ import { Button, Card } from '@/components/ui/primitives';
 import { maskCns, maskCpf, maskDate, maskPhone, TextField } from '@/components/ui/text-field';
 import { Txt } from '@/components/ui/txt';
 import { useApp } from '@/state/app-state';
+import { cpfValido } from '@/utils/cpf';
 import { colors } from '@/theme/tokens';
 
 const PASSOS = [
@@ -59,6 +60,7 @@ export default function Cadastro() {
   const insets = useSafeAreaInsets();
   const { cadastrar } = useApp();
   const [passo, setPasso] = useState(0);
+  const [carregando, setCarregando] = useState(false);
   const [form, setForm] = useState({
     nomeCompleto: '',
     cpf: '',
@@ -80,6 +82,7 @@ export default function Cadastro() {
     if (passo === 0) {
       if (form.nomeCompleto.trim().split(' ').length < 2) e.nomeCompleto = 'Digite nome e sobrenome.';
       if (form.cpf.replace(/\D/g, '').length !== 11) e.cpf = 'CPF precisa ter 11 números.';
+      else if (!cpfValido(form.cpf)) e.cpf = 'Confira o CPF: os números não conferem.';
       if (form.nascimento.length !== 10) e.nascimento = 'Use o formato DD/MM/AAAA.';
       if (form.celular.replace(/\D/g, '').length < 10) e.celular = 'Digite o celular com DDD.';
     }
@@ -88,7 +91,7 @@ export default function Cadastro() {
       if (cns.length > 0 && cns.length !== 15) e.cns = 'O Cartão SUS tem 15 números.';
     }
     if (passo === 2) {
-      if (form.senha.length < 6) e.senha = 'Use pelo menos 6 caracteres.';
+      if (form.senha.length < 8) e.senha = 'Use pelo menos 8 caracteres.';
       if (form.confirmar !== form.senha) e.confirmar = 'As senhas não são iguais.';
       if (!prefs.termos) e.termos = 'Você precisa aceitar os termos para continuar.';
     }
@@ -96,13 +99,14 @@ export default function Cadastro() {
     return Object.keys(e).length === 0;
   }
 
-  function avancar() {
-    if (!validar()) return;
+  async function avancar() {
+    if (carregando || !validar()) return;
     if (passo < 2) {
       setPasso(passo + 1);
       return;
     }
-    cadastrar({
+    setCarregando(true);
+    const r = await cadastrar({
       nomeCompleto: form.nomeCompleto,
       cpf: form.cpf,
       nascimento: form.nascimento,
@@ -110,8 +114,19 @@ export default function Cadastro() {
       email: form.email,
       ubs: form.ubs,
       ...(form.cns ? { cns: form.cns } : {}),
-    });
-    router.replace('/inicio');
+    }, form.senha);
+    setCarregando(false);
+    if (r.ok) {
+      router.replace('/inicio');
+      return;
+    }
+    // Erro de CPF volta ao primeiro passo; o resto (senha fraca, conta existente) fica aqui.
+    if (/cpf/i.test(r.erro)) {
+      setPasso(0);
+      setErros({ cpf: r.erro });
+    } else {
+      setErros({ senha: r.erro });
+    }
   }
 
   function voltar() {
@@ -257,7 +272,7 @@ export default function Cadastro() {
             <TextField
               label="Crie uma senha"
               icon="lock"
-              placeholder="Mínimo de 6 caracteres"
+              placeholder="Mínimo de 8 caracteres"
               password
               value={form.senha}
               onChangeText={set('senha')}
@@ -316,7 +331,8 @@ export default function Cadastro() {
         )}
 
         <Button
-          label={passo < 2 ? 'Continuar' : 'Criar minha conta'}
+          label={passo < 2 ? 'Continuar' : carregando ? 'Criando conta...' : 'Criar minha conta'}
+          disabled={carregando}
           iconRight={passo < 2 ? 'arrow_forward' : undefined}
           icon={passo === 2 ? 'how_to_reg' : undefined}
           iconColor="tertiary-fixed"

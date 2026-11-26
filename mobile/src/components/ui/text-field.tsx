@@ -32,6 +32,8 @@ export function TextField({ label, icon, hint, error, password, ...input }: Prop
           placeholderTextColor={colors.outline}
           selectionColor={colors.primary}
           secureTextEntry={password && hidden}
+          // Senha: sem corretor/sugestões (o teclado não aprende nem guarda a senha).
+          {...(password ? { autoCorrect: false, autoCapitalize: 'none', spellCheck: false } : {})}
           {...input}
           accessibilityLabel={label}
           onFocus={(e) => {

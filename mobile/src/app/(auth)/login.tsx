@@ -14,18 +14,36 @@ import { colors } from '@/theme/tokens';
 
 export default function Login() {
   const insets = useSafeAreaInsets();
-  const { entrar, toast } = useApp();
+  const { entrar, desbloquearComBiometria, sessaoSalva, biometriaDisponivel, toast } = useApp();
   const [cpf, setCpf] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<{ cpf?: string; senha?: string }>({});
+  const [carregando, setCarregando] = useState(false);
 
-  function handleEntrar() {
+  async function handleEntrar() {
+    if (carregando) return;
     const e: typeof erro = {};
     if (cpf.replace(/\D/g, '').length !== 11) e.cpf = 'Digite os 11 números do seu CPF.';
-    if (senha.length < 4) e.senha = 'A senha precisa ter pelo menos 4 caracteres.';
+    if (!senha) e.senha = 'Digite sua senha.';
     setErro(e);
     if (Object.keys(e).length) return;
-    if (entrar(cpf, senha)) router.replace('/inicio');
+    setCarregando(true);
+    const r = await entrar(cpf, senha);
+    setCarregando(false);
+    // A senha não fica na memória da tela depois da tentativa.
+    setSenha('');
+    if (r.ok) router.replace('/inicio');
+    else setErro({ senha: r.erro });
+  }
+
+  async function handleBiometria() {
+    if (!sessaoSalva) {
+      toast('A biometria fica disponível depois do primeiro acesso com CPF e senha.', 'fingerprint');
+      return;
+    }
+    const r = await desbloquearComBiometria();
+    if (r.ok) router.replace('/inicio');
+    else toast(r.erro, 'fingerprint');
   }
 
   return (
@@ -105,7 +123,14 @@ export default function Login() {
             </Txt>
           </Pressable>
 
-          <Button label="Entrar" icon="login" size="lg" iconColor="tertiary-fixed" onPress={handleEntrar} />
+          <Button
+            label={carregando ? 'Entrando...' : 'Entrar'}
+            icon="login"
+            size="lg"
+            iconColor="tertiary-fixed"
+            disabled={carregando}
+            onPress={handleEntrar}
+          />
 
           <View className="flex-row items-center gap-3 py-1">
             <View className="h-px flex-1 bg-outline-variant" />
@@ -127,7 +152,8 @@ export default function Login() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Entrar com biometria"
-              onPress={() => toast('Biometria será ativada após o primeiro acesso.', 'fingerprint')}
+              accessibilityState={{ disabled: !(sessaoSalva && biometriaDisponivel) }}
+              onPress={handleBiometria}
               className="h-12 w-14 items-center justify-center rounded-lg bg-surface-container active:opacity-70">
               <Icon name="fingerprint" size={26} />
             </Pressable>
