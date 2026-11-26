@@ -175,3 +175,15 @@ def test_sync_infosaude_files_grava_snapshots_atomicos(tmp_path: Path) -> None:
     maps_json = json.loads((tmp_path / "df_pharmacies_geolocated.json").read_text(encoding="utf-8"))
     assert len(stock_json["items"]) == 2
     assert len(maps_json["pharmacies"]) == 4
+
+
+def test_data_nula_dsr_nao_herda_data_da_linha_anterior() -> None:
+    raw = _sample_ceaf_dsr()
+    ds = raw["results"][0]["result"]["data"]["dsr"]["DS"][0]  # type: ignore[index]
+    second = ds["PH"][0]["DM0"][1]
+    second["R"] &= ~128
+    second["Ø"] = 128
+    assert decode_powerbi_dsr(ds)[1][7] is None
+    parsed = parse_ceaf_stock_payload(raw)
+    assert parsed["items"][0]["ultima_atualizacao"] == "26/11/2026 09:00:00"
+    assert parsed["items"][1]["ultima_atualizacao"] == ""

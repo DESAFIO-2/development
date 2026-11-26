@@ -63,7 +63,7 @@ def _seed_files(base_dir: Path, *, updated_at: str | None, synced_at: str | None
                 "disp_estoque": "COM ESTOQUE",
                 "origem_abastecimento": "Ministério da Saúde",
                 "psicotropico": "Não",
-                "ultima_atualizacao": "25/11/2026 15:00:00",
+                "ultima_atualizacao": updated_at,
             },
             {
                 "cod_produto": "102",
@@ -72,7 +72,7 @@ def _seed_files(base_dir: Path, *, updated_at: str | None, synced_at: str | None
                 "disp_estoque": "SEM ESTOQUE",
                 "origem_abastecimento": "SES-DF",
                 "psicotropico": "Não",
-                "ultima_atualizacao": "25/11/2026 15:00:00",
+                "ultima_atualizacao": updated_at,
             },
         ],
     }
@@ -185,3 +185,41 @@ def test_rotas_http_pharmacies_e_ceaf_stock() -> None:
         assert cpf not in stock_pii.text
         assert "[CPF_MASCARADO_LGPD]" in stock_pii.json()["query"]
         assert "[CPF_MASCARADO_LGPD]" in stock_pii.json()["unidade"]
+
+
+def test_frescor_por_item_nao_herda_data_recente_do_painel(tmp_path: Path) -> None:
+    now = datetime(2026, 11, 26, 12, tzinfo=UTC)
+    _seed_files(tmp_path, updated_at=now.isoformat(), synced_at=now.isoformat())
+    path = tmp_path / "ceaf_live_stock.json"
+    raw = json.loads(path.read_text())
+    raw["items"][1]["ultima_atualizacao"] = "05/11/2026 13:45:15"
+    path.write_text(json.dumps(raw))
+    repo = LocalPharmacyStockRepository(tmp_path)
+    old = repo.query_ceaf_stock(q="losartana", now_utc=now)
+    assert old.updated_at == "2026-11-05T16:45:15+00:00"
+    assert old.stale_warning and old.items[0].stale_warning
+    fresh = repo.query_ceaf_stock(q="adalimumabe", now_utc=now)
+    assert not fresh.stale_warning
+    assert fresh.items[0].updated_at == now.isoformat()
+    # O limite da página não pode esconder a existência de resultados antigos.
+    mixed = repo.query_ceaf_stock(limite=1, now_utc=now)
+    assert mixed.total == 2 and len(mixed.items) == 1
+    assert mixed.stale_warning and mixed.updated_at == old.updated_at
+    empty = repo.query_ceaf_stock(q="inexistente", now_utc=now)
+    assert empty.updated_at is None and empty.stale_warning
+
+
+def test_data_desconhecida_ou_futura_nunca_confirma_frescor(tmp_path: Path) -> None:
+    now = datetime(2026, 11, 26, 12, tzinfo=UTC)
+    for value in (None, "", "inválida", "2099-01-01T00:00:00Z"):
+        _seed_files(tmp_path, updated_at=now.isoformat())
+        path = tmp_path / "ceaf_live_stock.json"
+        raw = json.loads(path.read_text())
+        raw["items"][0]["ultima_atualizacao"] = value
+        path.write_text(json.dumps(raw))
+        result = LocalPharmacyStockRepository(tmp_path).query_ceaf_stock(now_utc=now)
+        assert result.stale_warning
+        assert result.items[0].stale_warning
+        if value != "2099-01-01T00:00:00Z":
+            assert result.updated_at is None
+            assert result.items[0].updated_at is None

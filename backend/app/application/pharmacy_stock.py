@@ -49,6 +49,8 @@ class CeafStockItemDTO(BaseModel):
     origem_abastecimento: str = ""
     psicotropico: str = ""
     ultima_atualizacao: str = ""
+    updated_at: str | None = None
+    stale_warning: bool = True
 
 
 class CeafStockResponseDTO(BaseModel):

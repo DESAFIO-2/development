@@ -17,6 +17,7 @@ from app.application.pharmacy_stock import (
     PharmacyStockRepositoryPort,
 )
 from app.core.config import settings
+from app.domain.stock_dates import parse_source_timestamp_utc
 from app.retrieval.text_normalizer import normalizar_texto_pt
 
 
@@ -41,7 +42,7 @@ def _is_snapshot_stale(updated_at_raw: str | None, *, now_utc: datetime | None =
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     ref = now_utc or datetime.now(UTC)
-    return (ref - parsed) > timedelta(hours=STALE_AFTER_HOURS)
+    return parsed > ref or (ref - parsed) > timedelta(hours=STALE_AFTER_HOURS)
 
 
 def _optional_float(value: Any) -> float | None:
@@ -195,13 +196,7 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
         now_utc: datetime | None = None,
     ) -> CeafStockResponseDTO:
         raw = self._load_stock()
-        updated_at = (
-            str(raw["panel_updated_at_utc"])
-            if raw.get("panel_updated_at_utc") is not None
-            else None
-        )
         synced_at_utc = str(raw["synced_at_utc"]) if raw.get("synced_at_utc") is not None else None
-        stale = _is_snapshot_stale(updated_at, now_utc=now_utc)
         rows: list[dict[str, Any]] = list(raw.get("items", []))
         norm_q = normalizar_texto_pt(q)
         tokens_q = [t for t in norm_q.split() if len(t) > 1]
@@ -217,6 +212,8 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
                 continue
             if norm_u and norm_u not in norm_unit:
                 continue
+            source_date = parse_source_timestamp_utc(row.get("ultima_atualizacao"))
+            item_updated_at = source_date.isoformat() if source_date else None
             matched.append(
                 CeafStockItemDTO(
                     cod_produto=str(row.get("cod_produto", row.get("cod_produto2", ""))),
@@ -225,10 +222,16 @@ class LocalPharmacyStockRepository(PharmacyStockRepositoryPort):
                     disp_estoque=str(row.get("disp_estoque", "")),
                     origem_abastecimento=str(row.get("origem_abastecimento", "")),
                     psicotropico=str(row.get("psicotropico", "")),
-                    ultima_atualizacao=str(row.get("ultima_atualizacao", "")),
+                    ultima_atualizacao=str(row.get("ultima_atualizacao") or ""),
+                    updated_at=item_updated_at,
+                    stale_warning=_is_snapshot_stale(item_updated_at, now_utc=now_utc),
                 )
             )
 
+        # Resumo conservador de TODOS os resultados, inclusive além do limite da página.
+        dates = [item.updated_at for item in matched if item.updated_at is not None]
+        updated_at = min(dates) if matched and len(dates) == len(matched) else None
+        stale = not matched or any(item.stale_warning for item in matched)
         return CeafStockResponseDTO(
             query=q,
             unidade=unidade or "Todas",

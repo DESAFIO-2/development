@@ -248,6 +248,8 @@ export interface CeafStockItemDTO {
   origem_abastecimento: string;
   psicotropico: string;
   ultima_atualizacao: string;
+  updated_at: string | null;
+  stale_warning: boolean;
 }
 
 export interface CeafStockResponseDTO {

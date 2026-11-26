@@ -27,7 +27,7 @@ Base React Native (**Expo SDK 58 + NativeWind + TypeScript**) portado do reposit
    - Áudio de voz via `orchestrateMultimodal` (`audioFile` / `audioBlob`), tratando bloqueios clínicos (`BLOQUEADO` -> SAMU 192 / UPA 24h) e abstinência (`NAO_PADRONIZADO`).
 3. **`(tabs)/farmacias.tsx`:**
    - Consumir `fetchNearbyPharmacies` (por `ra` ou `lat`/`lng` quando GPS permitido) e `fetchCeafStock`.
-   - Exibir claramente `updated_at`, alerta quando `stale_warning === true` (> 48 h) e `aviso_cobertura` informando que o estoque ao vivo cobre **somente Farmácias de Alto Custo (CEAF-DF)** e não UBSs.
+   - Exibir `items[].updated_at` e `items[].stale_warning` em cada resultado; data nula significa desconhecida. O alerta cobre data antiga (> 48 h), ausente, inválida ou futura. O resumo agrega todos os resultados filtrados, inclusive além da página; não representa a data mais recente do painel. `synced_at_utc` é a coleta, não a atualização da posição. Exibir `aviso_cobertura`: o snapshot cobre **somente Farmácias de Alto Custo (CEAF-DF)**, não estoque UBS.
 
 ## Como Rodar Localmente
 

@@ -1,6 +1,8 @@
 name: infosaude-stock-sync
 
 on:
+  pull_request:
+    paths: ["backend/app/ingestion/**", "backend/app/domain/stock_dates.py", ".github/workflows/infosaude-stock-sync.yml"]
   schedule:
     # Dias úteis às 06:00 BRT (09:00 UTC) e 15:00 BRT (18:00 UTC), após cargas do InfoSaúde-DF.
     - cron: "0 9,18 * * 1-5"
@@ -10,11 +12,18 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: infosaude-stock-sync
+  cancel-in-progress: false
+
 jobs:
   sincronizar-ceaf-mapas:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: main
       - uses: astral-sh/setup-uv@v7
       - name: Instalar dependências do backend
         run: uv sync --locked --project backend
@@ -27,27 +36,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          HAS_DATA_CHANGE=$(python3 - <<'PY'
-          import json, pathlib, subprocess
-          changed = False
-          for rel in ("data/processed/ceaf_live_stock.json", "data/processed/df_pharmacies_geolocated.json"):
-              cur = json.loads(pathlib.Path(rel).read_text(encoding="utf-8"))
-              try:
-                  prev = json.loads(subprocess.check_output(["git", "show", f"HEAD:{rel}"], text=True))
-              except subprocess.CalledProcessError:
-                  changed = True
-                  break
-              cur.pop("synced_at_utc", None)
-              prev.pop("synced_at_utc", None)
-              if cur != prev:
-                  changed = True
-                  break
-          print("1" if changed else "0")
-          PY
-          )
-          if [ "$HAS_DATA_CHANGE" != "1" ]; then
-            echo "Sem alterações funcionais nos snapshots InfoSaúde-DF."
-            git checkout -- data/processed/ceaf_live_stock.json data/processed/df_pharmacies_geolocated.json
+          SYNC_BRANCH=chore/infosaude-stock-sync
+          PR_NUMBER=$(gh pr list --head "$SYNC_BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          REMOTE_SHA=$(git ls-remote origin "refs/heads/$SYNC_BRANCH" | cut -f1)
+          if [ -n "$PR_NUMBER" ]; then
+            git fetch origin "refs/heads/$SYNC_BRANCH:refs/remotes/origin/$SYNC_BRANCH"
+            REMOTE_SHA=$(git rev-parse "refs/remotes/origin/$SYNC_BRANCH")
+            ACTION=$(PYTHONPATH=backend uv run --project backend python -m app.ingestion.stock_sync_plan --proposed-ref "$REMOTE_SHA")
+          else
+            ACTION=$(PYTHONPATH=backend uv run --project backend python -m app.ingestion.stock_sync_plan)
+          fi
+          if [ "$ACTION" = "close" ]; then
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr close "$PR_NUMBER"
+            fi
+            echo "Fonte igual à main; nenhuma atualização pendente."
+            exit 0
+          fi
+          if [ "$ACTION" = "noop" ]; then
+            echo "PR já contém a posição atual; preservando commit e revisão."
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -55,11 +62,40 @@ jobs:
           git checkout -B chore/infosaude-stock-sync
           git add data/processed/ceaf_live_stock.json data/processed/df_pharmacies_geolocated.json
           git commit -m "chore(data): atualiza snapshots InfoSaude-DF (CEAF e estabelecimentos)"
-          git push --force origin chore/infosaude-stock-sync
-          if ! gh pr list --head chore/infosaude-stock-sync --base main --state open --json number --jq '.[0].number' | grep -q .; then
+          git push --force-with-lease="refs/heads/$SYNC_BRANCH:$REMOTE_SHA" origin "HEAD:refs/heads/$SYNC_BRANCH"
+          if [ -z "$PR_NUMBER" ]; then
             gh pr create \
               --base main \
               --head chore/infosaude-stock-sync \
               --title "chore(data): atualiza snapshots InfoSaude-DF" \
-              --body "Atualização automática dos snapshots públicos InfoSaúde-DF (ceaf_live_stock.json e df_pharmacies_geolocated.json). Execute e valide o CI antes do merge para disparar rebuild da imagem."
+              --body "Atualização automática dos snapshots públicos InfoSaúde-DF (ceaf_live_stock.json e df_pharmacies_geolocated.json). Aprove a execução dos workflows gerados pelo GITHUB_TOKEN e valide o CI antes do merge. Após merge, faça rebuild/redeploy da imagem."
           fi
+
+  validar-fonte-real:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --project backend
+      - name: Consultar fonte pública sem publicar snapshots
+        env:
+          PYTHONPATH: backend
+        run: uv run --project backend python -m app.ingestion.infosaude_sync --output-dir "$RUNNER_TEMP/infosaude"
+      - name: Validar contratos do consumidor
+        env:
+          PYTHONPATH: backend
+        run: |
+          uv run --project backend python - <<'PY'
+          import os
+          from pathlib import Path
+          from app.infrastructure.persistence.repositories.pharmacy_stock_repository import LocalPharmacyStockRepository
+          repo = LocalPharmacyStockRepository(Path(os.environ["RUNNER_TEMP"]) / "infosaude")
+          stock = repo.query_ceaf_stock()
+          assert stock.total > 0 and stock.synced_at_utc
+          assert stock.cobertura_ubs_disponivel is False
+          assert repo.find_nearby().total > 0
+          print(f"Fonte real validada: {stock.total} registros CEAF; stale_warning={stock.stale_warning}")
+          PY
