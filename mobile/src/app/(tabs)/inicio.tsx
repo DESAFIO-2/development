@@ -90,13 +90,13 @@ export default function Inicio() {
               </Txt>
             </View>
             <Txt v="label-sm" className="text-tertiary-fixed">
-              SUS Digital
+              RemedIA
             </Txt>
           </View>
         </LinearGradient>
       </View>
 
-      {/* Atalho para a Zelo */}
+      {/* Atalho para a RemedIA */}
       <Pressable
         accessibilityRole="button"
         onPress={() => router.navigate('/zelo')}
@@ -116,7 +116,7 @@ export default function Inicio() {
           <View className="flex-1">
             <View className="flex-row items-center gap-1.5">
               <Txt v="title-md" className="text-primary">
-                Fale com a Zelo
+                Fale com a RemedIA
               </Txt>
               <View className="rounded bg-tertiary-fixed px-1.5">
                 <Txt v="label-sm" className="text-on-tertiary-fixed">

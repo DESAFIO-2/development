@@ -40,7 +40,7 @@ export default function Login() {
             <Logo />
             <View>
               <Txt v="title-md" className="text-primary">
-                SUS Digital
+                RemedIA
               </Txt>
               <Txt v="label-sm" w="medium" className="text-on-surface-variant">
                 Ministério da Saúde
@@ -70,7 +70,7 @@ export default function Login() {
             Que bom ter você aqui
           </Txt>
           <Txt v="body-sm" className="mt-1 text-primary-fixed">
-            Seus remédios, receitas e consultas do SUS em um só lugar, com a Zelo te acompanhando 24h.
+            Seus remédios, receitas e consultas do SUS em um só lugar, com a RemedIA te acompanhando 24h.
           </Txt>
         </LinearGradient>
 

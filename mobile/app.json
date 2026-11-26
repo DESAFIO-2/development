@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "SUS Digital",
-    "slug": "susdigital",
+    "name": "RemedIA",
+    "slug": "remedia",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "susdigital",
+    "scheme": "remedia",
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "A Zelo usa o microfone para ouvir suas dúvidas por voz.",
+        "NSMicrophoneUsageDescription": "A RemedIA usa o microfone para ouvir suas dúvidas por voz.",
         "NSCameraUsageDescription": "A câmera é usada para fotografar receitas e exames."
       }
     },

@@ -95,7 +95,7 @@ export default function Perfil() {
           </Txt>
           <Preferencia icon="volume_up" label="Alarme sonoro dos remédios" value={prefs.alarmes} onChange={toggle('alarmes')} />
           <Preferencia icon="watch" label="Alertas na pulseira" value={prefs.pulseira} onChange={toggle('pulseira')} />
-          <Preferencia icon="record_voice_over" label="Zelo responde por voz" value={prefs.voz} onChange={toggle('voz')} />
+          <Preferencia icon="record_voice_over" label="RemedIA responde por voz" value={prefs.voz} onChange={toggle('voz')} />
           <Preferencia icon="text_increase" label="Letras maiores" value={prefs.textoGrande} onChange={toggle('textoGrande')} />
         </Card>
 
@@ -111,7 +111,7 @@ export default function Perfil() {
 
         <Button label="Sair da conta" icon="logout" variant="white" iconColor="error" style={shadow.sm} onPress={sair} />
         <Txt v="label-sm" w="medium" className="text-center text-on-surface-variant">
-          SUS Digital • versão 1.0.0
+          RemedIA • versão 1.0.0
         </Txt>
       </ScrollView>
     </View>
