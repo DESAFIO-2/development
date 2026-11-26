@@ -28,6 +28,24 @@ CORPO_MALFORMADO: dict[int | str, dict[str, Any]] = {
     400: _resposta("Corpo da requisição malformado (JSON inválido ou codificação inválida)"),
 }
 
+# Respostas das proteções de borda (app/api/protecao.py) e da autenticação.
+CORPO_GRANDE: dict[int | str, dict[str, Any]] = {
+    413: _resposta("Corpo da requisição acima do limite"),
+}
+MUITAS_REQUISICOES: dict[int | str, dict[str, Any]] = {
+    429: _resposta("Muitas requisições deste IP; veja o cabeçalho Retry-After"),
+}
+NAO_AUTENTICADO: dict[int | str, dict[str, Any]] = {
+    401: _resposta("Token de acesso ausente, inválido ou expirado"),
+}
+# Rotas protegidas: JSON malformado, corpo grande, rate limit e token.
+ROTA_PROTEGIDA: dict[int | str, dict[str, Any]] = {
+    **CORPO_MALFORMADO,
+    **CORPO_GRANDE,
+    **MUITAS_REQUISICOES,
+    **NAO_AUTENTICADO,
+}
+
 ERROS_MULTIMODAL: dict[int | str, dict[str, Any]] = {
     400: _resposta("Multipart malformado"),
     413: _resposta("Arquivo ou campo acima do limite em memória"),
