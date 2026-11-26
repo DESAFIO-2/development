@@ -88,7 +88,12 @@ O schema é criado na subida (`CREATE TABLE IF NOT EXISTS`). Para os testes de c
 
 - **Revogação do access token:** depois de "sair", o access token emitido continua válido até expirar (no máximo 15 minutos), porque é validado sem consulta ao banco.
 - **Login em aparelho novo:** o perfil exibido é o de demonstração (`mobile/src/data/mock.ts`) com o CPF da pessoa, porque o perfil completo só existe no aparelho onde foi feito o cadastro. Definir com o time se o perfil passa a ser sincronizado, cifrado, pela API.
-- **DAST em modo produção:** o `make dast` sobe a API em `local`. Falta uma segunda rodada com `APP_ENVIRONMENT=producao`, Postgres e um token, para o ZAP e o Schemathesis exercitarem a autenticação.
+- **DAST:** o `make dast` sobe a API com `APP_AUTH_OBRIGATORIA=true`, cadastra um usuário sintético e passa o token ao ZAP (`ZAP_AUTH_HEADER_VALUE`) e ao Schemathesis (`-H`). Assim o ZAP e o Schemathesis exercitam a autenticação de verdade. O rate limit segue desligado no DAST, senão o fuzzing viraria uma sequência de 429. O Postgres fica de fora: a API do DAST usa o repositório em memória.
 - **Recuperação de senha:** "Esqueci minha senha" continua simulado. Depende de um canal verificado (SMS/e-mail/gov.br).
 - **Login gov.br:** continua planejado. Com ele, a senha local pode virar alternativa.
-- **CI:** Semgrep e Trivy entram como bloqueantes. Na primeira execução, triar os achados e registrar as exceções aqui, como foi feito no `docs/security/dast.md`.
+## Achados já corrigidos (primeira execução no CI, PR #42)
+
+- **Trivy:** CVE-2026-124851 (alta) na `libzstd1` da imagem `python:3.12-slim`. O Dockerfile passa a aplicar `apt-get upgrade` no build.
+- **Schemathesis ST401:** um cabeçalho `Authorization` presente mas não Bearer (ex.: `Basic ...`) era tratado como anônimo no modo local. Agora recebe 401 em qualquer modo.
+- **Schemathesis ST108:** o 422 do cadastro devolvia `detail` em texto, fora do contrato. O OpenAPI agora documenta os dois formatos.
+- **Semgrep, Gitleaks e `npm audit`:** sem achados.

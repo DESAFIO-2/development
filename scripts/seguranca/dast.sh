@@ -40,13 +40,24 @@ limpar  # sobra de uma execução interrompida
 
 api_build
 docker network create "$REDE" > /dev/null
+# Login obrigatório (como em produção) para o DAST exercitar a autenticação:
+# sem token tem de dar 401, e com o token as rotas protegidas são testadas a fundo.
+# Access token de 60 min para cobrir a rodada inteira. Rate limit segue desligado
+# (ambiente local), senão o fuzzing viraria uma sequência de 429.
+API_ENV_EXTRA=(-e APP_AUTH_OBRIGATORIA=true -e APP_AUTH_ACCESS_TTL_MIN=60)
 api_subir "$API" 127.0.0.1 "$PORTA" "$REDE"
+TOKEN="$(api_token "http://127.0.0.1:${PORTA}")"
+[ -n "$TOKEN" ] || { echo "Não consegui criar o usuário do DAST." >&2; exit 1; }
 
 # --- OWASP ZAP -------------------------------------------------------------
 # Códigos: 0 ok, 1 alguma regra FAIL, 2 só avisos (ignorados com -I), 3 erro.
 echo "== OWASP ZAP (API scan)"
 set +e
-docker run --rm --network "$REDE" -v "$SAIDA/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+# ZAP_AUTH_HEADER_VALUE: as imagens oficiais do ZAP mandam este valor no
+# cabeçalho Authorization de toda requisição (o token não vai para o log).
+docker run --rm --network "$REDE" -v "$SAIDA/zap:/zap/wrk:rw" \
+  -e ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}" -e ZAP_AUTH_HEADER_SITE="$API" \
+  "$ZAP_IMAGE" \
   zap-api-scan.py \
     -t "http://${API}:8000/openapi.json" \
     -f openapi \
@@ -66,6 +77,7 @@ uvx --from "schemathesis==${SCHEMATHESIS_VERSION}" schemathesis \
   --max-examples "$EXEMPLOS" \
   --seed 20261125 \
   --request-timeout 30 \
+  -H "Authorization: Bearer ${TOKEN}" \
   --report junit,html,ndjson \
   --report-dir "$SAIDA/schemathesis"
 st=$?

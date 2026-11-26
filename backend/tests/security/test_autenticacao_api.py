@@ -206,3 +206,26 @@ def test_producao_sem_banco_nem_segredos_nao_sobe() -> None:
         timeout=120,
     )
     assert r.returncode == 0, r.stderr[-2000:]
+
+
+# --- Regressões do DAST (Schemathesis) ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cabecalho", ["Basic dXNlcjpzZW5oYQ==", "Bearer", "Bearer ", "Token abc", "lixo", ""]
+)
+@pytest.mark.parametrize(("metodo", "rota", "kwargs"), ROTAS_PROTEGIDAS)
+def test_authorization_malformado_e_401_mesmo_no_local(
+    client: TestClient, metodo: str, rota: str, kwargs: dict[str, object], cabecalho: str
+) -> None:
+    # ST401: antes, "Basic ..." caía como anônimo e recebia 200 no modo local.
+    r = getattr(client, metodo)(rota, headers={"Authorization": cabecalho}, **kwargs)
+    assert r.status_code == 401
+
+
+def test_422_do_cadastro_segue_o_contrato() -> None:
+    # ST108: a política de CPF/senha responde `detail` em texto; o contrato aceita os dois.
+    schema = app.openapi()["paths"]["/api/v1/auth/cadastro"]["post"]["responses"]["422"]
+    assert schema["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErroDTO"
+    }

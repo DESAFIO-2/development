@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -115,10 +115,18 @@ _bearer = HTTPBearer(auto_error=False, description="Access token de /api/v1/auth
 
 
 def exigir_usuario(
+    request: Request,
     credenciais: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> UUID | None:
     """Id do usuário autenticado, ou None quando o login não é exigido e não há token."""
     if credenciais is None:
+        # O HTTPBearer devolve None também para "Basic ...", "Bearer" sem token etc.
+        # Cabeçalho presente e malformado é credencial inválida, nunca acesso anônimo
+        # (achado ST401 do Schemathesis).
+        if "authorization" in request.headers:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Token inválido ou expirado", headers=CABECALHO_BEARER
+            )
         if _exigida:
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Login necessário", headers=CABECALHO_BEARER
@@ -178,6 +186,9 @@ _ERROS_AUTH: dict[int | str, dict[str, Any]] = {
         **CORPO_MALFORMADO,
         **MUITAS_REQUISICOES,
         409: _resposta("Não foi possível concluir o cadastro com este CPF"),
+        # Substitui o 422 padrão: além da lista de erros de validação, a política
+        # de CPF/senha devolve uma mensagem em texto (achado ST108 do Schemathesis).
+        422: _resposta("CPF inválido, senha fora da política ou campos inválidos"),
     },
 )
 def cadastrar(payload: CredenciaisDTO) -> TokensDTO:
